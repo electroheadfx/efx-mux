@@ -140,7 +140,7 @@ Delete MILESTONE-CONTEXT.md if exists (consumed).
 Clear leftover phase directories from the previous milestone:
 
 ```bash
-node "/Users/lmarques/Dev/efx-mux/.claude/get-shit-done/bin/gsd-tools.cjs" phases clear
+node "/Users/lmarques/Dev/efx-mux/.claude/get-shit-done/bin/gsd-tools.cjs" phases clear --confirm
 ```
 
 ```bash
