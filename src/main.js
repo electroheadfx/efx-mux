@@ -1,30 +1,80 @@
-import { reactive, html } from '@arrow-js/core';
+// main.js -- App bootstrap for GSD MUX
+// Execution order matters:
+//   1. Restore persisted ratios from localStorage (prevents layout flash)
+//   2. Create reactive state
+//   3. Mount Arrow.js components
+//   4. Wire keyboard handlers
+import { reactive, html, watch } from '@arrow-js/core';
+import { Sidebar }     from './components/sidebar.js';
+import { MainPanel }   from './components/main-panel.js';
+import { RightPanel }  from './components/right-panel.js';
 
-const state = reactive({
-  sidebarCollapsed: false,
-});
+// --- Step 1: Restore persisted split ratios ---
+// Must run before components mount to avoid a flash of default widths.
+// Phase 4 will migrate this to state.json via Tauri IPC; localStorage is the
+// Phase 1 temporary measure (per D-08).
+const RATIO_KEY = 'gsd-mux:split-ratios';
+const DEFAULT_RATIOS = {
+  '--sidebar-w': '200px',
+  '--right-w':   '25%',
+};
 
-function app() {
-  const appEl = document.getElementById('app');
-
-  html`
-    <div class="sidebar ${() => state.sidebarCollapsed ? 'collapsed' : ''}">
-      <div class="sidebar-content">
-        <span style="color: var(--accent); font-size: 11px;">GSD MUX</span>
-      </div>
-    </div>
-    <div class="split-handle-v"></div>
-    <div class="main-panel">
-      <div class="terminal-area">terminal</div>
-      <div class="server-pane"></div>
-    </div>
-    <div class="split-handle-v"></div>
-    <div class="right-panel">
-      <div class="right-top">gsd viewer</div>
-      <div class="split-handle-h"></div>
-      <div class="right-bottom">git diff</div>
-    </div>
-  `(appEl);
+function loadRatios() {
+  try {
+    return JSON.parse(localStorage.getItem(RATIO_KEY) || '{}');
+  } catch {
+    return {};
+  }
 }
 
-window.addEventListener('DOMContentLoaded', app);
+function saveRatios(patch) {
+  const current = loadRatios();
+  localStorage.setItem(RATIO_KEY, JSON.stringify({ ...current, ...patch }));
+}
+
+function applyRatios(ratios) {
+  const merged = { ...DEFAULT_RATIOS, ...ratios };
+  for (const [prop, value] of Object.entries(merged)) {
+    document.documentElement.style.setProperty(prop, value);
+  }
+}
+
+// Apply immediately -- before first paint
+applyRatios(loadRatios());
+
+// --- Step 2: Reactive state ---
+const saved = loadRatios();
+const state = reactive({
+  // Sidebar collapsed: true if sidebar-w is 40px
+  sidebarCollapsed: saved['--sidebar-w'] === '40px',
+});
+
+// Keep CSS in sync when sidebarCollapsed changes.
+// Arrow.js watch() re-runs whenever any reactive data accessed inside changes.
+watch(() => {
+  const collapsed = state.sidebarCollapsed;
+  const w = collapsed ? '40px' : '200px';
+  document.documentElement.style.setProperty('--sidebar-w', w);
+  saveRatios({ '--sidebar-w': w });
+});
+
+// --- Step 3: Mount components ---
+const app = document.getElementById('app');
+if (!app) throw new Error('GSD MUX: #app element not found');
+
+html`
+  ${Sidebar({ collapsed: { value: () => state.sidebarCollapsed } })}
+  <div class="split-handle-v" data-handle="sidebar-main" role="separator" aria-orientation="vertical" aria-label="Resize sidebar"></div>
+  ${MainPanel()}
+  <div class="split-handle-v" data-handle="main-right" role="separator" aria-orientation="vertical" aria-label="Resize main panel"></div>
+  ${RightPanel()}
+`(app);
+
+// --- Step 4: Keyboard handlers ---
+// Ctrl+B -- toggle sidebar (per D-06 / LAYOUT-03)
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.key === 'b') {
+    e.preventDefault();
+    state.sidebarCollapsed = !state.sidebarCollapsed;
+  }
+});
