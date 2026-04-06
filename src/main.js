@@ -8,6 +8,7 @@ import { reactive, html, watch } from '@arrow-js/core';
 import { Sidebar }     from './components/sidebar.js';
 import { MainPanel }   from './components/main-panel.js';
 import { RightPanel }  from './components/right-panel.js';
+import { initDragManager } from './drag-manager.js';
 
 // --- Step 1: Restore persisted split ratios ---
 // Must run before components mount to avoid a flash of default widths.
@@ -70,7 +71,11 @@ html`
   ${RightPanel()}
 `(app);
 
-// --- Step 4: Keyboard handlers ---
+// --- Step 4: Wire drag handles ---
+// Must be after html`...`(app) so [data-handle] elements exist in DOM
+initDragManager({ saveRatios });
+
+// --- Step 5: Keyboard handlers ---
 // Ctrl+B -- toggle sidebar (per D-06 / LAYOUT-03)
 document.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.key === 'b') {
