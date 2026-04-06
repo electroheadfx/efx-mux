@@ -1,39 +1,29 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="stylesheet" href="styles.css" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri App</title>
-    <script type="module" src="/main.js" defer></script>
-  </head>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GSD MUX</title>
 
-  <body>
-    <main class="container">
-      <h1>Welcome to Tauri</h1>
+  <!--
+    Import map MUST appear before any <script type="module"> tags.
+    Per D-11: inline importmap in index.html, no external .json file.
+    Per RESEARCH Pitfall 2: placing this after module scripts causes
+    "Bare specifier not in import map" runtime errors.
+  -->
+  <script type="importmap">
+  {
+    "imports": {
+      "@arrow-js/core": "/vendor/arrow.js"
+    }
+  }
+  </script>
 
-      <div class="row">
-        <a href="https://tauri.app" target="_blank">
-          <img src="/assets/tauri.svg" class="logo tauri" alt="Tauri logo" />
-        </a>
-        <a
-          href="https://developer.mozilla.org/en-US/docs/Web/JavaScript"
-          target="_blank"
-        >
-          <img
-            src="/assets/javascript.svg"
-            class="logo vanilla"
-            alt="JavaScript logo"
-          />
-        </a>
-      </div>
-      <p>Click on the Tauri logo to learn more about the framework</p>
-
-      <form class="row" id="greet-form">
-        <input id="greet-input" placeholder="Enter a name..." />
-        <button type="submit">Greet</button>
-      </form>
-      <p id="greet-msg"></p>
-    </main>
-  </body>
+  <link rel="stylesheet" href="/styles/theme.css" />
+  <link rel="stylesheet" href="/styles/layout.css" />
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/main.js"></script>
+</body>
 </html>

@@ -1,18 +1,30 @@
-const { invoke } = window.__TAURI__.core;
+import { reactive, html } from '@arrow-js/core';
 
-let greetInputEl;
-let greetMsgEl;
+const state = reactive({
+  sidebarCollapsed: false,
+});
 
-async function greet() {
-  // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-  greetMsgEl.textContent = await invoke("greet", { name: greetInputEl.value });
+function app() {
+  const appEl = document.getElementById('app');
+
+  html`
+    <div class="sidebar ${() => state.sidebarCollapsed ? 'collapsed' : ''}">
+      <div class="sidebar-content">
+        <span style="color: var(--accent); font-size: 11px;">GSD MUX</span>
+      </div>
+    </div>
+    <div class="split-handle-v"></div>
+    <div class="main-panel">
+      <div class="terminal-area">terminal</div>
+      <div class="server-pane"></div>
+    </div>
+    <div class="split-handle-v"></div>
+    <div class="right-panel">
+      <div class="right-top">gsd viewer</div>
+      <div class="split-handle-h"></div>
+      <div class="right-bottom">git diff</div>
+    </div>
+  `(appEl);
 }
 
-window.addEventListener("DOMContentLoaded", () => {
-  greetInputEl = document.querySelector("#greet-input");
-  greetMsgEl = document.querySelector("#greet-msg");
-  document.querySelector("#greet-form").addEventListener("submit", (e) => {
-    e.preventDefault();
-    greet();
-  });
-});
+window.addEventListener('DOMContentLoaded', app);

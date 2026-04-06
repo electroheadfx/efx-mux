@@ -1,0 +1,163 @@
+/* layout.css — 3-zone flexbox layout with draggable split handles (per D-03 to D-09) */
+
+:root {
+  --sidebar-w:   200px;  /* D-03: full width; 40px when collapsed */
+  --right-w:     25%;    /* D-03: right panel fraction of total */
+  --handle-size: 4px;    /* visual thickness of split handle bar */
+  --handle-hit:  8px;    /* hit target — wider than visual for usability */
+}
+
+/* ─── App root ────────────────────────────────────── */
+#app {
+  display: flex;
+  flex-direction: row;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* ─── Sidebar ─────────────────────────────────────── */
+.sidebar {
+  width: var(--sidebar-w);
+  min-width: 40px;
+  max-width: 400px;
+  height: 100%;
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: width 0.15s ease;
+}
+
+.sidebar.collapsed {
+  width: 40px;
+}
+
+/* Placeholder content for sidebar icon strip */
+.sidebar-content {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  opacity: 1;
+  transition: opacity 0.1s ease;
+}
+
+.sidebar.collapsed .sidebar-content-full {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ─── Vertical split handle (sidebar↔main, main↔right) ─ */
+.split-handle-v {
+  width: var(--handle-size);
+  min-width: var(--handle-size);
+  height: 100%;
+  cursor: col-resize;
+  background: var(--border);
+  flex-shrink: 0;
+  /* Widen hit target with negative margin + transparent padding trick */
+  margin: 0 calc((var(--handle-hit) - var(--handle-size)) / -2);
+  padding: 0 calc((var(--handle-hit) - var(--handle-size)) / 2);
+  z-index: 10;
+  transition: background 0.1s ease;
+}
+
+.split-handle-v:hover,
+.split-handle-v.dragging {
+  background: var(--accent);
+}
+
+/* ─── Main panel ──────────────────────────────────── */
+.main-panel {
+  flex: 1;
+  min-width: 200px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+/* terminal-area: takes all remaining height (per D-05) */
+.terminal-area {
+  flex: 1;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  font-size: 12px;
+  border: 1px dashed var(--border);
+  margin: 8px;
+  border-radius: 2px;
+}
+
+/* server-pane: collapsed placeholder, height=0 (per D-05) */
+/* Phase 7 will expand this with controls and log output */
+.server-pane {
+  height: 0;
+  overflow: hidden;
+  background: var(--bg-raised);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+/* ─── Right panel ─────────────────────────────────── */
+.right-panel {
+  width: var(--right-w);
+  min-width: 120px;
+  max-width: 60%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+/* Horizontal split handle between right sub-panels (per D-09) */
+.split-handle-h {
+  width: 100%;
+  height: var(--handle-size);
+  min-height: var(--handle-size);
+  cursor: row-resize;
+  background: var(--border);
+  flex-shrink: 0;
+  /* Widen vertical hit target */
+  margin: calc((var(--handle-hit) - var(--handle-size)) / -2) 0;
+  padding: calc((var(--handle-hit) - var(--handle-size)) / 2) 0;
+  z-index: 10;
+  transition: background 0.1s ease;
+}
+
+.split-handle-h:hover,
+.split-handle-h.dragging {
+  background: var(--accent);
+}
+
+/* Right sub-panels (per D-04) */
+.right-top,
+.right-bottom {
+  flex: 1;
+  min-height: 60px;
+  background: var(--bg);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  font-size: 12px;
+  border: 1px dashed var(--border);
+  margin: 8px;
+  border-radius: 2px;
+}
+
+/* ─── Drag state — disable pointer events on panels during drag ─ */
+/* Applied by drag manager JS to prevent mousemove loss (per RESEARCH Pitfall 3) */
+.app-dragging .sidebar,
+.app-dragging .main-panel,
+.app-dragging .right-panel {
+  pointer-events: none;
+  user-select: none;
+}
