@@ -33,7 +33,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. User can collapse/expand the sidebar with Ctrl+B (toggles between 40px icon strip and 200px full)
   4. User can Cmd+C to copy and Cmd+V to paste text in any panel
   5. App chrome uses the forest-green dark palette with FiraCode Light 14 font throughout
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 01-01-PLAN.md — Scaffold + Arrow.js vendor + theme/layout CSS + index.html
+- [ ] 01-02-PLAN.md — Arrow.js panel components (sidebar, main-panel, right-panel) + main.js mount
+- [ ] 01-03-PLAN.md — Drag manager (all 3 handles) + localStorage persistence
+- [ ] 01-04-PLAN.md — Tauri clipboard menu (Rust) + Entitlements.plist + tauri.conf.json + UAT
 **UI hint**: yes
 
 ### Phase 2: Terminal Integration
@@ -130,7 +135,7 @@ Phases execute in numeric order. Note: Phases 3 and 6 are parallelizable after P
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Scaffold + Entitlements | 0/TBD | Not started | - |
+| 1. Scaffold + Entitlements | 0/4 | Not started | - |
 | 2. Terminal Integration | 0/TBD | Not started | - |
 | 3. Terminal Theming | 0/TBD | Not started | - |
 | 4. Session Persistence | 0/TBD | Not started | - |
