@@ -80,18 +80,13 @@
   overflow: hidden;
 }
 
-/* terminal-area: takes all remaining height (per D-05) */
+/* terminal-area: takes all remaining height, hosts xterm.js Terminal */
 .terminal-area {
   flex: 1;
   background: var(--bg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text);
-  font-size: 12px;
-  border: 1px dashed var(--border);
-  margin: 8px;
-  border-radius: 2px;
+  overflow: hidden;
+  position: relative;  /* xterm.js needs relative positioning for its layers */
+  min-height: 100px;
 }
 
 /* server-pane: collapsed placeholder, height=0 (per D-05) */

@@ -9,6 +9,9 @@ import { Sidebar }     from './components/sidebar.js';
 import { MainPanel }   from './components/main-panel.js';
 import { RightPanel }  from './components/right-panel.js';
 import { initDragManager } from './drag-manager.js';
+import { createTerminal } from './terminal/terminal-manager.js';
+import { connectPty } from './terminal/pty-bridge.js';
+import { attachResizeHandler } from './terminal/resize-handler.js';
 
 // --- Step 1: Restore persisted split ratios ---
 // Must run before components mount to avoid a flash of default widths.
@@ -82,4 +85,37 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     state.sidebarCollapsed = !state.sidebarCollapsed;
   }
+});
+
+// --- Step 6: Initialize terminal ---
+// Must run after html`...`(app) so .terminal-area exists in DOM (D-08: querySelector mount)
+// Uses requestAnimationFrame to ensure Arrow.js has finished rendering
+requestAnimationFrame(async () => {
+  const container = document.querySelector('.terminal-area');
+  if (!container) {
+    console.error('[efx-mux] .terminal-area not found in DOM');
+    return;
+  }
+
+  // Create xterm.js Terminal with WebGL/DOM fallback
+  const { terminal, fitAddon } = createTerminal(container);
+
+  // Connect to PTY via Channel (D-02: session name = directory basename)
+  // For Phase 2 MVP, use a fixed session name. Phase 5 will derive from project config.
+  const sessionName = 'efx-mux';
+  try {
+    await connectPty(terminal, sessionName);
+  } catch (err) {
+    console.error('[efx-mux] Failed to connect PTY:', err);
+    // If tmux is missing (D-01), show error in terminal
+    terminal.writeln('\r\n\x1b[31mFailed to start terminal: ' + err + '\x1b[0m');
+    terminal.writeln('\r\n\x1b[33mIf tmux is not installed, run: brew install tmux\x1b[0m');
+    return;
+  }
+
+  // Attach resize handler (D-12: 150ms debounce)
+  attachResizeHandler(container, terminal, fitAddon);
+
+  // Focus terminal for immediate keyboard input
+  terminal.focus();
 });

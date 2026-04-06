@@ -1,23 +1,29 @@
-// main-panel.js -- Main panel with terminal-area + server-pane (per D-05)
-// Phase 1: placeholder only. PTY + xterm.js wired in Phase 2.
+// main-panel.js -- Main panel with terminal-area + server-pane
+// Phase 2: terminal-area is empty -- xterm.js mounts via querySelector (D-08)
 import { html } from '@arrow-js/core';
 
-/**
- * MainPanel component.
- * terminal-area: takes remaining height (flex: 1) -- Phase 2 mounts xterm.js here.
- * server-pane: height: 0 collapsed placeholder -- Phase 7 adds controls.
- */
 export const MainPanel = () => html`
   <main class="main-panel" aria-label="Main panel">
-    <div class="terminal-area">
-      <span style="color: var(--text); font-size: 12px; letter-spacing: 0.04em;">
-        [ Terminal -- Phase 2 ]
-      </span>
+    <div class="terminal-area"></div>
+    <div
+      class="split-handle-h"
+      data-handle="main-h"
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label="Resize server pane"
+    ></div>
+    <div class="server-pane" aria-label="Server pane">
+      <div class="server-pane-toolbar">
+        <span style="color: var(--text-bright); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;">Server</span>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <button class="server-btn" title="Start server">Start</button>
+          <button class="server-btn" title="Stop server" disabled>Stop</button>
+          <button class="server-btn" title="Open in browser" disabled>Open</button>
+        </div>
+      </div>
+      <div class="server-pane-logs">
+        <span style="color: var(--text); font-size: 11px; opacity: 0.6;">[ Server logs -- Phase 7 ]</span>
+      </div>
     </div>
-    <!--
-      server-pane: height=0, overflow=hidden. Structural placeholder per D-05.
-      Phase 7 will expand this with start/stop/open-in-browser controls.
-    -->
-    <div class="server-pane" aria-hidden="true"></div>
   </main>
 `;
