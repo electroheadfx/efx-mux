@@ -1,5 +1,8 @@
 // src-tauri/src/lib.rs
+mod terminal;
+
 use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
+use terminal::pty::{ack_bytes, check_tmux, resize_pty, spawn_terminal, write_pty};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -38,8 +41,21 @@ pub fn run() {
                 .build()?;
             app.set_menu(menu)?;
 
+            // Probe for tmux availability (D-01)
+            // If tmux is missing, the frontend will show a modal.
+            match check_tmux() {
+                Ok(version) => println!("[efx-mux] tmux found: {}", version),
+                Err(e) => eprintln!("[efx-mux] WARNING: {}", e),
+            }
+
             Ok(())
         })
+        .invoke_handler(tauri::generate_handler![
+            spawn_terminal,
+            write_pty,
+            resize_pty,
+            ack_bytes,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application")
 }
