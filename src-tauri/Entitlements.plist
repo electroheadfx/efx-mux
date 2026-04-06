@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- sandbox=false: PTY spawning (Phase 2) is incompatible with App Sandbox.
+       This intentionally prevents Mac App Store distribution (see REQUIREMENTS.md). -->
+  <key>com.apple.security.app-sandbox</key>
+  <false/>
+
+  <!-- network.client: required for Phase 7 agent network calls and open-in-browser -->
+  <key>com.apple.security.network.client</key>
+  <true/>
+
+  <!-- files.user-selected.read-write: required for Phase 5/6 project file access -->
+  <key>com.apple.security.files.user-selected.read-write</key>
+  <true/>
+
+  <!-- files.downloads.read-write: required for Phase 6 file tree operations -->
+  <key>com.apple.security.files.downloads.read-write</key>
+  <true/>
+</dict>
+</plist>
