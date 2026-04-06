@@ -51,7 +51,11 @@ Plans:
   3. User closes the app, waits 10 seconds, reopens -- the tmux session is still alive and reattachable
   4. During heavy output (e.g., `cat /dev/urandom | xxd`), terminal remains responsive and no output is silently dropped (flow control pauses PTY reads at 400KB watermark)
   5. User drags the panel split handle and terminal content reflows correctly to the new dimensions without corruption
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 02-01-PLAN.md — Rust PTY backend (portable-pty + Tauri commands + flow control + tmux probe)
+- [ ] 02-02-PLAN.md — Vendor xterm.js 6.0 + terminal-manager.js + pty-bridge.js modules
+- [ ] 02-03-PLAN.md — Wire terminal into UI (main-panel + resize handler + main.js init) + UAT
 
 ### Phase 3: Terminal Theming
 **Goal**: User can fully customize terminal appearance via a theme.json file, import their existing iTerm2 theme, and see changes applied instantly without restarting
@@ -135,8 +139,8 @@ Phases execute in numeric order. Note: Phases 3 and 6 are parallelizable after P
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Scaffold + Entitlements | 0/4 | Planned | - |
-| 2. Terminal Integration | 0/TBD | Not started | - |
+| 1. Scaffold + Entitlements | 4/4 | Complete | 2026-04-06 |
+| 2. Terminal Integration | 0/3 | Planned | - |
 | 3. Terminal Theming | 0/TBD | Not started | - |
 | 4. Session Persistence | 0/TBD | Not started | - |
 | 5. Project System + Sidebar | 0/TBD | Not started | - |
