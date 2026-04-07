@@ -103,3 +103,64 @@ export function initBeforeUnload() {
     }
   });
 }
+
+// ============================================================================
+// Project registry helpers (Phase 5: project system sidebar)
+// ============================================================================
+
+/**
+ * Get all registered projects from Rust state.
+ * @returns {Promise<Array<{path: string, name: string, agent: string, gsd_file?: string, server_cmd?: string}>>}
+ */
+export async function getProjects() {
+  return await invoke('get_projects');
+}
+
+/**
+ * Get the currently active project name.
+ * @returns {Promise<string|null>}
+ */
+export async function getActiveProject() {
+  return await invoke('get_active_project');
+}
+
+/**
+ * Add a new project to the registry.
+ * @param {{ path: string, name: string, agent: string, gsd_file?: string, server_cmd?: string }} entry
+ */
+export async function addProject(entry) {
+  await invoke('add_project', { entry });
+  // Persist state after mutation
+  if (currentState) await invoke('save_state', { stateJson: JSON.stringify(currentState) });
+}
+
+/**
+ * Remove a project from the registry.
+ * @param {string} name
+ */
+export async function removeProject(name) {
+  await invoke('remove_project', { name });
+  // Persist state after mutation
+  if (currentState) await invoke('save_state', { stateJson: JSON.stringify(currentState) });
+}
+
+/**
+ * Switch to a different project (updates state.json active field).
+ * Emits 'project-changed' custom event on document.
+ * @param {string} name
+ */
+export async function switchProject(name) {
+  await invoke('switch_project', { name });
+  // Persist state after mutation
+  if (currentState) await invoke('save_state', { stateJson: JSON.stringify(currentState) });
+  document.dispatchEvent(new CustomEvent('project-changed', { detail: { name } }));
+}
+
+/**
+ * Get git status for a project directory.
+ * @param {string} path
+ * @returns {Promise<{branch: string, modified: number, staged: number, untracked: number}>}
+ */
+export async function getGitStatus(path) {
+  return await invoke('get_git_status', { path });
+}
