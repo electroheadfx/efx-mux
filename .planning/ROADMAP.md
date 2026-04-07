@@ -68,9 +68,9 @@ Plans:
   4. User can toggle app chrome between dark (Solarized Dark) and light mode; the preference persists across restarts
 **Plans**: 3 plans
 Plans:
-- [ ] 03-01-PLAN.md — Rust theme module (types, load/save, config dir, file watcher)
-- [ ] 03-02-PLAN.md — JS theme manager + dark/light CSS + terminal-manager update
-- [ ] 03-03-PLAN.md — iTerm2 importer + UAT checkpoint
+- [x] 03-01-PLAN.md — Rust theme module (types, load/save, config dir, file watcher)
+- [x] 03-02-PLAN.md — JS theme manager + dark/light CSS + terminal-manager update
+- [x] 03-03-PLAN.md — iTerm2 importer + UAT checkpoint
 **UI hint**: yes
 
 ### Phase 4: Session Persistence
