@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "GSD MUX",
+  "productName": "Efxmux",
   "version": "0.1.0",
-  "identifier": "com.gsd.mux",
+  "identifier": "com.efxmux.app",
   "build": {
     "frontendDist": "../src"
   },
@@ -10,7 +10,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "GSD MUX",
+        "title": "Efxmux",
         "width": 1400,
         "height": 900,
         "resizable": true,

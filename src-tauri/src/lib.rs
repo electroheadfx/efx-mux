@@ -12,7 +12,7 @@ pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             // ── macOS Application menu (first submenu = app name menu on macOS) ──
-            let app_menu = SubmenuBuilder::new(app, "GSD MUX")
+            let app_menu = SubmenuBuilder::new(app, "Efxmux")
                 .item(&PredefinedMenuItem::about(app, None, None)?)
                 .separator()
                 .item(&PredefinedMenuItem::quit(app, None)?)

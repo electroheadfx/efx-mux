@@ -15,7 +15,6 @@ export const RightPanel = () => html`
       </span>
     </div>
 
-    <!-- Horizontal split handle between right sub-panels (per D-09) -->
     <div
       class="split-handle-h"
       data-handle="right-h"

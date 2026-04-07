@@ -20,7 +20,6 @@ export const Sidebar = ({ collapsed }) => html`
     aria-label="Sidebar"
   >
     <div class="sidebar-content">
-      <!-- Full sidebar content (hidden when collapsed via CSS opacity) -->
       <div class="sidebar-content-full">
         <div class="sidebar-header" style="
           color: var(--text-bright);
@@ -30,7 +29,7 @@ export const Sidebar = ({ collapsed }) => html`
           padding: 4px 0 8px;
           border-bottom: 1px solid var(--border);
           margin-bottom: 8px;
-        ">GSD MUX</div>
+        ">EFXMUX</div>
         ${NAV_ICONS.map(item => html`
           <div class="sidebar-nav-item" style="
             display: flex;
@@ -47,7 +46,6 @@ export const Sidebar = ({ collapsed }) => html`
         `)}
       </div>
 
-      <!-- Icon strip (always visible, even when collapsed) -->
       <div class="sidebar-icons" style="
         display: flex;
         flex-direction: column;

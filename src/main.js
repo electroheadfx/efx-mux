@@ -93,7 +93,12 @@ document.addEventListener('keydown', (e) => {
 // Restores dark/light mode from localStorage + loads theme.json from Rust backend.
 // Uses requestAnimationFrame to ensure Arrow.js has finished rendering.
 requestAnimationFrame(async () => {
-  const loadedTheme = await initTheme();
+  let loadedTheme = null;
+  try {
+    loadedTheme = await initTheme();
+  } catch (err) {
+    console.warn('[efx-mux] Theme init failed, using defaults:', err);
+  }
 
   // --- Step 7: Initialize terminal ---
   // Must run after html`...`(app) so .terminal-area exists in DOM (D-08: querySelector mount)
