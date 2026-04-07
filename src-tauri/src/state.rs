@@ -162,10 +162,7 @@ fn config_dir() -> PathBuf {
     let home = std::env::var("HOME")
         .ok()
         .filter(|h| !h.is_empty())
-        .unwrap_or_else(|| {
-            eprintln!("[efxmux] WARNING: HOME not set; using /tmp/efxmux-fallback");
-            "/tmp/efxmux-fallback".to_string()
-        });
+        .expect("[efxmux] FATAL: HOME environment variable is not set");
     PathBuf::from(home).join(".config/efxmux")
 }
 
@@ -260,12 +257,13 @@ pub async fn save_state(
     let state: AppState = serde_json::from_str(&state_json).map_err(|e| e.to_string())?;
     // Update in-memory copy for the close handler.
     // Recover from poison since AppState has no invariants to violate.
-    let mut guard = managed.0.lock().unwrap_or_else(|e| {
-        eprintln!("[efxmux] WARNING: State mutex was poisoned, recovering");
-        e.into_inner()
-    });
-    *guard = state.clone();
-    drop(guard);
+    {
+        let mut guard = managed.0.lock().unwrap_or_else(|e| {
+            eprintln!("[efxmux] WARNING: State mutex was poisoned, recovering");
+            e.into_inner()
+        });
+        *guard = state.clone();
+    }
     // Use spawn_blocking for file I/O (per D-11, D-12)
     tauri::async_runtime::spawn_blocking(move || save_state_sync(&state))
         .await
