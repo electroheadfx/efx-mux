@@ -1,8 +1,10 @@
 // src-tauri/src/lib.rs
 mod terminal;
+mod theme;
 
 use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
 use terminal::pty::{ack_bytes, check_tmux, resize_pty, spawn_terminal, write_pty};
+use theme::types::load_theme;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -41,6 +43,9 @@ pub fn run() {
                 .build()?;
             app.set_menu(menu)?;
 
+            // Ensure ~/.config/efxmux/ exists before anything reads it
+            theme::types::ensure_config_dir();
+
             // Probe for tmux availability (D-01)
             // If tmux is missing, the frontend will show a modal.
             match check_tmux() {
@@ -55,6 +60,7 @@ pub fn run() {
             write_pty,
             resize_pty,
             ack_bytes,
+            load_theme,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application")
