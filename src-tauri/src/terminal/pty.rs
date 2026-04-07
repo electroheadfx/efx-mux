@@ -1,4 +1,5 @@
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use std::collections::HashMap;
 use std::io::Read;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
@@ -13,7 +14,7 @@ const FLOW_HIGH_WATERMARK: u64 = 400_000;
 /// Hysteresis prevents rapid pause/resume oscillation (HIGH=400KB pause, LOW=100KB resume).
 const FLOW_LOW_WATERMARK: u64 = 100_000;
 
-/// Managed Tauri state holding PTY handles and flow control counters.
+/// Per-session PTY state holding handles and flow control counters.
 pub struct PtyState {
     pub writer: Arc<Mutex<Box<dyn std::io::Write + Send>>>,
     pub master: Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>,
@@ -25,6 +26,10 @@ pub struct PtyState {
     #[allow(dead_code)]
     pub slave: Arc<Mutex<Option<Box<dyn portable_pty::SlavePty + Send>>>>,
 }
+
+/// Tauri-managed wrapper for multiple named PTY sessions (D-09).
+/// Replaces single PtyState managed by app.manage().
+pub struct PtyManager(pub Mutex<HashMap<String, PtyState>>);
 
 /// Probe for tmux availability. Returns version string or error with install instructions.
 pub fn check_tmux() -> Result<String, String> {
@@ -93,7 +98,12 @@ pub async fn spawn_terminal(
         acked_bytes: acked_bytes.clone(),
         slave: Arc::new(Mutex::new(Some(pair.slave))),
     };
-    app.manage(state);
+
+    // Insert into PtyManager HashMap (D-09) instead of app.manage(state)
+    let manager = app.state::<PtyManager>();
+    let mut map = manager.0.lock().map_err(|e| e.to_string())?;
+    map.insert(sanitized.clone(), state);
+    drop(map);
 
     let sent = sent_bytes;
     let acked = acked_bytes;
@@ -141,7 +151,10 @@ pub async fn spawn_terminal(
 
 /// Write input data to the PTY master (keystrokes from xterm.js).
 #[tauri::command]
-pub fn write_pty(data: String, state: tauri::State<'_, PtyState>) -> Result<(), String> {
+pub fn write_pty(data: String, session_name: String, manager: tauri::State<'_, PtyManager>) -> Result<(), String> {
+    let map = manager.0.lock().map_err(|e| e.to_string())?;
+    let state = map.get(&session_name)
+        .ok_or_else(|| format!("No PTY session found: {}", session_name))?;
     let mut writer = state.writer.lock().map_err(|e| e.to_string())?;
     writer
         .write_all(data.as_bytes())
@@ -151,7 +164,10 @@ pub fn write_pty(data: String, state: tauri::State<'_, PtyState>) -> Result<(), 
 
 /// Resize the PTY. This is a control operation that bypasses flow control (D-14).
 #[tauri::command]
-pub fn resize_pty(cols: u16, rows: u16, state: tauri::State<'_, PtyState>) -> Result<(), String> {
+pub fn resize_pty(cols: u16, rows: u16, session_name: String, manager: tauri::State<'_, PtyManager>) -> Result<(), String> {
+    let map = manager.0.lock().map_err(|e| e.to_string())?;
+    let state = map.get(&session_name)
+        .ok_or_else(|| format!("No PTY session found: {}", session_name))?;
     let master = state.master.lock().map_err(|e| e.to_string())?;
     master
         .resize(PtySize {
@@ -165,7 +181,17 @@ pub fn resize_pty(cols: u16, rows: u16, state: tauri::State<'_, PtyState>) -> Re
 
 /// Acknowledge processed bytes from the frontend for flow control (D-11).
 #[tauri::command]
-pub fn ack_bytes(count: u64, state: tauri::State<'_, PtyState>) -> Result<(), String> {
+pub fn ack_bytes(count: u64, session_name: String, manager: tauri::State<'_, PtyManager>) -> Result<(), String> {
+    let map = manager.0.lock().map_err(|e| e.to_string())?;
+    let state = map.get(&session_name)
+        .ok_or_else(|| format!("No PTY session found: {}", session_name))?;
     state.acked_bytes.fetch_add(count, Ordering::Relaxed);
     Ok(())
+}
+
+/// List active PTY session names (debugging utility).
+#[tauri::command]
+pub fn get_pty_sessions(manager: tauri::State<'_, PtyManager>) -> Result<Vec<String>, String> {
+    let map = manager.0.lock().map_err(|e| e.to_string())?;
+    Ok(map.keys().cloned().collect())
 }
