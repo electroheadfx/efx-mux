@@ -82,7 +82,10 @@ Plans:
   2. User reopens the app; layout is restored exactly and all tmux sessions are reattached with their running processes
   3. If a saved tmux session no longer exists (daemon died), user sees a warning and a fresh session is created automatically
   4. If state.json is missing or corrupted, app starts with default layout and logs a warning (no crash)
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [x] 04-01-PLAN.md -- Rust state persistence layer (state.json types, load/save commands, extend theme watcher)
+- [x] 04-02-PLAN.md -- JS integration (beforeunload wiring, migrate drag-manager + theme-manager to state.json, session reattach + dead session recovery)
 
 ### Phase 5: Project System + Sidebar
 **Goal**: User can register multiple project directories and switch between them -- each switch atomically updates the terminal session, sidebar git status, and all panel content
