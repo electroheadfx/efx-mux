@@ -5,7 +5,7 @@ milestone_name: milestone
 status: executing
 stopped_at: Phase 2 context gathered
 last_updated: "2026-04-06T14:33:54.971Z"
-last_activity: 2026-04-06 -- Phase 01 execution started
+last_activity: 2026-04-07 - Completed quick task 260407-di0: Fix phase 2 issues
 progress:
   total_phases: 8
   completed_phases: 1
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-06)
 Phase: 01 (scaffold-entitlements) — EXECUTING
 Plan: 1 of 4
 Status: Executing Phase 01
-Last activity: 2026-04-06 -- Phase 01 execution started
+Last activity: 2026-04-07 - Completed quick task 260407-di0: Fix phase 2 issues
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -73,6 +73,12 @@ None yet.
 
 - [Phase 2]: Two spikes required before production code -- `Channel<Vec<u8>>` binary encoding behavior and Arrow.js `ref` attribute in WKWebView. If either fails, architecture must adapt.
 - [Phase 2]: tmux not installed by default on macOS. Startup probe needed with user-friendly install prompt.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260407-di0 | Fix phase 2 issues: LOW watermark hysteresis, terminal padding, key repeat, word navigation, line cursor, scrollbar | 2026-04-07 | 62c653c | [260407-di0-fix-phase-2-issues-low-watermark-hystere](./quick/260407-di0-fix-phase-2-issues-low-watermark-hystere/) |
 
 ## Session Continuity
 
