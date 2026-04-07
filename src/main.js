@@ -13,7 +13,9 @@ import { createTerminal } from './terminal/terminal-manager.js';
 import { connectPty } from './terminal/pty-bridge.js';
 import { attachResizeHandler } from './terminal/resize-handler.js';
 import { initTheme, registerTerminal, toggleThemeMode } from './theme/theme-manager.js';
-import { loadAppState, initBeforeUnload, updateLayout, updateSession } from './state-manager.js';
+import { loadAppState, initBeforeUnload, updateLayout, updateSession, getProjects, getActiveProject, switchProject } from './state-manager.js';
+import { ProjectModal } from './components/project-modal.js';
+import { FuzzySearch }  from './components/fuzzy-search.js';
 
 // --- Step 1: Load persisted state from Rust backend ---
 // Must run before components mount to avoid layout flash.
@@ -71,11 +73,16 @@ html`
   ${MainPanel()}
   <div class="split-handle-v" data-handle="main-right" role="separator" aria-orientation="vertical" aria-label="Resize main panel"></div>
   ${RightPanel()}
+  ${ProjectModal()}
+  ${FuzzySearch()}
 `(app);
 
 // --- Step 4: Wire drag handles ---
 // Must be after html`...`(app) so [data-handle] elements exist in DOM
 initDragManager();
+
+// --- Step 4b: Init project system ---
+initProjects();
 
 // --- Step 5: Keyboard handlers ---
 // Ctrl+B -- toggle sidebar (per D-06 / LAYOUT-03)
@@ -89,6 +96,35 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     toggleThemeMode();
   }
+  // Ctrl+P -- fuzzy project search overlay (handled by fuzzy-search.js global listener)
+  // but also dispatch event here for explicit control
+  if (e.ctrlKey && e.key === 'p') {
+    // fuzzy-search.js already captures this at document level
+    // Dispatch event for explicit cross-component communication
+    document.dispatchEvent(new CustomEvent('open-fuzzy-search'));
+  }
+});
+
+// --- Step 4b: Project system init ---
+// Load projects on startup; auto-open modal if empty
+async function initProjects() {
+  try {
+    const projects = await getProjects();
+    if (projects.length === 0) {
+      // Signal first-run modal
+      const { openProjectModal } = await import('./components/project-modal.js');
+      openProjectModal({ firstRun: true });
+    }
+  } catch (err) {
+    console.warn('[efxmux] Failed to load projects:', err);
+  }
+}
+
+// Listen for project switches — update sidebar + tmux sessions
+document.addEventListener('project-changed', async (e) => {
+  const newProject = e.detail.name;
+  console.log('[efxmux] Project switched to:', newProject);
+  // TODO (Phase 6+): update tmux session, GSD viewer path, git panels
 });
 
 // --- Step 6: Initialize theme ---
