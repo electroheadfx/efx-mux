@@ -1,9 +1,11 @@
 // theme-manager.js -- Theme lifecycle: load, apply, hot-reload, dark/light toggle
 // Per D-10: loads theme from Rust backend on startup
 // Per D-13: hot-reload via Tauri 'theme-changed' event
-// Per D-14: dark/light chrome toggle with localStorage persistence
+// Per D-14: dark/light chrome toggle with state.json persistence (Phase 4)
 // Per D-15: light mode only affects app chrome; terminal colors always from theme.json
 // Per T-03-05: guard with null checks before property access
+
+import { updateThemeMode as persistThemeMode, getCurrentState } from '../state-manager.js';
 
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
@@ -79,7 +81,7 @@ export function getTerminalTheme() {
 const CHROME_PROPS = ['--bg', '--bg-raised', '--border', '--text', '--text-bright', '--accent'];
 
 /**
- * Set dark/light chrome mode and persist to localStorage.
+ * Set dark/light chrome mode and persist to state.json via Rust backend.
  * When switching to light: clears inline chrome CSS vars so :root[data-theme="light"] in
  * theme.css takes effect (inline styles have higher specificity than CSS selectors).
  * When switching to dark: re-applies chrome vars from cached theme.
@@ -88,7 +90,8 @@ const CHROME_PROPS = ['--bg', '--bg-raised', '--border', '--text', '--text-brigh
 export function setThemeMode(mode) {
   const style = document.documentElement.style;
   document.documentElement.setAttribute('data-theme', mode);
-  localStorage.setItem('efxmux:theme-mode', mode);
+  // Persist to state.json via Rust backend (Phase 4)
+  persistThemeMode(mode);
 
   if (mode === 'light') {
     // Remove inline chrome vars so CSS :root[data-theme="light"] wins
@@ -108,12 +111,13 @@ export function setThemeMode(mode) {
 }
 
 /**
- * Toggle dark/light chrome mode and persist to localStorage.
+ * Toggle dark/light chrome mode and persist to state.json.
  * Light mode only affects CSS custom properties (D-14, D-15).
  * Terminal colors remain from theme.json.
  */
 export function toggleThemeMode() {
   const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  // Mark as manually toggled (kept in localStorage -- UI preference flag, not layout state)
   localStorage.setItem('efxmux:theme-manual', 'true');
   setThemeMode(current === 'dark' ? 'light' : 'dark');
 }
@@ -126,8 +130,9 @@ export function toggleThemeMode() {
 function initOsThemeListener() {
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
 
-  // On first launch, follow OS if no manual preference stored
-  if (localStorage.getItem('efxmux:theme-mode') === null) {
+  // On first launch, follow OS if no preference stored in state.json
+  const currentMode = getCurrentState()?.theme?.mode;
+  if (currentMode === undefined || currentMode === null) {
     setThemeMode(mq.matches ? 'dark' : 'light');
   }
 
@@ -141,14 +146,18 @@ function initOsThemeListener() {
 
 /**
  * Initialize theme on startup:
- * 1. Restore dark/light mode from localStorage (before paint)
+ * 1. Restore dark/light mode from state.json (before paint, with localStorage fallback)
  * 2. Load theme from Rust backend
  * 3. Apply theme to CSS + xterm.js terminals
  * 4. Set up hot-reload listener
  * @returns {Promise<{ chrome?: object, terminal?: object } | null>}
  */
 export async function initTheme() {
-  const savedMode = localStorage.getItem('efxmux:theme-mode') || 'dark';
+  // Use theme mode from already-loaded state (Phase 4: state.json, not localStorage)
+  // Falls back to localStorage for upgrade users (Phase 3 -> Phase 4 transition)
+  const savedMode = getCurrentState()?.theme?.mode
+    ?? localStorage.getItem('efxmux:theme-mode')
+    ?? 'dark';
   document.documentElement.setAttribute('data-theme', savedMode);
 
   const theme = await invoke('load_theme');
