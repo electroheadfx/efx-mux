@@ -13,6 +13,9 @@ const { listen } = window.__TAURI__.event;
 /** @type {{ chrome?: object, terminal?: object } | null} */
 let currentTheme = null;
 
+/** Session-scoped flag: true after user manually toggles theme mode (resets on app restart) */
+let manualToggle = false;
+
 /** Terminal registry for hot-reload updates */
 const terminals = [];
 
@@ -117,8 +120,8 @@ export function setThemeMode(mode) {
  */
 export function toggleThemeMode() {
   const current = document.documentElement.getAttribute('data-theme') || 'dark';
-  // Mark as manually toggled (kept in localStorage -- UI preference flag, not layout state)
-  localStorage.setItem('efxmux:theme-manual', 'true');
+  // Mark as manually toggled for this session (resets on app restart)
+  manualToggle = true;
   setThemeMode(current === 'dark' ? 'light' : 'dark');
 }
 
@@ -138,7 +141,7 @@ function initOsThemeListener() {
 
   // Only follow OS changes if user hasn't manually toggled
   mq.addEventListener('change', (e) => {
-    if (localStorage.getItem('efxmux:theme-manual') !== 'true') {
+    if (!manualToggle) {
       setThemeMode(e.matches ? 'dark' : 'light');
     }
   });
@@ -162,6 +165,8 @@ export async function initTheme() {
 
   const theme = await invoke('load_theme');
   applyTheme(theme);
+  // Apply saved mode after applyTheme() -- clears inline CSS vars for light mode (Fix 1: UAT Test 4)
+  setThemeMode(savedMode);
 
   await listen('theme-changed', (event) => {
     applyTheme(event.payload);
