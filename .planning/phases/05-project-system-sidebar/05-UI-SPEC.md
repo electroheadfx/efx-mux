@@ -31,7 +31,7 @@ Declared values (must be multiples of 4):
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| xs | 4px | Icon gaps, inline padding, terminal-area padding |
+| xs | 4px | Icon gaps, inline padding, terminal-area padding, sidebar nav item vertical padding |
 | sm | 8px | Sidebar content padding, nav item gaps, collapsed icon gaps |
 | md | 16px | Modal field spacing, section padding |
 | lg | 24px | Modal internal padding, section breaks |
@@ -39,7 +39,7 @@ Declared values (must be multiples of 4):
 | 2xl | 48px | Not used this phase |
 | 3xl | 64px | Not used this phase |
 
-Exceptions: Sidebar nav items use 6px vertical padding (existing pattern from Phase 1, keep for density).
+Exceptions: None. All spacing values are multiples of 4.
 
 ---
 
@@ -103,15 +103,15 @@ Accent reserved for: active project left-border indicator (3px), Ctrl+P selected
 ```
 
 - Active project row: `background: rgba(37, 138, 209, 0.08)`, `border-left: 3px solid var(--accent)`, `padding-left: 5px` (8px minus 3px border).
-- Inactive project row: `padding: 6px 8px`, full 8px left padding.
+- Inactive project row: `padding: 4px 8px`, `min-height: 32px`, `display: flex`, `align-items: center`.
 - Project row height: auto (content-driven), minimum touch target 32px.
 - Git branch badge: `font-size: 11px`, `color: var(--accent)`, right-aligned in project row.
 - Git changes section: collapsible via click on section header. Default expanded.
 - File list items: `font-size: 12px`, `padding: 4px 8px`, `cursor: pointer`. Hover: `background: var(--bg-raised)`.
 - Status letter (M/S/U): right-aligned, colored per badge colors above.
 - Section divider: `1px solid var(--border)`, `margin: 8px 0`.
-- "+" button: 24x24px, `font-size: 16px`, `color: var(--text)`, hover: `color: var(--accent)`. Content: Unicode `+` (U+002B).
-- Refresh button [R]: 20x20px, `font-size: 12px`, Unicode `\u21BB` (clockwise arrow). Same hover behavior as "+".
+- "+" button: 24x24px, `font-size: 16px`, `color: var(--text)`, hover: `color: var(--accent)`, `aria-label: "Add project"`. Content: Unicode `+` (U+002B).
+- Refresh button [R]: 20x20px, `font-size: 12px`, Unicode `\u21BB` (clockwise arrow), `aria-label: "Refresh git status"`. Same hover behavior as "+".
 
 **Collapsed state (40px):**
 - Show first letter of each project name as 24x24px centered icon.
@@ -134,9 +134,8 @@ Accent reserved for: active project left-border indicator (3px), Ctrl+P selected
 |   | GSD File     [optional path        ]      |      |
 |   | Server Cmd   [optional command     ]      |      |
 |   |                                          |      |
-|   |              [Cancel]  [Add Project]      |      |
+|   |           [Cancel Add]  [Add Project]     |      |
 |   +------------------------------------------+      |
-|                                                     |
 +-----------------------------------------------------+
 ```
 
@@ -152,12 +151,12 @@ Accent reserved for: active project left-border indicator (3px), Ctrl+P selected
 - Directory field: has a browse button [...] that triggers native directory picker. Browse button: `width: 32px`, `background: var(--bg)`, `border: 1px solid var(--border)`, `border-left: none`, inline with input.
 - Agent dropdown: native `<select>` styled to match inputs. Options: claude, opencode, bash.
 - Button row: `padding: 16px 24px 24px`, `display: flex`, `justify-content: flex-end`, `gap: 8px`.
-- Cancel button: `background: transparent`, `border: 1px solid var(--border)`, `color: var(--text)`, `padding: 6px 16px`, `border-radius: 2px`. Hover: `border-color: var(--text)`.
-- Add Project button: `background: var(--accent)`, `color: #ffffff`, `border: none`, `padding: 6px 16px`, `border-radius: 2px`. Hover: `opacity: 0.9`. Disabled when directory field is empty.
+- Cancel Add button: `background: transparent`, `border: 1px solid var(--border)`, `color: var(--text)`, `padding: 8px 16px`, `border-radius: 2px`. Hover: `border-color: var(--text)`.
+- Add Project button: `background: var(--accent)`, `color: #ffffff`, `border: none`, `padding: 8px 16px`, `border-radius: 2px`. Hover: `opacity: 0.9`. Disabled when directory field is empty.
 - Animation: modal fades in over 150ms (`opacity: 0 -> 1`). No slide or scale animation.
 - Escape key dismisses modal. Click on backdrop dismisses modal.
 
-**First-run behavior (D-04):** When `projects` array is empty on startup, the modal opens automatically. The Cancel button is hidden in first-run mode (user must add at least one project). Close [X] button remains available.
+**First-run behavior (D-04):** When `projects` array is empty on startup, the modal opens automatically. The Cancel Add button is hidden in first-run mode (user must add at least one project). Close [X] button remains available.
 
 ### 3. Fuzzy Search Overlay (new: fuzzy-search.js)
 
@@ -195,10 +194,39 @@ Accent reserved for: active project left-border indicator (3px), Ctrl+P selected
 - Surface: `background: var(--bg-raised)`, `border: 1px solid var(--border)`, `border-radius: 4px`, `padding: 12px 16px`.
 - Error variant: `border-left: 3px solid #dc322f`.
 - Info variant: `border-left: 3px solid var(--accent)`.
-- Text: `font-size: 13px`, `color: var(--text-bright)`.
+- Text: `font-size: 12px`, `color: var(--text-bright)`.
 - Auto-dismiss: 4 seconds. No manual dismiss button (keeps it simple).
 - Animation: slide up 8px + fade in over 150ms. Fade out over 150ms before removal.
 - `z-index: 200` (above modals).
+
+### 5. Remove Project Confirmation Dialog (new: inline in sidebar.js)
+
+**Layout:**
+```
++-------- dimmed backdrop (rgba(0,0,0,0.5)) --------+
+|                                                     |
+|   +------------------------------------------+      |
+|   | Remove {name}                             |      |
+|   |------------------------------------------|      |
+|   | Remove this project from the sidebar?     |      |
+|   | The project files will not be deleted.    |      |
+|   |                                          |      |
+|   |           [Cancel]  [Remove Project]     |      |
+|   +------------------------------------------+      |
++-----------------------------------------------------+
+```
+
+- Dialog width: 360px, centered horizontally and vertically.
+- Surface: `background: var(--bg-raised)`, `border: 1px solid var(--border)`, `border-radius: 4px`.
+- Backdrop: `background: rgba(0, 0, 0, 0.5)`, `z-index: 101` (above modal's backdrop).
+- Dialog `z-index: 102` (above modal itself).
+- Title: 14px, `color: var(--text-bright)`, `padding: 16px 24px 0`.
+- Message body: 14px, `color: var(--text)`, `line-height: 1.5`, `padding: 0 24px`.
+- Button row: `padding: 16px 24px 24px`, `display: flex`, `justify-content: flex-end`, `gap: 8px`.
+- Cancel button: `background: transparent`, `border: 1px solid var(--border)`, `color: var(--text)`, `padding: 8px 16px`, `border-radius: 2px`. Hover: `border-color: var(--text)`.
+- Remove button: `background: #dc322f`, `color: #ffffff`, `border: none`, `padding: 8px 16px`, `border-radius: 2px`. Hover: `opacity: 0.9`.
+- Animation: fade in over 150ms. No slide or scale.
+- Escape key dismisses. Backdrop click dismisses.
 
 ---
 
@@ -219,6 +247,7 @@ Accent reserved for: active project left-border indicator (3px), Ctrl+P selected
 | Toast: project added | "Project {name} added" |
 | Toast: project switched | (no toast -- switch is visual via sidebar highlight) |
 | Modal title: add | "Add Project" |
+| Modal cancel | "Cancel Add" |
 | Modal field: directory | "Directory" |
 | Modal field: name | "Name" |
 | Modal field: agent | "Agent" |
@@ -266,7 +295,7 @@ Accent reserved for: active project left-border indicator (3px), Ctrl+P selected
 |-----|---------|--------|
 | Ctrl+P | App-level (captured before terminal) | Open fuzzy search overlay |
 | Escape | Fuzzy search open | Close fuzzy search |
-| Escape | Modal open | Close modal (except first-run where Cancel is hidden -- Escape still works via [X]) |
+| Escape | Modal open | Close modal (except first-run where Cancel Add is hidden -- Escape still works via [X]) |
 | Arrow Up/Down | Fuzzy search open | Navigate results |
 | Enter | Fuzzy search open | Switch to selected project, close overlay |
 | Enter | Modal focused, all required fields filled | Submit modal (add project) |
