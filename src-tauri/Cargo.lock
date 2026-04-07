@@ -1432,7 +1432,6 @@ dependencies = [
  "notify",
  "notify-debouncer-mini",
  "portable-pty",
- "regex",
  "serde",
  "serde_json",
  "tauri",

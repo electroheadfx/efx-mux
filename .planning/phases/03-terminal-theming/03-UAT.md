@@ -1,5 +1,5 @@
 ---
-status: partial
+status: diagnosed
 phase: 03-terminal-theming
 source: [03-01-SUMMARY.md, 03-02-SUMMARY.md, 03-03-SUMMARY.md]
 started: 2026-04-07T10:00:00Z
@@ -57,5 +57,12 @@ blocked: 1
   reason: "User reported: I change the OS theme to day mode from dark mode, the app stay on dark mode. In the app I have no dark/day mode toggle"
   severity: major
   test: 4
-  artifacts: []
-  missing: []
+  root_cause: "toggleThemeMode() exists in theme-manager.js but is never called — no UI button or keyboard shortcut wired. No matchMedia('prefers-color-scheme') listener to detect OS theme changes."
+  artifacts:
+    - path: "src/theme/theme-manager.js"
+      issue: "toggleThemeMode() exported but never invoked; no OS theme listener"
+    - path: "src/main.js"
+      issue: "Does not wire toggleThemeMode or add OS theme change listener"
+  missing:
+    - "Add matchMedia('(prefers-color-scheme: dark)') listener to auto-follow OS theme"
+    - "Wire toggleThemeMode() to a UI element or keyboard shortcut"
