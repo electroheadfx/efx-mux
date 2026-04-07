@@ -5,6 +5,7 @@ use std::time::Duration;
 use tauri::Emitter;
 
 use super::types::{config_dir, theme_path};
+use crate::state::state_path;
 
 /// Start a background thread that watches ~/.config/efxmux/ for theme.json changes.
 ///
@@ -15,8 +16,11 @@ pub fn start_theme_watcher(app_handle: tauri::AppHandle) {
     let target_path: PathBuf = theme_path();
     let watch_dir: PathBuf = config_dir();
 
+    let state_file_path: PathBuf = state_path();
+
     std::thread::spawn(move || {
         let target = target_path.clone();
+        let state_target = state_file_path.clone();
         let handle = app_handle.clone();
 
         let mut debouncer = match new_debouncer(
@@ -32,29 +36,52 @@ pub fn start_theme_watcher(app_handle: tauri::AppHandle) {
 
                 // Check if any event path matches theme.json specifically
                 let is_theme_event = events.iter().any(|e| e.path == target);
-                if !is_theme_event {
-                    return;
-                }
-
-                // Read and validate theme.json before emitting
-                match std::fs::read_to_string(&target) {
-                    Ok(content) => {
-                        match serde_json::from_str::<serde_json::Value>(&content) {
-                            Ok(theme_value) => {
-                                if let Err(e) = handle.emit("theme-changed", theme_value) {
-                                    eprintln!("[efxmux] Failed to emit theme-changed event: {}", e);
+                if is_theme_event {
+                    // Read and validate theme.json before emitting
+                    match std::fs::read_to_string(&target) {
+                        Ok(content) => {
+                            match serde_json::from_str::<serde_json::Value>(&content) {
+                                Ok(theme_value) => {
+                                    if let Err(e) = handle.emit("theme-changed", theme_value) {
+                                        eprintln!("[efxmux] Failed to emit theme-changed event: {}", e);
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!(
+                                        "[efxmux] Invalid theme.json: {}. Keeping current theme.",
+                                        e
+                                    );
                                 }
                             }
-                            Err(e) => {
-                                eprintln!(
-                                    "[efxmux] Invalid theme.json: {}. Keeping current theme.",
-                                    e
-                                );
-                            }
+                        }
+                        Err(e) => {
+                            eprintln!("[efxmux] Failed to read theme.json: {}", e);
                         }
                     }
-                    Err(e) => {
-                        eprintln!("[efxmux] Failed to read theme.json: {}", e);
+                }
+
+                // Check if any event path matches state.json
+                let is_state_event = events.iter().any(|e| e.path == state_target);
+                if is_state_event {
+                    match std::fs::read_to_string(&state_target) {
+                        Ok(content) => {
+                            match serde_json::from_str::<serde_json::Value>(&content) {
+                                Ok(state_value) => {
+                                    if let Err(e) = handle.emit("state-changed", state_value) {
+                                        eprintln!("[efxmux] Failed to emit state-changed event: {}", e);
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!(
+                                        "[efxmux] Invalid state.json: {}. Keeping current state.",
+                                        e
+                                    );
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("[efxmux] Failed to read state.json: {}", e);
+                        }
                     }
                 }
             },
