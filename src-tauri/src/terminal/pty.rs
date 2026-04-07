@@ -9,6 +9,10 @@ use tauri::Manager;
 /// High watermark: pause PTY reads when unacknowledged bytes exceed this threshold.
 const FLOW_HIGH_WATERMARK: u64 = 400_000;
 
+/// Low watermark: resume PTY reads when unacknowledged bytes drop below this threshold.
+/// Hysteresis prevents rapid pause/resume oscillation (HIGH=400KB pause, LOW=100KB resume).
+const FLOW_LOW_WATERMARK: u64 = 100_000;
+
 /// Managed Tauri state holding PTY handles and flow control counters.
 pub struct PtyState {
     pub writer: Arc<Mutex<Box<dyn std::io::Write + Send>>>,
@@ -94,11 +98,23 @@ pub async fn spawn_terminal(
     // PTY read loop on dedicated OS thread (NOT tokio::spawn -- Research Pitfall 5)
     std::thread::spawn(move || {
         let mut buf = vec![0u8; 4096];
+        let mut paused = false;
         loop {
-            // Flow control: pause if unacknowledged bytes exceed HIGH watermark
+            // Flow control: hysteresis between HIGH (400KB) and LOW (100KB) watermarks
             let unacked = sent.load(Ordering::Relaxed)
                 .saturating_sub(acked.load(Ordering::Relaxed));
-            if unacked > FLOW_HIGH_WATERMARK {
+
+            if paused {
+                // Resume only when unacked drops below LOW watermark
+                if unacked <= FLOW_LOW_WATERMARK {
+                    paused = false;
+                } else {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                    continue;
+                }
+            } else if unacked > FLOW_HIGH_WATERMARK {
+                // Pause when unacked exceeds HIGH watermark
+                paused = true;
                 std::thread::sleep(std::time::Duration::from_millis(10));
                 continue;
             }
