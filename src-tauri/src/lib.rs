@@ -1,4 +1,5 @@
 // src-tauri/src/lib.rs
+mod git_status;
 mod state;
 mod terminal;
 mod theme;
