@@ -76,16 +76,41 @@ export function getTerminalTheme() {
 }
 
 /**
+ * Set dark/light chrome mode and persist to localStorage.
+ * @param {'dark' | 'light'} mode
+ */
+export function setThemeMode(mode) {
+  document.documentElement.setAttribute('data-theme', mode);
+  localStorage.setItem('efxmux:theme-mode', mode);
+}
+
+/**
  * Toggle dark/light chrome mode and persist to localStorage.
  * Light mode only affects CSS custom properties (D-14, D-15).
  * Terminal colors remain from theme.json.
  */
 export function toggleThemeMode() {
-  const root = document.documentElement;
-  const current = root.getAttribute('data-theme') || 'dark';
-  const next = current === 'dark' ? 'light' : 'dark';
-  root.setAttribute('data-theme', next);
-  localStorage.setItem('efxmux:theme-mode', next);
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  setThemeMode(current === 'dark' ? 'light' : 'dark');
+}
+
+/**
+ * Follow OS dark/light preference via matchMedia.
+ * On first launch (no stored preference), adopts OS setting.
+ * On OS change mid-session, always follows OS (standard macOS behavior).
+ */
+function initOsThemeListener() {
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+
+  // On first launch, follow OS if no manual preference stored
+  if (localStorage.getItem('efxmux:theme-mode') === null) {
+    setThemeMode(mq.matches ? 'dark' : 'light');
+  }
+
+  // Follow OS changes mid-session
+  mq.addEventListener('change', (e) => {
+    setThemeMode(e.matches ? 'dark' : 'light');
+  });
 }
 
 /**
@@ -106,6 +131,8 @@ export async function initTheme() {
   await listen('theme-changed', (event) => {
     applyTheme(event.payload);
   });
+
+  initOsThemeListener();
 
   return theme;
 }

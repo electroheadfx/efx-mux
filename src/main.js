@@ -12,7 +12,7 @@ import { initDragManager } from './drag-manager.js';
 import { createTerminal } from './terminal/terminal-manager.js';
 import { connectPty } from './terminal/pty-bridge.js';
 import { attachResizeHandler } from './terminal/resize-handler.js';
-import { initTheme, registerTerminal } from './theme/theme-manager.js';
+import { initTheme, registerTerminal, toggleThemeMode } from './theme/theme-manager.js';
 
 // --- Step 1: Restore persisted split ratios ---
 // Must run before components mount to avoid a flash of default widths.
@@ -85,6 +85,11 @@ document.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.key === 'b') {
     e.preventDefault();
     state.sidebarCollapsed = !state.sidebarCollapsed;
+  }
+  // Ctrl+Shift+T -- toggle dark/light mode (per THEME-04)
+  if (e.ctrlKey && e.shiftKey && e.key === 'T') {
+    e.preventDefault();
+    toggleThemeMode();
   }
 });
 
