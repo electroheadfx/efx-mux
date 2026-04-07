@@ -1,6 +1,6 @@
 // main.js -- App bootstrap for GSD MUX
 // Execution order matters:
-//   1. Restore persisted ratios from localStorage (prevents layout flash)
+//   1. Load persisted state from Rust backend (prevents layout flash)
 //   2. Create reactive state
 //   3. Mount Arrow.js components
 //   4. Wire keyboard handlers
@@ -13,54 +13,52 @@ import { createTerminal } from './terminal/terminal-manager.js';
 import { connectPty } from './terminal/pty-bridge.js';
 import { attachResizeHandler } from './terminal/resize-handler.js';
 import { initTheme, registerTerminal, toggleThemeMode } from './theme/theme-manager.js';
+import { loadAppState, initBeforeUnload, updateLayout, updateSession } from './state-manager.js';
 
-// --- Step 1: Restore persisted split ratios ---
-// Must run before components mount to avoid a flash of default widths.
-// Phase 4 will migrate this to state.json via Tauri IPC; localStorage is the
-// Phase 1 temporary measure (per D-08).
-const RATIO_KEY = 'gsd-mux:split-ratios';
-const DEFAULT_RATIOS = {
-  '--sidebar-w': '200px',
-  '--right-w':   '25%',
-};
+// --- Step 1: Load persisted state from Rust backend ---
+// Must run before components mount to avoid layout flash.
+// Uses state.json at ~/.config/efxmux/ (Phase 4 replaces localStorage).
+let appState = null;
+try {
+  appState = await loadAppState();
+} catch (err) {
+  console.warn('[efxmux] State load failed, using defaults:', err);
+}
 
-function loadRatios() {
-  try {
-    return JSON.parse(localStorage.getItem(RATIO_KEY) || '{}');
-  } catch {
-    return {};
+// Apply loaded layout to CSS custom properties immediately
+if (appState?.layout) {
+  const { layout } = appState;
+  if (layout['sidebar-w']) document.documentElement.style.setProperty('--sidebar-w', layout['sidebar-w']);
+  if (layout['right-w']) document.documentElement.style.setProperty('--right-w', layout['right-w']);
+  if (layout['right-h-pct']) {
+    const pct = parseFloat(layout['right-h-pct']);
+    if (!isNaN(pct)) {
+      const rightPanel = document.querySelector('.right-panel');
+      if (rightPanel) {
+        const rt = rightPanel.querySelector('.right-top');
+        const rb = rightPanel.querySelector('.right-bottom');
+        if (rt) rt.style.flex = `0 0 ${pct.toFixed(1)}%`;
+        if (rb) rb.style.flex = `0 0 ${(100 - pct).toFixed(1)}%`;
+      }
+    }
   }
 }
 
-function saveRatios(patch) {
-  const current = loadRatios();
-  localStorage.setItem(RATIO_KEY, JSON.stringify({ ...current, ...patch }));
-}
-
-function applyRatios(ratios) {
-  const merged = { ...DEFAULT_RATIOS, ...ratios };
-  for (const [prop, value] of Object.entries(merged)) {
-    document.documentElement.style.setProperty(prop, value);
-  }
-}
-
-// Apply immediately -- before first paint
-applyRatios(loadRatios());
+// Wire beforeunload to save state on app close (D-11)
+initBeforeUnload();
 
 // --- Step 2: Reactive state ---
-const saved = loadRatios();
 const state = reactive({
-  // Sidebar collapsed: true if sidebar-w is 40px
-  sidebarCollapsed: saved['--sidebar-w'] === '40px',
+  sidebarCollapsed: appState?.layout?.['sidebar-collapsed'] ?? false,
 });
 
-// Keep CSS in sync when sidebarCollapsed changes.
-// Arrow.js watch() re-runs whenever any reactive data accessed inside changes.
+// Keep CSS and state.json in sync when sidebarCollapsed changes.
 watch(() => {
   const collapsed = state.sidebarCollapsed;
   const w = collapsed ? '40px' : '200px';
   document.documentElement.style.setProperty('--sidebar-w', w);
-  saveRatios({ '--sidebar-w': w });
+  // Persist to state.json via Rust
+  updateLayout({ 'sidebar-w': w, 'sidebar-collapsed': collapsed });
 });
 
 // --- Step 3: Mount components ---
@@ -77,7 +75,7 @@ html`
 
 // --- Step 4: Wire drag handles ---
 // Must be after html`...`(app) so [data-handle] elements exist in DOM
-initDragManager({ saveRatios });
+initDragManager();
 
 // --- Step 5: Keyboard handlers ---
 // Ctrl+B -- toggle sidebar (per D-06 / LAYOUT-03)
@@ -95,21 +93,21 @@ document.addEventListener('keydown', (e) => {
 
 // --- Step 6: Initialize theme ---
 // Must run before terminal creation so theme values are available.
-// Restores dark/light mode from localStorage + loads theme.json from Rust backend.
+// Restores dark/light mode from state.json + loads theme.json from Rust backend.
 // Uses requestAnimationFrame to ensure Arrow.js has finished rendering.
 requestAnimationFrame(async () => {
   let loadedTheme = null;
   try {
     loadedTheme = await initTheme();
   } catch (err) {
-    console.warn('[efx-mux] Theme init failed, using defaults:', err);
+    console.warn('[efxmux] Theme init failed, using defaults:', err);
   }
 
   // --- Step 7: Initialize terminal ---
   // Must run after html`...`(app) so .terminal-area exists in DOM (D-08: querySelector mount)
   const container = document.querySelector('.terminal-area');
   if (!container) {
-    console.error('[efx-mux] .terminal-area not found in DOM');
+    console.error('[efxmux] .terminal-area not found in DOM');
     return;
   }
 
@@ -123,21 +121,44 @@ requestAnimationFrame(async () => {
   // Register terminal for hot-reload theme updates
   registerTerminal(terminal, fitAddon);
 
-  // Connect to PTY via Channel (D-02: session name = directory basename)
-  // For Phase 2 MVP, use a fixed session name. Phase 5 will derive from project config.
-  const sessionName = 'efx-mux';
+  // Connect to PTY via Channel (D-03: use saved session name, reattach via tmux -A -s)
+  // Phase 4: read session name from state.json instead of hardcoded 'efx-mux'
+  const sessionName = appState?.session?.['main-tmux-session'] ?? 'efx-mux';
   try {
     await connectPty(terminal, sessionName);
   } catch (err) {
-    console.error('[efx-mux] Failed to connect PTY:', err);
-    // If tmux is missing (D-01), show error in terminal
-    terminal.writeln('\r\n\x1b[31mFailed to start terminal: ' + err + '\x1b[0m');
-    terminal.writeln('\r\n\x1b[33mIf tmux is not installed, run: brew install tmux\x1b[0m');
-    return;
+    console.error('[efxmux] Failed to connect PTY:', err);
+    // D-05/D-06: Dead session recovery -- warn to console, tmux -A -s will auto-create
+    terminal.writeln('\r\n\x1b[33mWarning: Could not attach to tmux session "' + sessionName + '":\x1b[0m ' + err);
+    terminal.writeln('\r\n\x1b[33mA fresh session will be created automatically.\x1b[0m');
+    // Try again with a fresh session name (append -new to avoid conflict)
+    const freshSession = sessionName + '-new';
+    try {
+      await connectPty(terminal, freshSession);
+      // Update saved session name to the new one
+      updateSession({ 'main-tmux-session': freshSession });
+    } catch (err2) {
+      terminal.writeln('\r\n\x1b[31mFailed to create fresh session: ' + err2 + '\x1b[0m');
+      terminal.writeln('\r\n\x1b[33mIf tmux is not installed, run: brew install tmux\x1b[0m');
+    }
   }
 
   // Attach resize handler (D-12: 150ms debounce)
   attachResizeHandler(container, terminal, fitAddon);
+
+  // Apply right-h-pct after DOM is ready (right panel now exists)
+  if (appState?.layout?.['right-h-pct']) {
+    const pct = parseFloat(appState.layout['right-h-pct']);
+    if (!isNaN(pct)) {
+      const rightPanel = document.querySelector('.right-panel');
+      if (rightPanel) {
+        const rt = rightPanel.querySelector('.right-top');
+        const rb = rightPanel.querySelector('.right-bottom');
+        if (rt) rt.style.flex = `0 0 ${pct.toFixed(1)}%`;
+        if (rb) rb.style.flex = `0 0 ${(100 - pct).toFixed(1)}%`;
+      }
+    }
+  }
 
   // Focus terminal for immediate keyboard input
   terminal.focus();
