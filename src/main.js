@@ -12,6 +12,7 @@ import { initDragManager } from './drag-manager.js';
 import { createTerminal } from './terminal/terminal-manager.js';
 import { connectPty } from './terminal/pty-bridge.js';
 import { attachResizeHandler } from './terminal/resize-handler.js';
+import { initTheme, registerTerminal } from './theme/theme-manager.js';
 
 // --- Step 1: Restore persisted split ratios ---
 // Must run before components mount to avoid a flash of default widths.
@@ -87,10 +88,15 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// --- Step 6: Initialize terminal ---
-// Must run after html`...`(app) so .terminal-area exists in DOM (D-08: querySelector mount)
-// Uses requestAnimationFrame to ensure Arrow.js has finished rendering
+// --- Step 6: Initialize theme ---
+// Must run before terminal creation so theme values are available.
+// Restores dark/light mode from localStorage + loads theme.json from Rust backend.
+// Uses requestAnimationFrame to ensure Arrow.js has finished rendering.
 requestAnimationFrame(async () => {
+  const loadedTheme = await initTheme();
+
+  // --- Step 7: Initialize terminal ---
+  // Must run after html`...`(app) so .terminal-area exists in DOM (D-08: querySelector mount)
   const container = document.querySelector('.terminal-area');
   if (!container) {
     console.error('[efx-mux] .terminal-area not found in DOM');
@@ -98,7 +104,14 @@ requestAnimationFrame(async () => {
   }
 
   // Create xterm.js Terminal with WebGL/DOM fallback
-  const { terminal, fitAddon } = createTerminal(container);
+  const { terminal, fitAddon } = createTerminal(container, {
+    theme: loadedTheme?.terminal,
+    font: loadedTheme?.chrome?.font,
+    fontSize: loadedTheme?.chrome?.fontSize,
+  });
+
+  // Register terminal for hot-reload theme updates
+  registerTerminal(terminal, fitAddon);
 
   // Connect to PTY via Channel (D-02: session name = directory basename)
   // For Phase 2 MVP, use a fixed session name. Phase 5 will derive from project config.

@@ -1,4 +1,4 @@
-/* theme.css — Forest-green dark palette (per D-14, D-15)
+/* theme.css — Solarized Dark palette (D-14, D-15) with light mode variant
    All colors are CSS custom properties. No hardcoded colors in component files. */
 
 @font-face {
@@ -10,18 +10,29 @@
 }
 
 :root {
-  /* Color tokens — derived from user's iTerm2 theme */
-  --bg:          #1e2d25;
-  --bg-raised:   #2d3d32;
-  --border:      #3a4d3f;
-  --text:        #8e9a90;
-  --text-bright: #c8d4ca;
-  --accent:      #26a641;
+  /* Color tokens — Solarized Dark (D-14, D-15) */
+  --bg:          #282d3a;
+  --bg-raised:   #363b3d;
+  --border:      #3e454a;
+  --text:        #8d999a;
+  --text-bright: #92a0a0;
+  --accent:      #258ad1;
 
   /* Typography */
   --font:      'FiraCode', 'Fira Code', 'JetBrains Mono', monospace;
   --font-size: 14px;
   --font-weight: 300; /* Light */
+}
+
+/* Light mode chrome variables (D-14, D-15, D-16)
+   Only affects app chrome. Terminal colors always come from theme.json. */
+:root[data-theme="light"] {
+  --bg:          #fdf6e3;
+  --bg-raised:   #eee8d5;
+  --border:      #d3cfc2;
+  --text:        #657b83;
+  --text-bright: #586e75;
+  --accent:      #268bd2;
 }
 
 /* Reset and global baseline */
