@@ -17,6 +17,8 @@ import { loadAppState, initBeforeUnload, updateLayout, updateSession, getProject
 import { ProjectModal } from './components/project-modal.js';
 import { FuzzySearch }  from './components/fuzzy-search.js';
 
+const { invoke } = window.__TAURI__.core;
+
 // --- Step 1: Load persisted state from Rust backend ---
 // Must run before components mount to avoid layout flash.
 // Uses state.json at ~/.config/efxmux/ (Phase 4 replaces localStorage).
@@ -114,6 +116,15 @@ async function initProjects() {
       // Signal first-run modal
       const { openProjectModal } = await import('./components/project-modal.js');
       openProjectModal({ firstRun: true });
+      return;
+    }
+    // Activate md file watcher for active project on startup (PANEL-03 gap closure)
+    const activeName = await getActiveProject();
+    if (activeName) {
+      const project = projects.find(p => p.name === activeName);
+      if (project && project.path) {
+        invoke('set_project_path', { path: project.path });
+      }
     }
   } catch (err) {
     console.warn('[efxmux] Failed to load projects:', err);
@@ -122,9 +133,18 @@ async function initProjects() {
 
 // Listen for project switches — update sidebar + tmux sessions
 document.addEventListener('project-changed', async (e) => {
-  const newProject = e.detail.name;
-  console.log('[efxmux] Project switched to:', newProject);
-  // TODO (Phase 6+): update tmux session, GSD viewer path, git panels
+  const newProjectName = e.detail.name;
+  console.log('[efxmux] Project switched to:', newProjectName);
+  // Activate md file watcher for new project (PANEL-03 gap closure)
+  try {
+    const projects = await getProjects();
+    const project = projects.find(p => p.name === newProjectName);
+    if (project && project.path) {
+      await invoke('set_project_path', { path: project.path });
+    }
+  } catch (err) {
+    console.warn('[efxmux] Failed to set project path for watcher:', err);
+  }
 });
 
 // --- Step 6: Initialize theme ---
