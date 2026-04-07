@@ -18,19 +18,19 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-06)
+See: .planning/PROJECT.md (updated 2026-04-07)
 
 **Core value:** A single native macOS window that co-locates AI agent terminals alongside live GSD progress, git diff, and file tree -- all persisted across restarts via tmux.
-**Current focus:** Phase 03 — terminal-theming
+**Current focus:** Phase 05 — project-system-+-sidebar
 
 ## Current Position
 
 Phase: 5
 Plan: Not started
-Status: Executing Phase 03
+Status: Ready to plan
 Last activity: 2026-04-07
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [████████████████████] 15/15 plans (100%)
 
 ## Performance Metrics
 
@@ -65,6 +65,8 @@ Recent decisions affecting current work:
 - [Phase 1]: Arrow.js vendored via import map, no bundler. `component()` returns render functions, not Custom Elements.
 - [Phase 2]: PTY streaming via `Channel<Vec<u8>>`, not `emit()`. Binary encoding and Arrow.js `ref` mount require spike verification before production code.
 - [Phase 2]: tmux via `std::process::Command` (no Rust crate). xterm.js 6.0 only (no canvas addon, WebGL + DOM fallback).
+- [Phase 4]: State persisted to ~/.config/efxmux/state.json via Rust atomic write (tmp+rename). JS state-manager.js bridges frontend to Rust.
+- [Phase 4]: Theme persistence uses session-scoped module variable for manual toggle (not localStorage) so OS listener resets on restart.
 
 ### Pending Todos
 
@@ -83,6 +85,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-07T10:53:08.394Z
-Stopped at: Phase 4 context gathered (discuss mode)
-Resume file: .planning/phases/04-session-persistence/04-CONTEXT.md
+Last session: 2026-04-07
+Stopped at: Phase 4 complete, ready to plan Phase 5
+Resume file: None
