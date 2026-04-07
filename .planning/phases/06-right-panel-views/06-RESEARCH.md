@@ -588,22 +588,24 @@ function escapeHtml(text) {
 
 ## Open Questions
 
-1. **Checkbox line mapping**: How does the post-processing regex know which checkbox corresponds to which line number? Need a pre-pass that scans markdown line-by-line and builds `checkboxIndex -> lineNumber` map before rendering.
+**All resolved -- see inline resolutions.**
+
+1. **Checkbox line mapping**: **RESOLVED** -- Pre-pass regex builds checkboxIndex->lineNumber map. See gsd-viewer.js Task 2 in 06-02-PLAN.md.
    - What we know: marked.js `checkbox` token has `{ checked: boolean }` only.
    - What's unclear: The exact post-processing algorithm for injecting `data-line`.
    - Recommendation: Pre-scan markdown with regex `/^(\s*[-*]\s*\[[ x]\])/gm` to build array of line numbers, then inject in order.
 
-2. **File tree path construction**: When user clicks a file, how does `file-opened` event carry the full path for opening in main panel?
+2. **File tree path construction**: **RESOLVED** -- entry.path is absolute from list_directory. See file-tree.js Task 4 in 06-02-PLAN.md.
    - What we know: D-08 says `file-opened` CustomEvent, main.js catches it.
    - What's unclear: Whether to use `entry.path` directly or reconstruct from `currentPath + name`.
    - Recommendation: Use `entry.path` (absolute) from list_directory result, no reconstruction needed.
 
-3. **Right-bottom bash terminal lifecycle**: When does `right-tmux-session` get created? On app start or on tab switch?
+3. **Right-bottom bash terminal lifecycle**: **RESOLVED** -- Lazy spawn on first tab switch. See right-panel.js Task 5 in 06-02-PLAN.md.
    - What we know: D-10 says it connects via `connectPty(rightTerminal, 'right-tmux-session')`.
    - What's unclear: Whether to pre-spawn the session on app launch or lazily on tab switch.
    - Recommendation: Lazy spawn on first tab switch -- avoids creating unused sessions.
 
-4. **Tab persistence**: Should tab state (which view is active) persist across restarts?
+4. **Tab persistence**: **RESOLVED** -- Persist via PanelsState.right_top_tab/right_bottom_tab. See right-panel.js Task 5 in 06-02-PLAN.md.
    - What we know: `PanelsState` in state.rs has `right_top_tab` and `right_bottom_tab`.
    - What's unclear: Whether to persist which view is active per panel.
    - Recommendation: Yes, persist via `updateLayout()` on tab switch.
