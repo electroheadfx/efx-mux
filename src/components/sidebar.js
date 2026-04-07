@@ -273,6 +273,8 @@ const RemoveDialog = () => {
  * @param {{ collapsed: { value: () => boolean } }} props
  */
 export const Sidebar = ({ collapsed }) => {
+  // Initialize sidebar data on mount
+  initSidebar();
   // Sync collapsed state with reactive
   state.collapsed = collapsed.value();
 
