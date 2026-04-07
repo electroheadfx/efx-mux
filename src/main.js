@@ -147,6 +147,19 @@ document.addEventListener('project-changed', async (e) => {
   }
 });
 
+// Handle file-opened from File Tree (PANEL-06 gap closure)
+document.addEventListener('file-opened', async (e) => {
+  const { path, name } = e.detail;
+  try {
+    const content = await invoke('read_file_content', { path });
+    document.dispatchEvent(new CustomEvent('show-file-viewer', {
+      detail: { path, name, content }
+    }));
+  } catch (err) {
+    console.error('[efxmux] Failed to read file:', err);
+  }
+});
+
 // --- Step 6: Initialize theme ---
 // Must run before terminal creation so theme values are available.
 // Restores dark/light mode from state.json + loads theme.json from Rust backend.
