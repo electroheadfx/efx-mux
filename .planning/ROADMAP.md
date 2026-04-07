@@ -119,11 +119,12 @@ Plans:
   5. User can navigate the project file tree with keyboard (arrows + Enter) and clicking a file opens it as a read-only tab in the main panel
   6. User can open a Bash Terminal tab in the right panel connected to an independent tmux session
 
-**Plans**: 3 plans
+**Plans**: 4 plans
 Plans:
 - [x] 06-01-PLAN.md -- Wave 1: PtyManager HashMap refactor, new Rust commands, .md file watcher
 - [x] 06-02-PLAN.md -- Wave 2: Tab bars, GSD Viewer, Diff Viewer, File Tree, Bash Terminal wiring
-- [ ] 06-03-PLAN.md -- Wave 3: Gap closure: wire md file watcher activation + file-opened handler
+- [x] 06-03-PLAN.md -- Wave 3: Gap closure: wire md file watcher activation + file-opened handler
+- [ ] 06-04-PLAN.md -- UAT gap closure: fix Add Project persistence + Bash terminal ref bug
 
 **UI hint**: yes
 
@@ -140,8 +141,8 @@ Plans:
 
 **Plans**: 2 plans
 Plans:
-- [ ] 06-01-PLAN.md -- Wave 1: PtyManager HashMap refactor, new Rust commands, .md file watcher
-- [ ] 06-02-PLAN.md -- Wave 2: Tab bars, GSD Viewer, Diff Viewer, File Tree, Bash Terminal wiring
+- [x] 06-01-PLAN.md -- Wave 1: PtyManager HashMap refactor, new Rust commands, .md file watcher
+- [x] 06-02-PLAN.md -- Wave 2: Tab bars, GSD Viewer, Diff Viewer, File Tree, Bash Terminal wiring
 
 **UI hint**: yes
 
