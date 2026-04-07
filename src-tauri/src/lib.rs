@@ -46,6 +46,10 @@ pub fn run() {
             // Ensure ~/.config/efxmux/ exists before anything reads it
             theme::types::ensure_config_dir();
 
+            // Start theme file watcher (D-09: watch theme.json for changes)
+            let app_handle = app.handle().clone();
+            theme::watcher::start_theme_watcher(app_handle);
+
             // Probe for tmux availability (D-01)
             // If tmux is missing, the frontend will show a modal.
             match check_tmux() {
