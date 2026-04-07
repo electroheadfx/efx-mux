@@ -103,6 +103,33 @@ impl Default for SessionState {
 pub struct ProjectState {
     #[serde(default, rename = "active")]
     pub active: Option<String>,
+
+    #[serde(default, rename = "projects")]
+    pub projects: Vec<ProjectEntry>,
+}
+
+/// Project entry stored in the project registry
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectEntry {
+    pub path: String,
+    pub name: String,
+    pub agent: String,
+    #[serde(default)]
+    pub gsd_file: Option<String>,
+    #[serde(default)]
+    pub server_cmd: Option<String>,
+}
+
+impl Default for ProjectEntry {
+    fn default() -> Self {
+        Self {
+            path: String::new(),
+            name: String::new(),
+            agent: String::new(),
+            gsd_file: None,
+            server_cmd: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
