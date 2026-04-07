@@ -1,13 +1,16 @@
 // src-tauri/src/lib.rs
+pub mod file_ops;
+pub mod file_watcher;
 pub mod git_status;
 pub mod project;
 mod state;
 mod terminal;
 mod theme;
 
+use std::collections::HashMap;
 use tauri::Manager;
 use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
-use terminal::pty::{ack_bytes, check_tmux, resize_pty, spawn_terminal, write_pty};
+use terminal::pty::{ack_bytes, check_tmux, get_pty_sessions, resize_pty, spawn_terminal, write_pty, PtyManager};
 use theme::iterm2::import_iterm2_theme;
 use state::{get_config_dir, load_state, save_state, ManagedAppState};
 use theme::types::load_theme;
@@ -57,6 +60,9 @@ pub fn run() {
             let initial_state = state::load_state_sync();
             app.manage(ManagedAppState(std::sync::Mutex::new(initial_state)));
 
+            // Initialize PtyManager for multi-session PTY support (D-09)
+            app.manage(PtyManager(std::sync::Mutex::new(HashMap::new())));
+
             // Start theme file watcher (D-09: watch theme.json for changes)
             let app_handle = app.handle().clone();
             theme::watcher::start_theme_watcher(app_handle);
@@ -71,21 +77,41 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            // PTY commands (D-09: session-aware via PtyManager)
             spawn_terminal,
             write_pty,
             resize_pty,
             ack_bytes,
+            get_pty_sessions,
+
+            // Theme
             load_theme,
             import_iterm2_theme,
+
+            // State
             load_state,
             save_state,
             get_config_dir,
+
+            // Git
             git_status::get_git_status,
+
+            // Projects
             project::add_project,
             project::remove_project,
             project::switch_project,
             project::get_projects,
             project::get_active_project,
+
+            // Phase 6: File operations (D-04, D-06, D-01)
+            file_ops::get_file_diff,
+            file_ops::list_directory,
+            file_ops::read_file_content,
+            file_ops::read_file,
+            file_ops::write_checkbox,
+
+            // Phase 6: File watcher (D-02)
+            file_watcher::set_project_path,
         ])
         .plugin(tauri_plugin_dialog::init())
         .on_window_event(|window, event| {
