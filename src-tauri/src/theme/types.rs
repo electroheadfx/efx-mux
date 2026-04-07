@@ -192,7 +192,14 @@ impl Default for ThemeConfig {
 // ── Path helpers ─────────────────────────────────────────────────────────────
 
 pub fn config_dir() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".config/efxmux")
+    let home = std::env::var("HOME")
+        .ok()
+        .filter(|h| !h.is_empty())
+        .unwrap_or_else(|| {
+            eprintln!("[efxmux] WARNING: HOME not set; using /tmp/efxmux-fallback for config");
+            "/tmp/efxmux-fallback".to_string()
+        });
+    PathBuf::from(home).join(".config/efxmux")
 }
 
 pub fn theme_path() -> PathBuf {

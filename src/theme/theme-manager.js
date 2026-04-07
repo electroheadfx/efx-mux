@@ -114,6 +114,7 @@ export function setThemeMode(mode) {
  */
 export function toggleThemeMode() {
   const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  localStorage.setItem('efxmux:theme-manual', 'true');
   setThemeMode(current === 'dark' ? 'light' : 'dark');
 }
 
@@ -130,9 +131,11 @@ function initOsThemeListener() {
     setThemeMode(mq.matches ? 'dark' : 'light');
   }
 
-  // Follow OS changes mid-session
+  // Only follow OS changes if user hasn't manually toggled
   mq.addEventListener('change', (e) => {
-    setThemeMode(e.matches ? 'dark' : 'light');
+    if (localStorage.getItem('efxmux:theme-manual') !== 'true') {
+      setThemeMode(e.matches ? 'dark' : 'light');
+    }
   });
 }
 

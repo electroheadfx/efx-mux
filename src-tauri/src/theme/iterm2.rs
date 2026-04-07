@@ -49,9 +49,27 @@ fn iterm2_color_to_hex(color: &Value) -> Option<String> {
 /// - Writes the new theme.json (hot-reload watcher picks it up automatically)
 #[tauri::command]
 pub fn import_iterm2_theme(path: String) -> Result<String, String> {
-    // 1. Read and parse the iTerm2 profile JSON
+    let p = std::path::Path::new(&path);
+
+    // 1. Must be an absolute path
+    if !p.is_absolute() {
+        return Err("Path must be absolute".into());
+    }
+
+    // 2. Must have an expected extension
+    match p.extension().and_then(|e| e.to_str()) {
+        Some("json") | Some("itermcolors") => {}
+        _ => return Err("File must be a .json or .itermcolors file".into()),
+    }
+
+    // 3. Resolve symlinks to prevent traversal
+    let canonical = p
+        .canonicalize()
+        .map_err(|e| format!("Cannot resolve path: {}", e))?;
+
+    // 4. Read and parse the iTerm2 profile JSON
     let content =
-        fs::read_to_string(&path).map_err(|e| format!("Failed to read iTerm2 file: {}", e))?;
+        fs::read_to_string(&canonical).map_err(|e| format!("Failed to read iTerm2 file: {}", e))?;
     let profile: Value =
         serde_json::from_str(&content).map_err(|e| format!("Invalid iTerm2 JSON: {}", e))?;
 

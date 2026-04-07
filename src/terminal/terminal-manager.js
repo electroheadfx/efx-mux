@@ -34,16 +34,16 @@ export function createTerminal(container, options = {}) {
   terminal.attachCustomKeyEventHandler((ev) => {
     if (ev.type !== 'keydown') return true;
 
-    // Cmd+Left -> Home (move to line start)
+    // Cmd+Left -> beginning of line (Ctrl+A)
     if (ev.metaKey && ev.key === 'ArrowLeft') {
       ev.preventDefault();
-      terminal.write('\x1b[H'); // Home - CSI H
+      terminal.write('\x01'); // Ctrl+A - beginning of line
       return false;
     }
-    // Cmd+Right -> End (move to line end)
+    // Cmd+Right -> end of line (Ctrl+E)
     if (ev.metaKey && ev.key === 'ArrowRight') {
       ev.preventDefault();
-      terminal.write('\x1b[F'); // End - CSI F
+      terminal.write('\x05'); // Ctrl+E - end of line
       return false;
     }
     // Alt+Left -> word left (ESC b)
