@@ -17,9 +17,12 @@ const FLOW_LOW_WATERMARK: u64 = 100_000;
 pub struct PtyState {
     pub writer: Arc<Mutex<Box<dyn std::io::Write + Send>>>,
     pub master: Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>,
+    /// Tracks cumulative bytes sent to frontend (cloned into read thread before struct creation).
+    #[allow(dead_code)]
     pub sent_bytes: Arc<AtomicU64>,
     pub acked_bytes: Arc<AtomicU64>,
-    // Keep slave alive until child exits (portable-pty gotcha from CLAUDE.md)
+    /// Must stay alive until child exits (portable-pty gotcha from CLAUDE.md).
+    #[allow(dead_code)]
     pub slave: Arc<Mutex<Option<Box<dyn portable_pty::SlavePty + Send>>>>,
 }
 
