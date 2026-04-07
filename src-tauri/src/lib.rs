@@ -1,5 +1,6 @@
 // src-tauri/src/lib.rs
-mod git_status;
+pub mod git_status;
+pub mod project;
 mod state;
 mod terminal;
 mod theme;
@@ -79,6 +80,12 @@ pub fn run() {
             load_state,
             save_state,
             get_config_dir,
+            git_status::get_git_status,
+            project::add_project,
+            project::remove_project,
+            project::switch_project,
+            project::get_projects,
+            project::get_active_project,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
