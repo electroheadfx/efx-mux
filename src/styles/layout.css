@@ -164,6 +164,39 @@
   border-radius: 2px;
 }
 
+/* ─── Tab bar (D-11, PANEL-01) ────────────────────── */
+.tab-bar {
+  display: flex;
+  gap: 2px;
+  padding: 4px 8px 0;
+  background: var(--bg-base, var(--bg));
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.tab-btn {
+  padding: 6px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  margin-bottom: -1px;
+  transition: background 0.1s, color 0.1s;
+}
+
+.tab-btn:hover:not(.active) {
+  background: var(--bg-raised);
+}
+
+.tab-btn.active {
+  background: var(--bg-raised);
+  border-bottom-color: var(--accent);
+  color: var(--text-bright);
+}
+
 /* ─── Drag state — disable pointer events on panels during drag ─ */
 /* Applied by drag manager JS to prevent mousemove loss (per RESEARCH Pitfall 3) */
 .app-dragging .sidebar,
