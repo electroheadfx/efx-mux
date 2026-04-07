@@ -87,6 +87,7 @@ pub fn run() {
             project::get_projects,
             project::get_active_project,
         ])
+        .plugin(tauri_plugin_dialog::init())
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 // Synchronously save the latest in-memory state to disk.
