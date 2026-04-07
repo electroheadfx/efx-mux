@@ -10,20 +10,21 @@ import { FitAddon } from '@xterm/addon-fit';
 /**
  * Create and mount an xterm.js Terminal instance.
  * @param {HTMLElement} container - DOM element to mount into (e.g., document.querySelector('.terminal-area'))
+ * @param {{ theme?: object, font?: string, fontSize?: number }} [options={}] - Theme and font options from theme-manager
  * @returns {{ terminal: Terminal, fitAddon: FitAddon, dispose: () => void }}
  */
-export function createTerminal(container) {
+export function createTerminal(container, options = {}) {
   const terminal = new Terminal({
     cursorBlink: true,
     cursorStyle: 'bar',
     scrollback: 10000,
-    fontSize: 14,
-    fontFamily: "'FiraCode Light', 'Fira Code', monospace",
-    theme: {
-      background: '#1a2e1a',
-      foreground: '#d4d4c8',
-      cursor: '#7fba4c',
-      selectionBackground: '#3a5a3a',
+    fontSize: options.fontSize || 14,
+    fontFamily: options.font ? `'${options.font}', monospace` : "'FiraCode Light', 'Fira Code', monospace",
+    theme: options.theme || {
+      background: '#282d3a',
+      foreground: '#92a0a0',
+      cursor: '#258ad1',
+      selectionBackground: '#3e454a',
     },
     overviewRuler: { width: 10 },
     allowProposedApi: true,
