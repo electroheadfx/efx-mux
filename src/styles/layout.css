@@ -87,6 +87,22 @@
   overflow: hidden;
   position: relative;  /* xterm.js needs relative positioning for its layers */
   min-height: 100px;
+  padding: 4px;
+}
+
+/* Visible scrollbar in terminal */
+.terminal-area .xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+.terminal-area .xterm-viewport::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+.terminal-area .xterm-viewport::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+.terminal-area .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: var(--text);
 }
 
 /* server-pane: collapsed placeholder, height=0 (per D-05) */

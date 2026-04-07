@@ -15,7 +15,7 @@ import { FitAddon } from '@xterm/addon-fit';
 export function createTerminal(container) {
   const terminal = new Terminal({
     cursorBlink: true,
-    cursorStyle: 'block',
+    cursorStyle: 'bar',
     scrollback: 10000,
     fontSize: 14,
     fontFamily: "'FiraCode Light', 'Fira Code', monospace",
@@ -25,7 +25,39 @@ export function createTerminal(container) {
       cursor: '#7fba4c',
       selectionBackground: '#3a5a3a',
     },
+    overviewRuler: { width: 10 },
     allowProposedApi: true,
+  });
+
+  // Word/line navigation: convert macOS shortcuts to terminal escape codes
+  terminal.attachCustomKeyEventHandler((ev) => {
+    if (ev.type !== 'keydown') return true;
+
+    // Cmd+Left -> Home (move to line start)
+    if (ev.metaKey && ev.key === 'ArrowLeft') {
+      ev.preventDefault();
+      terminal.write('\x1b[H'); // Home - CSI H
+      return false;
+    }
+    // Cmd+Right -> End (move to line end)
+    if (ev.metaKey && ev.key === 'ArrowRight') {
+      ev.preventDefault();
+      terminal.write('\x1b[F'); // End - CSI F
+      return false;
+    }
+    // Alt+Left -> word left (ESC b)
+    if (ev.altKey && ev.key === 'ArrowLeft') {
+      ev.preventDefault();
+      terminal.write('\x1bb'); // ESC b - word backward
+      return false;
+    }
+    // Alt+Right -> word right (ESC f)
+    if (ev.altKey && ev.key === 'ArrowRight') {
+      ev.preventDefault();
+      terminal.write('\x1bf'); // ESC f - word forward
+      return false;
+    }
+    return true;
   });
 
   const fitAddon = new FitAddon();
