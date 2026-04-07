@@ -1,10 +1,12 @@
 // src-tauri/src/lib.rs
+mod state;
 mod terminal;
 mod theme;
 
 use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
 use terminal::pty::{ack_bytes, check_tmux, resize_pty, spawn_terminal, write_pty};
 use theme::iterm2::import_iterm2_theme;
+use state::{get_config_dir, load_state, save_state};
 use theme::types::load_theme;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -45,6 +47,7 @@ pub fn run() {
             app.set_menu(menu)?;
 
             // Ensure ~/.config/efxmux/ exists before anything reads it
+            state::ensure_config_dir();
             theme::types::ensure_config_dir();
 
             // Start theme file watcher (D-09: watch theme.json for changes)
@@ -67,6 +70,9 @@ pub fn run() {
             ack_bytes,
             load_theme,
             import_iterm2_theme,
+            load_state,
+            save_state,
+            get_config_dir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application")
