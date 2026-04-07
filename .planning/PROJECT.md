@@ -21,7 +21,11 @@ Laurent (the developer) and other developers who use Claude Code / OpenCode as t
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] 3-zone layout: sidebar (collapsable) + main terminal panel + right split panels — Validated in Phase 1
+- [x] Real xterm.js terminals with GPU-accelerated WebGL rendering — Validated in Phase 2
+- [x] tmux session backend — sessions survive app close/reopen — Validated in Phase 2
+- [x] Full terminal theming: Solarized Dark palette with theme.json hot-reload — Validated in Phase 3
+- [x] Dark / light theme toggle for app chrome — Validated in Phase 3
 
 ### Active
 
@@ -64,19 +68,19 @@ Laurent (the developer) and other developers who use Claude Code / OpenCode as t
 
 ## Theme Spec
 
-Derived from user's iTerm2 export (FiraCode Light 14, dark forest-green palette):
+Solarized Dark palette (FiraCode Light 14):
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| `--bg` | `#1e2d25` | App background, sidebar, panels |
-| `--bg-raised` | `#2d3d32` | Tab bars, panel headers |
-| `--border` | `#3a4d3f` | Split handles, dividers |
-| `--text` | `#8e9a90` | Muted text, labels |
-| `--text-bright` | `#c8d4ca` | Active text, filenames |
-| `--accent` | `#26a641` | Git indicators, active tab, checkboxes |
+| `--bg` | `#282d3a` | App background, sidebar, panels |
+| `--bg-raised` | `#363b3d` | Tab bars, panel headers |
+| `--border` | `#3e454a` | Split handles, dividers |
+| `--text` | `#8d999a` | Muted text, labels |
+| `--text-bright` | `#92a0a0` | Active text, filenames |
+| `--accent` | `#258ad1` | Git indicators, active tab, checkboxes |
 | `--font` | `FiraCode Light 14` | All app chrome (mirrors terminal font) |
 
-Terminal colors applied via xterm.js theme object, imported from `~/.config/gsd-mux/theme.json` (hot-reloads on change).
+Terminal colors applied via xterm.js theme object, imported from `~/.config/efxmux/theme.json` (hot-reloads on change). Dark/light chrome toggle via Ctrl+Shift+T + OS auto-follow.
 
 ## Key Decisions
 
