@@ -3,10 +3,11 @@ mod state;
 mod terminal;
 mod theme;
 
+use tauri::Manager;
 use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
 use terminal::pty::{ack_bytes, check_tmux, resize_pty, spawn_terminal, write_pty};
 use theme::iterm2::import_iterm2_theme;
-use state::{get_config_dir, load_state, save_state};
+use state::{get_config_dir, load_state, save_state, ManagedAppState};
 use theme::types::load_theme;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -50,6 +51,10 @@ pub fn run() {
             state::ensure_config_dir();
             theme::types::ensure_config_dir();
 
+            // Load initial state into Tauri managed state (for close handler, WR-03)
+            let initial_state = state::load_state_sync();
+            app.manage(ManagedAppState(std::sync::Mutex::new(initial_state)));
+
             // Start theme file watcher (D-09: watch theme.json for changes)
             let app_handle = app.handle().clone();
             theme::watcher::start_theme_watcher(app_handle);
@@ -74,6 +79,20 @@ pub fn run() {
             save_state,
             get_config_dir,
         ])
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                // Synchronously save the latest in-memory state to disk.
+                // This guarantees state.json is written even if the JS
+                // beforeunload async invoke did not complete (WR-03 fix).
+                let managed = window.state::<ManagedAppState>();
+                let snapshot = managed.0.lock().ok().map(|g| g.clone());
+                if let Some(ref s) = snapshot {
+                    if let Err(e) = state::save_state_sync(s) {
+                        eprintln!("[efxmux] WARNING: Failed to save state on close: {}", e);
+                    }
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application")
 }

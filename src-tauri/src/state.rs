@@ -1,5 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::Mutex;
+
+/// Tauri-managed wrapper for in-memory AppState.
+/// Updated on every save_state call; written to disk on window close.
+pub struct ManagedAppState(pub Mutex<AppState>);
 
 /// Application state persisted to ~/.config/efxmux/state.json (per D-07)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -243,10 +248,18 @@ pub async fn load_state() -> AppState {
         .unwrap_or_else(|_| AppState::default())
 }
 
-/// Save app state to state.json. Used by beforeunload hook.
+/// Save app state to state.json. Used by beforeunload hook and periodic saves.
+/// Also updates the Tauri-managed in-memory copy for the close handler (WR-03).
 #[tauri::command]
-pub async fn save_state(state_json: String) -> Result<(), String> {
+pub async fn save_state(
+    state_json: String,
+    managed: tauri::State<'_, ManagedAppState>,
+) -> Result<(), String> {
     let state: AppState = serde_json::from_str(&state_json).map_err(|e| e.to_string())?;
+    // Update in-memory copy for the close handler
+    if let Ok(mut guard) = managed.0.lock() {
+        *guard = state.clone();
+    }
     // Use spawn_blocking for file I/O (per D-11, D-12)
     tauri::async_runtime::spawn_blocking(move || save_state_sync(&state))
         .await
