@@ -75,13 +75,36 @@ export function getTerminalTheme() {
   return currentTheme?.terminal ?? null;
 }
 
+/** Chrome CSS properties set by applyTheme() — must be cleared for light mode CSS to take effect */
+const CHROME_PROPS = ['--bg', '--bg-raised', '--border', '--text', '--text-bright', '--accent'];
+
 /**
  * Set dark/light chrome mode and persist to localStorage.
+ * When switching to light: clears inline chrome CSS vars so :root[data-theme="light"] in
+ * theme.css takes effect (inline styles have higher specificity than CSS selectors).
+ * When switching to dark: re-applies chrome vars from cached theme.
  * @param {'dark' | 'light'} mode
  */
 export function setThemeMode(mode) {
+  const style = document.documentElement.style;
   document.documentElement.setAttribute('data-theme', mode);
   localStorage.setItem('efxmux:theme-mode', mode);
+
+  if (mode === 'light') {
+    // Remove inline chrome vars so CSS :root[data-theme="light"] wins
+    for (const prop of CHROME_PROPS) {
+      style.removeProperty(prop);
+    }
+  } else if (currentTheme?.chrome) {
+    // Re-apply dark theme chrome vars from cached theme
+    const c = currentTheme.chrome;
+    if (c.bg) style.setProperty('--bg', c.bg);
+    if (c.bgRaised) style.setProperty('--bg-raised', c.bgRaised);
+    if (c.border) style.setProperty('--border', c.border);
+    if (c.text) style.setProperty('--text', c.text);
+    if (c.textBright) style.setProperty('--text-bright', c.textBright);
+    if (c.accent) style.setProperty('--accent', c.accent);
+  }
 }
 
 /**

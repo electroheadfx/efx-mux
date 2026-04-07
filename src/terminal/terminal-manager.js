@@ -58,6 +58,14 @@ export function createTerminal(container, options = {}) {
       terminal.write('\x1bf'); // ESC f - word forward
       return false;
     }
+    // Ctrl+Shift+T -> let document handler toggle dark/light mode (THEME-04)
+    if (ev.ctrlKey && ev.shiftKey && ev.key === 'T') {
+      return false;
+    }
+    // Ctrl+B -> let document handler toggle sidebar (LAYOUT-03)
+    if (ev.ctrlKey && ev.key === 'b') {
+      return false;
+    }
     return true;
   });
 
