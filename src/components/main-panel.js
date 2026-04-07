@@ -50,14 +50,7 @@ export const MainPanel = () => html`
     <div class="terminal-area"></div>
     <div
       class="file-viewer-overlay"
-      style="
-        display: ${() => state.fileViewerVisible ? 'flex' : 'none'};
-        position: absolute;
-        top: 0; left: 0; right: 0; bottom: 0;
-        flex-direction: column;
-        background: var(--bg-base);
-        z-index: 10;
-      "
+      style="${() => `display: ${state.fileViewerVisible ? 'flex' : 'none'}; position: absolute; top: 0; left: 0; right: 0; bottom: 0; flex-direction: column; background: var(--bg-base); z-index: 10;`}"
     >
       <div class="file-viewer-header" style="
         display: flex;

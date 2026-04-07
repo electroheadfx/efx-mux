@@ -125,16 +125,7 @@ export const FileTree = (activeProject) => {
         }
         return state.entries.map((entry, i) => html`
           <div
-            style="
-              display: flex;
-              align-items: center;
-              padding: 4px 12px;
-              cursor: pointer;
-              font-size: 13px;
-              color: ${() => state.selectedIndex === i ? 'var(--text-bright)' : 'var(--text)'};
-              background: ${() => state.selectedIndex === i ? 'var(--bg-raised)' : 'transparent'};
-              gap: 6px;
-            "
+            style="${() => `display: flex; align-items: center; padding: 4px 12px; cursor: pointer; font-size: 13px; color: ${state.selectedIndex === i ? 'var(--text-bright)' : 'var(--text)'}; background: ${state.selectedIndex === i ? 'var(--bg-raised)' : 'transparent'}; gap: 6px;`}"
             @click="${() => { state.selectedIndex = i; openEntry(entry); }}"
             @mouseenter="${() => { state.selectedIndex = i; }}"
           >

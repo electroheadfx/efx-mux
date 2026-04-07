@@ -121,7 +121,7 @@ export const ProjectModal = () => {
         display: flex; align-items: center; justify-content: center;
         animation: fadeIn 150ms ease-out;
       "
-      @click=${handleBackdropClick}
+      @click="${handleBackdropClick}"
     >
       <style>
         @keyframes fadeIn {
@@ -138,9 +138,8 @@ export const ProjectModal = () => {
           z-index: 101;
           animation: fadeIn 150ms ease-out;
         "
-        @click=${(e) => { e.stopPropagation(); }}
+        @click="${(e) => { e.stopPropagation(); }}"
       >
-        <!-- Header -->
         <div style="
           display: flex;
           align-items: center;
@@ -154,19 +153,17 @@ export const ProjectModal = () => {
               font-size: 16px; color: var(--text); cursor: pointer;
             "
             title="Close"
-            @click=${() => {
+            @click="${() => {
               closeProjectModal();
               document.removeEventListener('keydown', handleKeydown);
-            }}
+            }}"
           >\u2715</div>
         </div>
 
-        <!-- Form -->
         <form
           style="padding: 0 24px; margin-top: 16px;"
-          @submit=${(e) => { e.preventDefault(); handleSubmit(); }}
+          @submit="${(e) => { e.preventDefault(); handleSubmit(); }}"
         >
-          <!-- Directory -->
           <div style="margin-bottom: 16px;">
             <label style="
               display: block;
@@ -191,10 +188,10 @@ export const ProjectModal = () => {
                   color: var(--text-bright);
                   outline: none;
                 "
-                value=${() => state.directory}
-                @input=${(e) => { state.directory = e.currentTarget.value; }}
-                @focus=${(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; }}
-                @blur=${(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+                value="${() => state.directory}"
+                @input="${(e) => { state.directory = e.currentTarget.value; }}"
+                @focus="${(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; }}"
+                @blur="${(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}"
               />
               <button
                 type="button"
@@ -211,12 +208,11 @@ export const ProjectModal = () => {
                   flex-shrink: 0;
                 "
                 title="Browse"
-                @click=${handleBrowse}
+                @click="${handleBrowse}"
               >[...]</button>
             </div>
           </div>
 
-          <!-- Name -->
           <div style="margin-bottom: 16px;">
             <label style="
               display: block;
@@ -241,14 +237,13 @@ export const ProjectModal = () => {
                 outline: none;
                 box-sizing: border-box;
               "
-              value=${() => state.name}
-              @input=${(e) => { state.name = e.currentTarget.value; }}
-              @focus=${(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; }}
-              @blur=${(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+              value="${() => state.name}"
+              @input="${(e) => { state.name = e.currentTarget.value; }}"
+              @focus="${(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; }}"
+              @blur="${(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}"
             />
           </div>
 
-          <!-- Agent -->
           <div style="margin-bottom: 16px;">
             <label style="
               display: block;
@@ -271,8 +266,8 @@ export const ProjectModal = () => {
                 outline: none;
                 box-sizing: border-box;
               "
-              value=${() => state.agent}
-              @change=${(e) => { state.agent = e.currentTarget.value; }}
+              value="${() => state.agent}"
+              @change="${(e) => { state.agent = e.currentTarget.value; }}"
             >
               <option value="claude">claude</option>
               <option value="opencode">opencode</option>
@@ -280,7 +275,6 @@ export const ProjectModal = () => {
             </select>
           </div>
 
-          <!-- GSD File -->
           <div style="margin-bottom: 16px;">
             <label style="
               display: block;
@@ -305,14 +299,13 @@ export const ProjectModal = () => {
                 outline: none;
                 box-sizing: border-box;
               "
-              value=${() => state.gsdFile}
-              @input=${(e) => { state.gsdFile = e.currentTarget.value; }}
-              @focus=${(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; }}
-              @blur=${(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+              value="${() => state.gsdFile}"
+              @input="${(e) => { state.gsdFile = e.currentTarget.value; }}"
+              @focus="${(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; }}"
+              @blur="${(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}"
             />
           </div>
 
-          <!-- Server Command -->
           <div style="margin-bottom: 8px;">
             <label style="
               display: block;
@@ -337,10 +330,10 @@ export const ProjectModal = () => {
                 outline: none;
                 box-sizing: border-box;
               "
-              value=${() => state.serverCmd}
-              @input=${(e) => { state.serverCmd = e.currentTarget.value; }}
-              @focus=${(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; }}
-              @blur=${(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+              value="${() => state.serverCmd}"
+              @input="${(e) => { state.serverCmd = e.currentTarget.value; }}"
+              @focus="${(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; }}"
+              @blur="${(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}"
             />
           </div>
 
@@ -352,7 +345,6 @@ export const ProjectModal = () => {
             ">${() => state.error}</div>
           ` : ''}
 
-          <!-- Button row -->
           <div style="
             padding: 16px 0 24px;
             display: flex;
@@ -371,25 +363,16 @@ export const ProjectModal = () => {
                   cursor: pointer;
                   font-size: 14px;
                 "
-                @click=${() => {
+                @click="${() => {
                   closeProjectModal();
                   document.removeEventListener('keydown', handleKeydown);
-                }}
+                }}"
               >Cancel Add</button>
             ` : ''}
             <button
               type="submit"
-              disabled=${() => !isValid()}
-              style="
-                background: ${isValid() ? 'var(--accent)' : 'var(--accent)'};
-                border: none;
-                color: #ffffff;
-                padding: 8px 16px;
-                border-radius: 2px;
-                cursor: ${isValid() ? 'pointer' : 'not-allowed'};
-                font-size: 14px;
-                opacity: ${isValid() ? 1 : 0.4};
-              "
+              disabled="${() => !isValid()}"
+              style="${() => `background: var(--accent); border: none; color: #ffffff; padding: 8px 16px; border-radius: 2px; cursor: ${isValid() ? 'pointer' : 'not-allowed'}; font-size: 14px; opacity: ${isValid() ? 1 : 0.4};`}"
             >Add Project</button>
           </div>
         </form>

@@ -213,7 +213,10 @@ requestAnimationFrame(async () => {
   }
 
   // Attach resize handler (D-12: 150ms debounce)
-  attachResizeHandler(container, terminal, fitAddon);
+  attachResizeHandler(container, terminal, fitAddon, sessionName);
+
+  // Force initial fit after layout settles (fixes terminal not filling on first load)
+  setTimeout(() => fitAddon.fit(), 100);
 
   // Apply right-h-pct after DOM is ready (right panel now exists)
   if (appState?.layout?.['right-h-pct']) {

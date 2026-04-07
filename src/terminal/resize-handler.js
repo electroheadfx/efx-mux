@@ -12,7 +12,7 @@ const { invoke } = window.__TAURI__.core;
  * @param {import('@xterm/addon-fit').FitAddon} fitAddon - FitAddon instance
  * @returns {{ detach: () => void }}
  */
-export function attachResizeHandler(container, terminal, fitAddon) {
+export function attachResizeHandler(container, terminal, fitAddon, sessionName) {
   let lastCols = 0;
   let lastRows = 0;
   let resizeTimer = null;
@@ -33,7 +33,7 @@ export function attachResizeHandler(container, terminal, fitAddon) {
     // Debounced IPC to Rust (D-12: 150ms trailing)
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
-      invoke('resize_pty', { cols, rows });
+      invoke('resize_pty', { cols, rows, sessionName });
     }, 150);
   });
 

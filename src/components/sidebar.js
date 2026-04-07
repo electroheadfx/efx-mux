@@ -2,6 +2,7 @@
 import { html } from '@arrow-js/core';
 import { reactive } from '@arrow-js/core';
 import { getProjects, getActiveProject, getGitStatus, switchProject } from '../state-manager.js';
+import { openProjectModal } from './project-modal.js';
 
 /** @typedef {{ branch: string, modified: number, staged: number, untracked: number }} GitData */
 
@@ -29,7 +30,7 @@ export async function initSidebar() {
     state.activeProject = active;
     // Auto-open modal on first run
     if (projects.length === 0) {
-      state.showModal = true;
+      openProjectModal();
     }
     // Fetch git status for all projects in parallel
     await refreshAllGitStatus();
@@ -45,7 +46,7 @@ export async function initSidebar() {
 
   // Listen for open-modal events (from "+" button)
   document.addEventListener('open-add-project', () => {
-    state.showModal = true;
+    openProjectModal();
   });
 }
 
@@ -83,34 +84,24 @@ const ProjectRow = (project, index) => {
 
   return html`
     <div
-      class="sidebar-project-row${isActive() ? ' active' : ''}"
-      style="
-        display: flex;
-        align-items: center;
-        padding: 4px 8px;
-        min-height: 32px;
-        cursor: pointer;
-        color: ${isActive() ? 'var(--text-bright)' : 'var(--text)'};
-        background: ${isActive() ? 'rgba(37, 138, 209, 0.08)' : 'transparent'};
-        border-left: ${isActive() ? '3px solid var(--accent)' : '3px solid transparent'};
-        padding-left: ${isActive() ? '5px' : '8px'};
-      "
+      class="${() => 'sidebar-project-row' + (isActive() ? ' active' : '')}"
+      style="${() => `display: flex; align-items: center; padding: 4px 8px; min-height: 32px; cursor: pointer; color: ${isActive() ? 'var(--text-bright)' : 'var(--text)'}; background: ${isActive() ? 'rgba(37, 138, 209, 0.08)' : 'transparent'}; border-left: ${isActive() ? '3px solid var(--accent)' : '3px solid transparent'}; padding-left: ${isActive() ? '5px' : '8px'};`}"
       title="${project.path}"
       data-index="${index}"
-      @click=${async () => {
+      @click="${async () => {
         if (isActive()) return;
         try {
           await switchProject(project.name);
         } catch (err) {
           console.warn('[efxmux] Failed to switch project:', err);
         }
-      }}
-      @mouseenter=${(e) => {
+      }}"
+      @mouseenter="${(e) => {
         if (!isActive()) e.currentTarget.style.background = 'var(--bg-raised)';
-      }}
-      @mouseleave=${(e) => {
+      }}"
+      @mouseleave="${(e) => {
         if (!isActive()) e.currentTarget.style.background = 'transparent';
-      }}
+      }}"
     >
       <span style="flex: 1; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
         ${project.name}
@@ -129,26 +120,17 @@ const CollapsedIcon = (project, index) => {
   const initial = project.name.charAt(0).toUpperCase();
   return html`
     <div
-      style="
-        width: 24px;
-        height: 24px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 12px;
-        color: ${isActive() ? 'var(--accent)' : 'var(--text)'};
-        cursor: pointer;
-      "
+      style="${() => `width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: ${isActive() ? 'var(--accent)' : 'var(--text)'}; cursor: pointer;`}"
       title="${project.name}"
       data-index="${index}"
-      @click=${async () => {
+      @click="${async () => {
         state.collapsed = false;
         try {
           await switchProject(project.name);
         } catch (err) {
           console.warn('[efxmux] Failed to switch project:', err);
         }
-      }}
+      }}"
     >${initial}</div>
   `;
 };
@@ -171,16 +153,16 @@ const GitFileRow = (file) => {
         color: var(--text);
         cursor: pointer;
       "
-      @click=${() => {
+      @click="${() => {
         document.dispatchEvent(new CustomEvent('open-diff', { detail: { path: file.path } }));
-      }}
-      @mouseenter=${(e) => { e.currentTarget.style.background = 'var(--bg-raised)'; }}
-      @mouseleave=${(e) => { e.currentTarget.style.background = 'transparent'; }}
+      }}"
+      @mouseenter="${(e) => { e.currentTarget.style.background = 'var(--bg-raised)'; }}"
+      @mouseleave="${(e) => { e.currentTarget.style.background = 'transparent'; }}"
     >
       <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
         ${file.name}
       </span>
-      <span style="color: ${statusColor}; margin-left: 8px; font-size: 11px; flex-shrink: 0;">
+      <span style="${`color: ${statusColor}; margin-left: 8px; font-size: 11px; flex-shrink: 0;`}">
         ${statusChar}
       </span>
     </div>
@@ -200,7 +182,7 @@ const RemoveDialog = () => {
         z-index: 101;
         display: flex; align-items: center; justify-content: center;
       "
-      @click=${() => { state.removeTarget = null; }}
+      @click="${() => { state.removeTarget = null; }}"
     >
       <div
         style="
@@ -210,7 +192,7 @@ const RemoveDialog = () => {
           border-radius: 4px;
           padding: 0 0 24px;
         "
-        @click=${(e) => { e.stopPropagation(); }}
+        @click="${(e) => { e.stopPropagation(); }}"
       >
         <div style="padding: 16px 24px 0; font-size: 14px; color: var(--text-bright);">
           Remove ${name}
@@ -236,7 +218,7 @@ const RemoveDialog = () => {
               cursor: pointer;
               font-size: 14px;
             "
-            @click=${() => { state.removeTarget = null; }}
+            @click="${() => { state.removeTarget = null; }}"
           >Cancel</button>
           <button
             style="
@@ -248,7 +230,7 @@ const RemoveDialog = () => {
               cursor: pointer;
               font-size: 14px;
             "
-            @click=${async () => {
+            @click="${async () => {
               const { removeProject } = await import('../state-manager.js');
               await removeProject(name);
               state.removeTarget = null;
@@ -257,7 +239,7 @@ const RemoveDialog = () => {
               state.projects = projects;
               const active = await getActiveProject();
               state.activeProject = active;
-            }}
+            }}"
           >Remove Project</button>
         </div>
       </div>
@@ -288,9 +270,6 @@ export const Sidebar = ({ collapsed }) => {
     if (!state.activeProject) return [];
     const project = state.projects.find(p => p.name === state.activeProject);
     if (!project) return [];
-    // We don't have file-level git status from get_git_status yet
-    // (get_git_status returns counts only). Show empty for now.
-    // Phase 6 will add file-level diff.
     return [];
   };
 
@@ -321,7 +300,7 @@ export const Sidebar = ({ collapsed }) => {
               style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 16px; color: var(--text); cursor: pointer;"
               title="Add project"
               aria-label="Add project"
-              @click=${() => { state.showModal = true; }}
+              @click="${() => { openProjectModal(); }}"
             >+</div>
           </div>
         ` : html`
@@ -344,11 +323,10 @@ export const Sidebar = ({ collapsed }) => {
                 style="font-size: 16px; color: var(--text); cursor: pointer; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;"
                 title="Add project"
                 aria-label="Add project"
-                @click=${() => { state.showModal = true; }}
+                @click="${() => { openProjectModal(); }}"
               >+</div>
             </div>
 
-            <!-- PROJECTS section -->
             <div style="
               font-size: 11px;
               letter-spacing: 0.08em;
@@ -365,7 +343,6 @@ export const Sidebar = ({ collapsed }) => {
               ` : () => state.projects.map((p, i) => ProjectRow(p, i))}
             </div>
 
-            <!-- GIT CHANGES section -->
             <div style="
               border-top: 1px solid var(--border);
               margin-top: 8px;
@@ -385,7 +362,7 @@ export const Sidebar = ({ collapsed }) => {
                   style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--text); cursor: pointer;"
                   title="Refresh git status"
                   aria-label="Refresh git status"
-                  @click=${async () => {
+                  @click="${async () => {
                     const { getGitStatus } = await import('../state-manager.js');
                     if (state.activeProject) {
                       const project = state.projects.find(p => p.name === state.activeProject);
@@ -398,9 +375,9 @@ export const Sidebar = ({ collapsed }) => {
                         }
                       }
                     }
-                  }}
-                  @mouseenter=${(e) => { e.currentTarget.style.color = 'var(--accent)'; }}
-                  @mouseleave=${(e) => { e.currentTarget.style.color = 'var(--text)'; }}
+                  }}"
+                  @mouseenter="${(e) => { e.currentTarget.style.color = 'var(--accent)'; }}"
+                  @mouseleave="${(e) => { e.currentTarget.style.color = 'var(--text)'; }}"
                 >\u21BB</div>
               </div>
 
@@ -410,7 +387,6 @@ export const Sidebar = ({ collapsed }) => {
                 </div>
               ` : ''}
 
-              <!-- Change count badges -->
               <div style="display: flex; gap: 8px; padding: 4px 8px; flex-wrap: wrap;">
                 ${git().modified > 0 ? html`
                   <span style="font-size: 12px; color: #b58900;">M ${git().modified}</span>
@@ -426,7 +402,6 @@ export const Sidebar = ({ collapsed }) => {
                 ` : ''}
               </div>
 
-              <!-- File list -->
               ${gitFiles().length > 0 ? html`
                 <div style="max-height: 120px; overflow-y: auto;">
                   ${gitFiles().map(f => GitFileRow(f))}

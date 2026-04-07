@@ -112,22 +112,13 @@ const SearchResult = (project, index) => {
 
   return html`
     <div
-      style="
-        display: flex;
-        align-items: center;
-        padding: 8px 16px;
-        font-size: 14px;
-        color: var(--text-bright);
-        background: ${isSelected() ? 'rgba(37, 138, 209, 0.12)' : 'transparent'};
-        cursor: pointer;
-        min-height: 36px;
-      "
+      style="${() => `display: flex; align-items: center; padding: 8px 16px; font-size: 14px; color: var(--text-bright); background: ${isSelected() ? 'rgba(37, 138, 209, 0.12)' : 'transparent'}; cursor: pointer; min-height: 36px;`}"
       data-index="${index}"
-      @click=${() => {
+      @click="${() => {
         state.selectedIndex = index;
         selectCurrent();
-      }}
-      @mouseenter=${() => { state.selectedIndex = index; }}
+      }}"
+      @mouseenter="${() => { state.selectedIndex = index; }}"
     >
       <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
         ${project.name}
@@ -158,7 +149,7 @@ export const FuzzySearch = () => {
         padding-top: 20vh;
         animation: fadeInSearch 100ms ease-out;
       "
-      @click=${closeSearch}
+      @click="${closeSearch}"
     >
       <style>
         @keyframes fadeInSearch {
@@ -180,9 +171,8 @@ export const FuzzySearch = () => {
           flex-direction: column;
           animation: fadeInSearch 100ms ease-out;
         "
-        @click=${(e) => { e.stopPropagation(); }}
+        @click="${(e) => { e.stopPropagation(); }}"
       >
-        <!-- Search input -->
         <div style="
           display: flex;
           align-items: center;
@@ -203,15 +193,14 @@ export const FuzzySearch = () => {
               color: var(--text-bright);
               caret-color: var(--accent);
             "
-            value=${() => state.query}
-            @input=${(e) => {
+            value="${() => state.query}"
+            @input="${(e) => {
               state.query = e.currentTarget.value;
               state.selectedIndex = 0;
-            }}
+            }}"
           />
         </div>
 
-        <!-- Results list -->
         <div style="overflow-y: auto; max-height: 360px;">
           ${results().length === 0 ? html`
             <div style="

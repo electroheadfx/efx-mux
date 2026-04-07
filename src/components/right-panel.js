@@ -91,13 +91,13 @@ export const RightPanel = () => {
       <div class="right-top" style="display: flex; flex-direction: column; min-height: 0;">
         ${TabBar(RIGHT_TOP_TABS, () => state.rightTopTab, (tab) => { state.rightTopTab = tab; })}
         <div class="right-top-content" style="flex: 1; min-height: 0; overflow: hidden; position: relative;">
-          <div style="height: 100%; display: ${() => state.rightTopTab === 'GSD' ? 'block' : 'none'};">
+          <div style="${() => `height: 100%; display: ${state.rightTopTab === 'GSD' ? 'block' : 'none'};`}">
             ${gsdViewer}
           </div>
-          <div style="height: 100%; display: ${() => state.rightTopTab === 'Diff' ? 'block' : 'none'};">
+          <div style="${() => `height: 100%; display: ${state.rightTopTab === 'Diff' ? 'block' : 'none'};`}">
             ${diffViewer}
           </div>
-          <div style="height: 100%; display: ${() => state.rightTopTab === 'File Tree' ? 'block' : 'none'};">
+          <div style="${() => `height: 100%; display: ${state.rightTopTab === 'File Tree' ? 'block' : 'none'};`}">
             ${fileTree}
           </div>
         </div>
