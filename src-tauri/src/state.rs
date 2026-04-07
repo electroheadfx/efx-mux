@@ -227,8 +227,10 @@ pub fn load_state_sync() -> AppState {
 pub fn save_state_sync(state: &AppState) -> Result<(), String> {
     ensure_config_dir();
     let path = state_path();
+    let tmp_path = path.with_extension("json.tmp");
     let json = serde_json::to_string_pretty(state).map_err(|e| e.to_string())?;
-    std::fs::write(&path, json).map_err(|e| e.to_string())?;
+    std::fs::write(&tmp_path, &json).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp_path, &path).map_err(|e| e.to_string())?;
     Ok(())
 }
 
