@@ -408,14 +408,14 @@ Based on research, here are recommendations for areas left to Claude's discretio
 | A3 | Dark/light toggle via `data-theme` CSS attribute is standard pattern | Code Examples | LOW -- well-established CSS pattern |
 | A4 | xterm.js `terminal.options.theme` setter triggers immediate re-render | Architecture | LOW -- documented behavior, widely used |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **notify-debouncer-mini + notify 8.2 version compatibility**
+1. **notify-debouncer-mini + notify 8.2 version compatibility** -- RESOLVED
    - What we know: debouncer-mini 0.7.0 lists notify as a dependency; cargo should resolve
    - What's unclear: Whether 0.7.0 pins to notify 8.x specifically or also supports 9.x-rc
    - Recommendation: Add both to Cargo.toml and let cargo resolve. If version conflict, use raw notify with a manual 200ms timer.
 
-2. **Terminal registry for hot-reload**
+2. **Terminal registry for hot-reload** -- RESOLVED
    - What we know: Phase 2 has a single terminal instance. Future phases may add more.
    - What's unclear: How to collect all terminal instances for theme updates.
    - Recommendation: Create a simple `terminals` array in theme-manager.js. Export `registerTerminal(term)` / `unregisterTerminal(term)`. Each terminal creation calls register.
