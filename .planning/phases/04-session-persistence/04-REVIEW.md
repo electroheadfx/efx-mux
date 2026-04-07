@@ -1,110 +1,91 @@
 ---
 phase: 04-session-persistence
-reviewed: 2026-04-07T14:00:00Z
+reviewed: 2026-04-07T13:26:25Z
 depth: standard
-files_reviewed: 2
+files_reviewed: 6
 files_reviewed_list:
-  - src-tauri/src/state.rs
   - src-tauri/src/lib.rs
+  - src-tauri/src/state.rs
+  - src/drag-manager.js
+  - src/main.js
+  - src/state-manager.js
+  - src/theme/theme-manager.js
 findings:
-  critical: 1
-  warning: 2
-  info: 1
-  total: 4
+  critical: 0
+  warning: 1
+  info: 2
+  total: 3
 status: issues_found
 ---
 
 # Phase 4: Code Review Report
 
-**Reviewed:** 2026-04-07T14:00:00Z
+**Reviewed:** 2026-04-07T13:26:25Z
 **Depth:** standard
-**Files Reviewed:** 2
+**Files Reviewed:** 6
 **Status:** issues_found
 
 ## Summary
 
-Reviewed the `state.rs` module (session persistence via `state.json`) and the updated `lib.rs` integration. The architecture is sound: state is loaded at startup into Tauri managed state, the `save_state` command updates both in-memory and disk copies via `spawn_blocking`, and the close handler flushes state synchronously. The serde model with per-field defaults and manual `Default` impls is well-designed for forward compatibility. The prior CR-01 (version defaulting to 0) and WR-03 (beforeunload race) have been fixed.
+Reviewed the full Phase 4 session persistence surface: Rust backend (state.rs, lib.rs) and JS frontend (state-manager.js, main.js, drag-manager.js, theme-manager.js). The architecture is sound -- state loads at startup into Tauri managed state, `save_state` updates both in-memory and disk copies via `spawn_blocking`, and the close handler flushes state synchronously as a safety net. Prior review findings (CR-01 non-atomic write, WR-01 mutex poison, WR-02 /tmp fallback) have all been fixed correctly: state.rs now uses tmp+rename for atomic writes, recovers from mutex poison via `into_inner()`, and panics on missing HOME instead of silently falling back.
 
-Key concerns: non-atomic file writes risk data loss on crash, the `save_state` command silently swallows mutex poison errors (which causes the close handler to overwrite newer state with stale data), and the `/tmp` fallback for missing HOME is a latent security issue.
-
-## Critical Issues
-
-### CR-01: Non-atomic write to state.json risks data loss or corruption
-
-**File:** `src-tauri/src/state.rs:230-231`
-**Issue:** `save_state_sync` uses `std::fs::write` directly. This call truncates the file then writes new content. If the process is killed (SIGKILL, OOM killer, power loss) mid-write, `state.json` will be partially written or empty (zero bytes). On next launch, `load_state_sync` will detect corrupt JSON and fall back to defaults, silently discarding all persisted layout, session, and panel state. This is especially likely during the `on_window_event(CloseRequested)` path in `lib.rs:84-93`, where macOS may terminate the process shortly after the close event fires.
-**Fix:** Write to a temporary file in the same directory, then rename (atomic on POSIX filesystems):
-```rust
-pub fn save_state_sync(state: &AppState) -> Result<(), String> {
-    ensure_config_dir();
-    let path = state_path();
-    let tmp_path = path.with_extension("json.tmp");
-    let json = serde_json::to_string_pretty(state).map_err(|e| e.to_string())?;
-    std::fs::write(&tmp_path, &json).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp_path, &path).map_err(|e| e.to_string())?;
-    Ok(())
-}
-```
+One warning remains: the Arrow.js `watch()` in main.js fires immediately on creation, triggering an unnecessary save on every app startup. Two informational items noted: dead code in the early layout application and the double JSON parse pattern (carried forward from prior review, still informational).
 
 ## Warnings
 
-### WR-01: Mutex lock failure silently ignored in save_state command
+### WR-01: Arrow.js watch fires immediately, saving state on every startup
 
-**File:** `src-tauri/src/state.rs:260-262`
-**Issue:** If the mutex is poisoned (a prior thread panicked while holding it), `managed.0.lock()` returns `Err` and the `if let Ok(...)` silently skips the in-memory update. The disk write still proceeds with the new state, but the close handler (`lib.rs:88`) reads from the in-memory copy and will then overwrite the newer disk state with the stale in-memory copy on shutdown. This creates a data-loss race: save succeeds to disk, close handler overwrites it with old data.
-**Fix:** Recover from poison since `AppState` has no invariants to violate:
-```rust
-let mut guard = managed.0.lock().unwrap_or_else(|e| {
-    eprintln!("[efxmux] WARNING: State mutex was poisoned, recovering");
-    e.into_inner()
+**File:** `src/main.js:56-62`
+**Issue:** Arrow.js `watch()` executes its callback immediately upon creation. This means `updateLayout({ 'sidebar-w': w, 'sidebar-collapsed': collapsed })` fires during app initialization, triggering a full `saveAppState()` round-trip (JSON serialize, IPC invoke, spawn_blocking, file write) before the app has finished mounting. This happens on every startup, even when no state has changed. While not a data corruption risk (the values are correct), it adds unnecessary I/O and could race with the initial `loadAppState()` if timing is unfortunate.
+**Fix:** Guard the watch callback to skip the first invocation, or compare against the loaded state before saving:
+```js
+let initialRender = true;
+watch(() => {
+  const collapsed = state.sidebarCollapsed;
+  const w = collapsed ? '40px' : '200px';
+  document.documentElement.style.setProperty('--sidebar-w', w);
+  if (initialRender) {
+    initialRender = false;
+    return;
+  }
+  updateLayout({ 'sidebar-w': w, 'sidebar-collapsed': collapsed });
 });
-*guard = state.clone();
 ```
-
-### WR-02: Fallback to /tmp/efxmux-fallback when HOME is unset
-
-**File:** `src-tauri/src/state.rs:162-168`
-**Issue:** `/tmp` is world-writable. Any local user can pre-create `/tmp/efxmux-fallback/` or place a symlink there before the app runs (symlink attack). On macOS this is lower risk since desktop apps virtually always have HOME set, but it is a latent security issue. The fallback also means the app silently uses a temp directory that is cleaned on reboot, losing state without any user-visible warning.
-**Fix:** Fail hard instead of silently falling back. If HOME is unset in a desktop macOS app, something is fundamentally wrong:
-```rust
-fn config_dir() -> PathBuf {
-    let home = std::env::var("HOME")
-        .ok()
-        .filter(|h| !h.is_empty())
-        .expect("[efxmux] FATAL: HOME environment variable is not set");
-    PathBuf::from(home).join(".config/efxmux")
-}
-```
-Alternatively, use `dirs::config_dir()` from the `dirs` crate which handles platform-specific config paths correctly.
 
 ## Info
 
-### IN-01: Double JSON parse in load_state_sync
+### IN-01: Dead code -- early layout application before DOM exists
 
-**File:** `src-tauri/src/state.rs:191-203`
-**Issue:** The file content is parsed twice: first as `serde_json::Value` to check the version field (line 191), then again as `AppState` (line 202). This is functionally correct but redundant work. Since `AppState.version` already has `#[serde(default = "default_version")]`, the version is always available after a typed parse.
-**Fix:** Parse once into `AppState`, then check `state.version`:
+**File:** `src/main.js:29-44`
+**Issue:** Lines 29-44 attempt to apply `right-h-pct` to `.right-panel`, `.right-top`, and `.right-bottom` elements. However, Arrow.js has not yet rendered the DOM at this point (that happens at line 74 with `html\`...\`(app)`). The `querySelector` calls will return null, making the inner `if` blocks unreachable. The same logic is correctly duplicated inside the `requestAnimationFrame` callback at lines 150-161, where the DOM does exist. The `--sidebar-w` and `--right-w` CSS property assignments on lines 31-32 do work because they target `document.documentElement`, not component-rendered elements.
+**Fix:** Remove lines 33-44 (the `right-h-pct` block). The CSS custom property assignments on lines 31-32 should remain:
+```js
+if (appState?.layout) {
+  const { layout } = appState;
+  if (layout['sidebar-w']) document.documentElement.style.setProperty('--sidebar-w', layout['sidebar-w']);
+  if (layout['right-w']) document.documentElement.style.setProperty('--right-w', layout['right-w']);
+}
+```
+
+### IN-02: Double JSON parse in load_state_sync
+
+**File:** `src-tauri/src/state.rs:188-207`
+**Issue:** The file content is parsed twice: first as `serde_json::Value` to check the version field (line 188), then again as `AppState` (line 199). This is functionally correct but redundant. Since `AppState.version` has `#[serde(default = "default_version")]`, the version is always available after a typed parse. The current two-pass approach is more defensive against future schema changes (a version 2 with new required fields would fail deserialization, whereas the Value check catches it earlier with a cleaner message), so this is informational only.
+**Fix:** Optional -- parse once into `AppState`, then check `state.version`:
 ```rust
 match serde_json::from_str::<AppState>(&content) {
     Ok(state) if state.version == 1 => return state,
     Ok(state) => {
-        eprintln!(
-            "[efxmux] WARNING: state.json version {} not supported. Using defaults.",
-            state.version
-        );
+        eprintln!("[efxmux] WARNING: state.json version {} not supported.", state.version);
     }
     Err(err) => {
-        eprintln!(
-            "[efxmux] WARNING: Corrupt state.json ({}). Using defaults.",
-            err
-        );
+        eprintln!("[efxmux] WARNING: Corrupt state.json ({}). Using defaults.", err);
     }
 }
 ```
-Note: This changes behavior slightly -- if a future version 2 adds new fields, the single-parse approach would fail at deserialization rather than at the version check. The current two-pass approach is more defensive in that regard, so this is informational only.
 
 ---
 
-_Reviewed: 2026-04-07T14:00:00Z_
+_Reviewed: 2026-04-07T13:26:25Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
