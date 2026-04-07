@@ -4,6 +4,7 @@ mod theme;
 
 use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
 use terminal::pty::{ack_bytes, check_tmux, resize_pty, spawn_terminal, write_pty};
+use theme::iterm2::import_iterm2_theme;
 use theme::types::load_theme;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -65,6 +66,7 @@ pub fn run() {
             resize_pty,
             ack_bytes,
             load_theme,
+            import_iterm2_theme,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application")
