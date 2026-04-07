@@ -87,7 +87,7 @@ Plans:
 - [x] 04-01-PLAN.md -- Rust state persistence layer (state.json types, load/save commands, extend theme watcher)
 - [x] 04-02-PLAN.md -- JS integration (beforeunload wiring, migrate drag-manager + theme-manager to state.json, session reattach + dead session recovery)
 - [x] 04-03-PLAN.md -- Gap closure: fix version default bug (CR-01) + add Rust-side close handler (WR-03)
-- [ ] 04-04-PLAN.md -- UAT gap closure: fix theme persistence on restart + OS theme listener unblocking
+- [x] 04-04-PLAN.md -- UAT gap closure: fix theme persistence on restart + OS theme listener unblocking
 
 ### Phase 5: Project System + Sidebar
 **Goal**: User can register multiple project directories and switch between them -- each switch atomically updates the terminal session, sidebar git status, and all panel content
