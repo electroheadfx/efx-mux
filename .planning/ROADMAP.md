@@ -12,8 +12,8 @@ GSD MUX goes from zero to a fully functional native macOS terminal multiplexer i
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Scaffold + Entitlements** - Tauri 2 init, 3-zone CSS layout, Arrow.js import map, macOS entitlements locked, Cmd+C/V clipboard
-- [ ] **Phase 2: Terminal Integration** - PTY Channel pipeline, xterm.js 6.0 + WebGL/DOM fallback, tmux session, flow control, resize
+- [x] **Phase 1: Scaffold + Entitlements** - Tauri 2 init, 3-zone CSS layout, Arrow.js import map, macOS entitlements locked, Cmd+C/V clipboard
+- [x] **Phase 2: Terminal Integration** - PTY Channel pipeline, xterm.js 6.0 + WebGL/DOM fallback, tmux session, flow control, resize
 - [ ] **Phase 3: Terminal Theming** - theme.json schema, iTerm2 importer, hot reload, dark/light toggle
 - [ ] **Phase 4: Session Persistence** - state.json save/restore, tmux reattach, dead session recovery, corrupted state fallback
 - [ ] **Phase 5: Project System + Sidebar** - Project registration, sidebar with git badge, project switching, Ctrl+P switcher
@@ -53,20 +53,24 @@ Plans:
   5. User drags the panel split handle and terminal content reflows correctly to the new dimensions without corruption
 **Plans**: 3 plans
 Plans:
-- [ ] 02-01-PLAN.md — Rust PTY backend (portable-pty + Tauri commands + flow control + tmux probe)
-- [ ] 02-02-PLAN.md — Vendor xterm.js 6.0 + terminal-manager.js + pty-bridge.js modules
-- [ ] 02-03-PLAN.md — Wire terminal into UI (main-panel + resize handler + main.js init) + UAT
+- [x] 02-01-PLAN.md — Rust PTY backend (portable-pty + Tauri commands + flow control + tmux probe)
+- [x] 02-02-PLAN.md — Vendor xterm.js 6.0 + terminal-manager.js + pty-bridge.js modules
+- [x] 02-03-PLAN.md — Wire terminal into UI (main-panel + resize handler + main.js init) + UAT
 
 ### Phase 3: Terminal Theming
 **Goal**: User can fully customize terminal appearance via a theme.json file, import their existing iTerm2 theme, and see changes applied instantly without restarting
 **Depends on**: Phase 2
 **Requirements**: THEME-01, THEME-02, THEME-03, THEME-04
 **Success Criteria** (what must be TRUE):
-  1. User edits `~/.config/gsd-mux/theme.json` and all xterm.js terminals apply the new colors/font on load
+  1. User edits `~/.config/efxmux/theme.json` and all xterm.js terminals apply the new colors/font on load
   2. User drops an iTerm2 `.json` export and it is converted to theme.json format automatically
   3. User saves changes to theme.json while the app is running and all terminals hot-reload the new theme within 1 second
-  4. User can toggle app chrome between dark (forest-green) and light mode; the preference persists across restarts
-**Plans**: TBD
+  4. User can toggle app chrome between dark (Solarized Dark) and light mode; the preference persists across restarts
+**Plans**: 3 plans
+Plans:
+- [ ] 03-01-PLAN.md — Rust theme module (types, load/save, config dir, file watcher)
+- [ ] 03-02-PLAN.md — JS theme manager + dark/light CSS + terminal-manager update
+- [ ] 03-03-PLAN.md — iTerm2 importer + UAT checkpoint
 **UI hint**: yes
 
 ### Phase 4: Session Persistence
@@ -141,7 +145,7 @@ Phases execute in numeric order. Note: Phases 3 and 6 are parallelizable after P
 |-------|----------------|--------|-----------|
 | 1. Scaffold + Entitlements | 4/4 | Complete | 2026-04-06 |
 | 2. Terminal Integration | 0/3 | Planned | - |
-| 3. Terminal Theming | 0/TBD | Not started | - |
+| 3. Terminal Theming | 0/3 | Planned | - |
 | 4. Session Persistence | 0/TBD | Not started | - |
 | 5. Project System + Sidebar | 0/TBD | Not started | - |
 | 6. Right Panel Views | 0/TBD | Not started | - |
