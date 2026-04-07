@@ -1,13 +1,13 @@
 // drag-manager.js -- Vanilla JS drag manager for all split handles (per D-06 to D-09)
 // No framework dependencies. Attaches to DOM handles identified by [data-handle].
-// Ratios persisted via the saveRatios callback passed from main.js.
+// Ratios persisted via state-manager.js (Phase 4: state.json via Rust backend).
+
+import { updateLayout } from './state-manager.js';
 
 /**
  * Initialize drag behavior for all split handles.
- *
- * @param {{ saveRatios: (patch: Record<string, string>) => void }} options
  */
-export function initDragManager({ saveRatios }) {
+export function initDragManager() {
   const app = document.getElementById('app');
   if (!app) return;
 
@@ -23,7 +23,7 @@ export function initDragManager({ saveRatios }) {
       },
       onEnd(clientX) {
         const w = Math.min(400, Math.max(40, clientX));
-        saveRatios({ '--sidebar-w': `${w}px` });
+        updateLayout({ 'sidebar-w': `${w}px` });
       },
     });
   }
@@ -45,7 +45,7 @@ export function initDragManager({ saveRatios }) {
         const totalW = window.innerWidth;
         const rawPct = ((totalW - clientX) / totalW) * 100;
         const pct = Math.min(50, Math.max(10, rawPct));
-        saveRatios({ '--right-w': `${pct.toFixed(1)}%` });
+        updateLayout({ 'right-w': `${pct.toFixed(1)}%` });
       },
     });
   }
@@ -75,26 +75,10 @@ export function initDragManager({ saveRatios }) {
         const rightPanel = document.querySelector('.right-panel');
         if (!rightPanel) return;
         const pct = parseFloat(rightPanel.dataset.splitPct || '50');
-        saveRatios({ '--right-h-pct': `${pct.toFixed(1)}` });
+        updateLayout({ 'right-h-pct': `${pct.toFixed(1)}` });
       },
     });
   }
-
-  // Restore persisted right-panel horizontal split on mount
-  // (--right-h-pct is stored as a plain number, not a CSS property)
-  try {
-    const saved = JSON.parse(localStorage.getItem('gsd-mux:split-ratios') || '{}');
-    const pct = parseFloat(saved['--right-h-pct']);
-    if (!isNaN(pct)) {
-      const rightPanel = document.querySelector('.right-panel');
-      if (rightPanel) {
-        const rightTop    = rightPanel.querySelector('.right-top');
-        const rightBottom = rightPanel.querySelector('.right-bottom');
-        if (rightTop)    rightTop.style.flex    = `0 0 ${pct.toFixed(1)}%`;
-        if (rightBottom) rightBottom.style.flex = `0 0 ${(100 - pct).toFixed(1)}%`;
-      }
-    }
-  } catch { /* ignore corrupt localStorage */ }
 }
 
 // --- Vertical drag helper ----------------------------------------------------
