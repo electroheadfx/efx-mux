@@ -2,9 +2,9 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// Application state persisted to ~/.config/efxmux/state.json (per D-07)
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppState {
-    #[serde(default)]
+    #[serde(default = "default_version")]
     pub version: u32,
 
     #[serde(default)]
@@ -21,6 +21,19 @@ pub struct AppState {
 
     #[serde(default)]
     pub panels: PanelsState,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            version: default_version(),
+            layout: LayoutState::default(),
+            theme: ThemeState::default(),
+            session: SessionState::default(),
+            project: ProjectState::default(),
+            panels: PanelsState::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -129,6 +142,9 @@ fn default_right_top_tab() -> String {
 }
 fn default_right_bottom_tab() -> String {
     "git".into()
+}
+fn default_version() -> u32 {
+    1
 }
 
 /// Path to state.json
