@@ -6,6 +6,11 @@
           {
             "type": "command",
             "command": "node .claude/hooks/gsd-check-update.js"
+          },
+          {
+            "type": "command",
+            "command": "uvx --python 3.13 better-code-review-graph build",
+            "timeout": 30000
           }
         ]
       },
@@ -19,6 +24,16 @@
       }
     ],
     "PostToolUse": [
+      {
+        "matcher": "Write|Edit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uvx --python 3.13 better-code-review-graph update",
+            "timeout": 5000
+          }
+        ]
+      },
       {
         "matcher": "Bash|Edit|Write|MultiEdit|Agent|Task",
         "hooks": [

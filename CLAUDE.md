@@ -24,23 +24,6 @@ A native macOS desktop application that wraps Claude Code and OpenCode terminal 
 - `listen` is now `@tauri-apps/api/event`, same path as v1 but the module restructure means other v1 imports will break.
 - Tauri 2 migrated most plugins (shell, fs, store, etc.) out of core into separate `tauri-plugin-*` crates. Each needs explicit `cargo add` and frontend npm package.
 - Multiple webview panels (native split via `Window::add_child`) are not production-ready as of 2.10.x. Use a single webview with CSS flexbox panels.
-## Arrow.js
-### Core API
-### No-bundler ESM import
-### @arrow-js/skill
-### Available packages
-| Package | Purpose |
-|---------|---------|
-| `@arrow-js/core` | Reactive state + html template literal rendering |
-| `@arrow-js/framework` | Async component runtime with loading boundaries |
-| `@arrow-js/ssr` | Server-side rendering (not needed for Tauri) |
-| `@arrow-js/hydrate` | Client hydration after SSR (not needed) |
-| `@arrow-js/sandbox` | WASM-sandboxed code execution (not needed for MVP) |
-### Gotchas
-- Arrow.js does not use web components (Custom Elements). `component()` returns a render function, not a custom element class. No `customElements.define` needed.
-- There is no virtual DOM diffing — reactivity is at the individual expression level. Entire template subtrees do not re-render; only the tracked arrow function expressions update.
-- The framework is deliberately minimal. For complex state shapes (app-wide panel state), use a single top-level `reactive({})` store and pass sub-objects into components.
-- Arrow.js is maintained by Standard Agents, not a large OSS foundation. Verify activity on GitHub before each major phase.
 ## xterm.js
 ### Version recommendation: USE 5.5.0, NOT 6.0.0
 ### WebGL addon in Tauri (WKWebView on macOS)
@@ -113,7 +96,6 @@ A native macOS desktop application that wraps Claude Code and OpenCode terminal 
 |---------|---------------------|--------|------------|
 | tauri (Rust) | 2.10.3 | docs.rs confirmed | HIGH |
 | @tauri-apps/api (JS) | ^2.0.0 | matches tauri core | HIGH |
-| @arrow-js/core | 1.0.6 (or latest 1.x) | GitHub confirmed | HIGH |
 | @xterm/xterm | 6.0.0 | GitHub releases confirmed | HIGH |
 | @xterm/addon-webgl | 0.19.0 | npm confirmed | HIGH |
 | @xterm/addon-fit | 0.11.0 | npm confirmed | HIGH |
@@ -134,8 +116,6 @@ A native macOS desktop application that wraps Claude Code and OpenCode terminal 
 - xterm.js 6.0.0 release notes: https://github.com/xtermjs/xterm.js/releases/tag/6.0.0
 - @xterm/addon-webgl npm: https://www.npmjs.com/package/@xterm/addon-webgl
 - WebGL in WKWebView (Babylon.js forum): https://forum.babylonjs.com/t/performance-between-safari-and-wkwebview-tauri/60811
-- Arrow.js GitHub: https://github.com/standardagents/arrow-js
-- Arrow.js site: https://arrow-js.com/
 - portable-pty docs.rs: https://docs.rs/portable-pty/latest/portable_pty/
 - git2 docs.rs: https://docs.rs/git2/latest/git2/
 - notify crates.io: https://crates.io/crates/notify
@@ -180,20 +160,3 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
 > This section is managed by `generate-claude-profile` -- do not edit manually.
 <!-- GSD:profile-end -->
 
-<!-- arrow-js-skill:start -->
-# Arrow
-
-Use the local Arrow references when working on this project:
-
-- `.arrow-js/skill/getting-started.md`
-- `.arrow-js/skill/api.md`
-- `.arrow-js/skill/examples.md`
-
-Prefer idiomatic Arrow patterns:
-- `reactive()` for live state
-- `html` tagged templates for DOM
-- `component()` for reusable view units
-- `routeToPage(url)` in scaffolded SSR apps
-
-Keep no-build core usage simple. If SSR or hydration is involved, preserve payload and boundary behavior.
-<!-- arrow-js-skill:end -->
