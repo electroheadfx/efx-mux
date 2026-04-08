@@ -16,6 +16,7 @@ export interface ProjectEntry {
   agent: string;
   gsd_file?: string;
   server_cmd?: string;
+  server_url?: string;
 }
 
 export interface GitData {
