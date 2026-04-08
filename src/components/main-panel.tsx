@@ -1,0 +1,106 @@
+// main-panel.tsx -- Main panel with terminal-area + file viewer overlay + server-pane
+// Phase 2: terminal-area is empty -- xterm.js mounts via querySelector (D-08)
+// Phase 6 gap closure: file viewer overlay for read-only file display (PANEL-06)
+// Migrated from Arrow.js to Preact TSX (Phase 6.1)
+
+import { signal } from '@preact/signals';
+import { useEffect } from 'preact/hooks';
+
+// Module-level signals for file viewer state
+const fileViewerVisible = signal(false);
+const fileName = signal('');
+const filePath = signal('');
+const fileContent = signal('');
+
+function closeFileViewer(): void {
+  fileViewerVisible.value = false;
+  fileContent.value = '';
+}
+
+/**
+ * Escape HTML entities for safe rendering in pre block.
+ */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+export function MainPanel() {
+  // Register show-file-viewer and Escape key listeners
+  useEffect(() => {
+    function handleShowFile(e: Event) {
+      const detail = (e as CustomEvent).detail;
+      if (detail) {
+        fileName.value = detail.name || '';
+        filePath.value = detail.path || '';
+        fileContent.value = detail.content || '';
+        fileViewerVisible.value = true;
+      }
+    }
+
+    function handleKeydown(e: KeyboardEvent) {
+      if (e.key === 'Escape' && fileViewerVisible.value) {
+        e.preventDefault();
+        closeFileViewer();
+      }
+    }
+
+    document.addEventListener('show-file-viewer', handleShowFile);
+    document.addEventListener('keydown', handleKeydown);
+
+    return () => {
+      document.removeEventListener('show-file-viewer', handleShowFile);
+      document.removeEventListener('keydown', handleKeydown);
+    };
+  }, []);
+
+  return (
+    <main class="main-panel relative" aria-label="Main panel">
+      <div class="terminal-area flex-1 bg-bg overflow-hidden relative min-h-[100px] p-1" data-handle="main-h"></div>
+
+      {fileViewerVisible.value && (
+        <div class="absolute inset-0 flex flex-col bg-bg z-10">
+          <div class="flex items-center justify-between px-3 py-1.5 bg-bg-raised border-b border-border shrink-0">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-[10px] px-1.5 py-px rounded-sm bg-accent text-bg font-semibold tracking-wider shrink-0">READ-ONLY</span>
+              <span class="text-text-bright text-[13px] font-mono overflow-hidden text-ellipsis whitespace-nowrap">{fileName.value}</span>
+            </div>
+            <button
+              onClick={closeFileViewer}
+              class="bg-transparent border border-border text-text cursor-pointer px-2 py-0.5 rounded-sm text-xs font-mono"
+              title="Close file viewer (Esc)"
+            >Close</button>
+          </div>
+          <pre class="flex-1 m-0 px-4 py-3 overflow-auto text-text text-[13px] font-mono leading-relaxed whitespace-pre tab-[4]"
+            dangerouslySetInnerHTML={{ __html: escapeHtml(fileContent.value) }}
+          />
+        </div>
+      )}
+
+      <div
+        class="split-handle-h"
+        data-handle="main-h"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize server pane"
+      ></div>
+
+      <div class="server-pane" aria-label="Server pane">
+        <div class="server-pane-toolbar">
+          <span class="text-text-bright text-[11px] tracking-wider uppercase">Server</span>
+          <div class="flex gap-1.5 items-center">
+            <button class="server-btn" title="Start server">Start</button>
+            <button class="server-btn" title="Stop server" disabled>Stop</button>
+            <button class="server-btn" title="Open in browser" disabled>Open</button>
+          </div>
+        </div>
+        <div class="server-pane-logs">
+          <span class="text-text text-[11px] opacity-60">[ Server logs -- Phase 7 ]</span>
+        </div>
+      </div>
+    </main>
+  );
+}
