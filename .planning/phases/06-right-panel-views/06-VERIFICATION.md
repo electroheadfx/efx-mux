@@ -1,44 +1,43 @@
 ---
 phase: 06-right-panel-views
-verified: 2026-04-07T18:30:00Z
+verified: 2026-04-08T10:15:00Z
 status: human_needed
 score: 7/7 must-haves verified
 overrides_applied: 0
 re_verification:
   previous_status: gaps_found
-  previous_score: 5/7
+  previous_score: 6/7
   gaps_closed:
-    - "GSD Viewer auto-refreshes when watched .md file changes on disk (set_project_path now wired in main.js)"
-    - "File Tree opens files in main panel (file-opened handler + file-viewer overlay now implemented)"
+    - "Diff Viewer shows syntax-highlighted unified diffs from git2"
   gaps_remaining: []
   regressions: []
 human_verification:
-  - test: "GSD Viewer checkbox write-back: open a project's PLAN.md in the GSD Viewer, click a checkbox, then check the .md file on disk"
-    expected: "Checkbox state toggled in the file within milliseconds"
-    why_human: "Requires running app + a project with a PLAN.md containing task checkboxes"
-  - test: "GSD Viewer auto-refresh: with a project loaded, externally edit the PLAN.md, check that GSD Viewer updates without manual reload"
-    expected: "Viewer content updates automatically within ~200ms (notify debounce)"
-    why_human: "Requires running app + tmux session + external file edit"
-  - test: "Diff Viewer integration with sidebar: click a modified file in the sidebar git-changed section, check the Diff tab in the right panel"
-    expected: "Git diff renders with green additions, red deletions, accent-colored hunk headers"
-    why_human: "Requires a project with uncommitted changes"
-  - test: "File Tree -> file viewer: navigate to a file in the File Tree, press Enter (or click), verify file viewer overlay appears in main panel"
-    expected: "Main panel shows READ-ONLY badge, filename, preformatted content; Close button and Escape key dismiss it"
-    why_human: "Requires running app + a project with files to browse"
-  - test: "Bash Terminal connection: launch app, switch to Bash tab in right-bottom panel"
-    expected: "xterm.js terminal appears and connects to efx-mux-right tmux session"
-    why_human: "Requires running app + tmux installed"
-  - test: "Tab bar visual state: click each tab in right-top panel (GSD, Diff, File Tree)"
-    expected: "Active tab shows accent-colored underline; content area switches to the corresponding view"
+  - test: "GSD Viewer checkbox write-back end-to-end"
+    expected: "Check a checkbox in the GSD Viewer; the .md file on disk updates within milliseconds"
+    why_human: "Requires running app with a project containing task checkboxes"
+  - test: "GSD Viewer auto-refresh on external .md edit"
+    expected: "Edit the .md file externally; viewer content updates automatically within ~200ms"
+    why_human: "Requires running app plus external file edit"
+  - test: "Diff Viewer integration with sidebar file click"
+    expected: "Click a modified file in sidebar; diff renders with colored additions/deletions/hunks"
+    why_human: "Requires running app with uncommitted changes"
+  - test: "File Tree -> file viewer overlay in main panel"
+    expected: "Navigate to a file, press Enter; READ-ONLY overlay appears with file content"
+    why_human: "Requires running app with files to browse"
+  - test: "Bash Terminal connection in right-bottom panel"
+    expected: "xterm.js terminal appears and connects to tmux session"
+    why_human: "Requires running app with tmux installed"
+  - test: "Tab bar visual state switching"
+    expected: "Active tab shows accent underline; content area switches correctly between all tabs"
     why_human: "Visual appearance requires running app"
 ---
 
-# Phase 6: Right Panel Views — Verification Report (Re-verification)
+# Phase 6: Right Panel Views -- Verification Report (Re-verification #4)
 
 **Phase Goal:** User has a fully functional right panel with tabbed views for GSD plan tracking, git diffs, file browsing, and an independent bash terminal -- with live file watching and checkbox write-back
-**Verified:** 2026-04-07T18:30:00Z
+**Verified:** 2026-04-08T10:15:00Z
 **Status:** human_needed
-**Re-verification:** Yes — after gap closure (Plan 03)
+**Re-verification:** Yes -- after Plan 06 diff-viewer ref fix
 
 ## Goal Achievement
 
@@ -46,145 +45,160 @@ human_verification:
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | Right panels have independent tab bars; user can switch between GSD Viewer, Diff Viewer, File Tree, and Bash Terminal per panel | VERIFIED | right-panel.js: TabBar(RIGHT_TOP_TABS, ...) and TabBar(RIGHT_BOTTOM_TABS, ...) wired. tab-bar.js is a substantive component with active-state styling. |
-| 2 | GSD Viewer renders PLAN.md with checkboxes; checking writes back to .md file | VERIFIED | gsd-viewer.js: invoke('read_file_content'), marked.parse(), buildLineMap(), injectLineNumbers(), invoke('write_checkbox') all present and wired |
-| 3 | GSD Viewer auto-refreshes when the watched .md file changes on disk | VERIFIED | listen('md-file-changed') present in gsd-viewer.js. set_project_path now called in main.js initProjects() (line 126) and project-changed handler (line 143). Watcher activation chain is complete. |
-| 4 | Diff Viewer shows syntax-highlighted unified diffs from git2 | VERIFIED | diff-viewer.js: listens for open-diff event from sidebar.js, calls invoke('get_file_diff'), renders with CSS per-line highlighting (+/-/@@ patterns) |
-| 5 | File tree keyboard navigation (ArrowUp/Down, Enter, Backspace) | VERIFIED | file-tree.js: handleKeydown() implements all four keys, tabindex="0" present, @keydown wired |
-| 6 | Clicking a file in the File Tree opens it as a read-only viewer in the main panel | VERIFIED | main.js: document.addEventListener('file-opened') handler (line 151) reads file via invoke('read_file_content') and dispatches show-file-viewer. main-panel.js: show-file-viewer listener, reactive file-viewer-overlay with READ-ONLY badge, escapeHtml, Close/Escape dismiss. |
-| 7 | Bash Terminal tab connects to independent tmux session | VERIFIED | right-panel.js: connectBashTerminal() lazy-connects on mount, calls connectPty(terminal, sessionName) with right-tmux-session name from persisted state |
+| 1 | Right panels have independent tab bars; user can switch between GSD Viewer, Diff Viewer, File Tree, and Bash Terminal per panel | VERIFIED | right-panel.js: TabBar(RIGHT_TOP_TABS) and TabBar(RIGHT_BOTTOM_TABS). Show/hide pattern with display:none preserves state across tab switches. |
+| 2 | GSD Viewer renders PLAN.md with checkboxes; checking writes back to .md file | VERIFIED | gsd-viewer.js: getElementById('gsd-viewer-content') at line 116. loadGSD() reads file via invoke('read_file_content'), renders via marked.parse(), injects data-line attributes. Checkbox click handler calls invoke('write_checkbox'). |
+| 3 | GSD Viewer auto-refreshes when the watched .md file changes on disk | VERIFIED | listen('md-file-changed') at gsd-viewer.js line 98. main.js calls invoke('set_project_path') on init and project-changed. Watcher chain complete. |
+| 4 | Diff Viewer shows syntax-highlighted unified diffs from git2 | VERIFIED | diff-viewer.js: ref callback removed, replaced with id="diff-viewer-content" (line 99) and setTimeout + getElementById (line 82-84). loadDiff() calls invoke('get_file_diff') at line 67. renderDiffHtml() at line 26 produces colored diff lines. open-diff listener at line 75. |
+| 5 | File tree keyboard navigation (ArrowUp/Down, Enter, Backspace) and file opening | VERIFIED | file-tree.js: setTimeout + loadDir pattern. Keyboard handler with ArrowDown/Up/Enter/Backspace. Root boundary guard. Dispatches file-opened. |
+| 6 | Clicking a file in the File Tree opens it as a read-only viewer in the main panel | VERIFIED | main.js: file-opened handler reads file via invoke('read_file_content'), dispatches show-file-viewer. main-panel.js: reactive overlay with file-viewer-overlay class, READ-ONLY badge, escapeHtml, Close/Escape dismiss. |
+| 7 | Bash Terminal tab connects to independent tmux session | VERIFIED | right-panel.js: getElementById('bash-terminal-container') at line 91. connectBashTerminal() lazy-connects via connectPty. attachResizeHandler wired for responsive resize. |
 
 **Score:** 7/7 truths verified
 
-### Re-verification: Gap Closure Confirmation
+### Re-verification: Plan 06 Changes
 
-| Gap (from previous verification) | Closed? | Evidence |
-|-----------------------------------|---------|----------|
-| PANEL-03: set_project_path never called from frontend | CLOSED | main.js line 126: `invoke('set_project_path', { path: project.path })` in initProjects(). Line 143: same call in project-changed handler. grep -c "set_project_path" returns 2. |
-| PANEL-06: file-opened event orphaned, no handler, no tab system | CLOSED | main.js lines 151-161: file-opened handler reads file content, dispatches show-file-viewer. main-panel.js: full file-viewer-overlay implementation with reactive state, READ-ONLY badge, escapeHtml, keyboard dismiss. |
+| Plan 06 Fix | Status | Evidence |
+|-------------|--------|----------|
+| diff-viewer.js ref callback removed | CONFIRMED | grep 'ref=' diff-viewer.js returns 0 matches |
+| diff-viewer.js getElementById added | CONFIRMED | Line 83: contentEl = document.getElementById('diff-viewer-content') |
+| diff-viewer.js id attribute in template | CONFIRMED | Line 99: id="diff-viewer-content" |
+
+### Regression Check (Previously Passed Items)
+
+| Item | Status | Evidence |
+|------|--------|---------|
+| Tab bars in right-panel.js | No regression | TabBar imported and used for both panels |
+| set_project_path wiring | No regression | 2 calls in main.js |
+| file-opened handler | No regression | main.js file-opened listener present |
+| Bash terminal getElementById | No regression | right-panel.js line 91 |
+| Project persistence (save_state_sync) | No regression | 4 calls in project.rs |
+| File viewer overlay | No regression | main-panel.js: file-viewer-overlay class present |
+| GSD Viewer getElementById | No regression | gsd-viewer.js line 116 |
+| File tree getElementById | No regression | file-tree.js line 109 |
+| get_git_files registered | No regression | lib.rs: get_git_files in handler |
+| attachResizeHandler | No regression | right-panel.js: 2 matches |
+| cargo check | No regression | Finished dev profile, zero errors |
 
 ### Required Artifacts
 
 | Artifact | Provides | Status | Details |
 |----------|----------|--------|---------|
-| `src/components/tab-bar.js` | Reusable TabBar component | VERIFIED | Substantive: TabBar(tabs, activeTab, onSwitch). Used in right-panel.js |
-| `src/components/gsd-viewer.js` | GSD Markdown viewer | VERIFIED | marked.js, checkbox write-back, md-file-changed listener |
-| `src/components/diff-viewer.js` | Git diff renderer | VERIFIED | escapeHtml, renderDiffHtml, get_file_diff invoke, open-diff listener |
-| `src/components/file-tree.js` | Keyboard-navigable file tree | VERIFIED | keyboard nav + file-opened dispatch |
-| `src/components/right-panel.js` | Right panel with tab bars | VERIFIED | All 4 components imported and used, Bash lazy-connect |
-| `src/main.js` | set_project_path wiring + file-opened handler | VERIFIED | set_project_path called in initProjects() and project-changed. file-opened handler present. |
-| `src/components/main-panel.js` | File viewer overlay | VERIFIED | file-viewer-overlay with reactive state, READ-ONLY badge, escapeHtml, show/hide wired |
-| `src-tauri/src/file_ops.rs` | File operations backend | VERIFIED | get_file_diff, list_directory, read_file_content, write_checkbox, read_file |
-| `src-tauri/src/file_watcher.rs` | .md file watcher | VERIFIED | start_md_watcher with 200ms debounce, set_project_path command |
-| `src-tauri/src/lib.rs` | All Phase 6 commands registered | VERIFIED | All file_ops + file_watcher commands in generate_handler!, PtyManager initialized in setup() |
+| `src/components/tab-bar.js` | Reusable TabBar component | VERIFIED | Substantive, used in right-panel.js |
+| `src/components/gsd-viewer.js` | GSD Markdown viewer | VERIFIED | getElementById pattern, marked.parse, write_checkbox, md-file-changed listener |
+| `src/components/diff-viewer.js` | Git diff renderer | VERIFIED | getElementById pattern (Plan 06 fix), renderDiffHtml, escapeHtml, open-diff listener |
+| `src/components/file-tree.js` | Keyboard-navigable file tree | VERIFIED | setTimeout + loadDir pattern, keyboard nav, root boundary guard |
+| `src/components/right-panel.js` | Right panel with tab bars | VERIFIED | All components imported, getElementById for bash, attachResizeHandler |
+| `src/components/main-panel.js` | File viewer overlay | VERIFIED | Reactive overlay, escapeHtml, READ-ONLY badge |
+| `src/components/sidebar.js` | Git files listing | VERIFIED | refreshGitFiles(), state.gitFiles reactive, GitFileRow dispatches open-diff |
+| `src/main.js` | set_project_path + file-opened | VERIFIED | 2x set_project_path, file-opened handler |
+| `src-tauri/src/file_ops.rs` | File operations backend | VERIFIED | All commands with spawn_blocking and path validation |
+| `src-tauri/src/file_watcher.rs` | .md file watcher | VERIFIED | Debounced, set_project_path command |
+| `src-tauri/src/terminal/pty.rs` | PtyManager HashMap | VERIFIED | Multi-session, all commands session-aware |
+| `src-tauri/src/git_status.rs` | Git status + file entries | VERIFIED | get_git_status + get_git_files with GitFileEntry struct |
+| `src-tauri/src/lib.rs` | All commands registered | VERIFIED | file_ops, file_watcher, get_git_files in generate_handler! |
+| `src-tauri/src/project.rs` | Project mutation persistence | VERIFIED | save_state_sync after add, remove, switch |
+| `src/state-manager.js` | Project helpers reload from Rust | VERIFIED | load_state after project mutations |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |------|----|-----|--------|---------|
-| src/components/right-panel.js | src/components/tab-bar.js | TabBar() renders tab bar UI | WIRED | TabBar(RIGHT_TOP_TABS, ...) and TabBar(RIGHT_BOTTOM_TABS, ...) |
-| src/components/right-panel.js | src/components/gsd-viewer.js | GSDViewer(activeProject) | WIRED | GSDViewer(() => state.activeProject) |
-| src/components/gsd-viewer.js | src-tauri/src/file_ops.rs | invoke('write_checkbox'), invoke('read_file_content') | WIRED | invoke('read_file_content') + invoke('write_checkbox') both present |
-| src/components/diff-viewer.js | src-tauri/src/file_ops.rs | invoke('get_file_diff') | WIRED | invoke('get_file_diff', { path: filePath }) |
-| src/components/diff-viewer.js | src/components/sidebar.js | open-diff CustomEvent | WIRED | sidebar.js dispatches; diff-viewer.js listens |
-| src/components/file-tree.js | src-tauri/src/file_ops.rs | invoke('list_directory') | WIRED | invoke('list_directory', { path }) |
-| src/components/file-tree.js | src/main.js | file-opened CustomEvent | WIRED | file-tree.js dispatches; main.js addEventListener('file-opened') consumes |
-| src/main.js | src/components/main-panel.js | show-file-viewer CustomEvent | WIRED | main.js dispatches; main-panel.js document.addEventListener('show-file-viewer') consumes |
-| src/main.js | src-tauri/src/file_watcher.rs | invoke('set_project_path') | WIRED | Called in initProjects() on startup and in project-changed handler |
-| src/components/right-panel.js | src/terminal/pty-bridge.js | connectPty(rightTerminal, session) | WIRED | connectPty(terminal, sessionName) |
-| src-tauri/src/lib.rs | src-tauri/src/terminal/pty.rs | PtyManager state via app.manage() | WIRED | setup(): app.manage(PtyManager(...)) |
+| right-panel.js | tab-bar.js | TabBar() | WIRED | Two instances for top/bottom panels |
+| right-panel.js | gsd-viewer.js | GSDViewer() | WIRED | Component rendered |
+| right-panel.js | diff-viewer.js | DiffViewer() | WIRED | Component rendered |
+| right-panel.js | file-tree.js | FileTree() | WIRED | Component rendered |
+| gsd-viewer.js | file_ops.rs | invoke('write_checkbox'), invoke('read_file_content') | WIRED | Both invokes present |
+| diff-viewer.js | file_ops.rs | invoke('get_file_diff') | WIRED | Invoke at line 67, contentEl now assigned via getElementById |
+| diff-viewer.js | sidebar.js | open-diff CustomEvent | WIRED | sidebar dispatches; diff-viewer listens at line 75 |
+| file-tree.js | file_ops.rs | invoke('list_directory') | WIRED | Invoke with projectRoot param |
+| file-tree.js | main.js | file-opened CustomEvent | WIRED | file-tree dispatches; main.js consumes |
+| main.js | main-panel.js | show-file-viewer CustomEvent | WIRED | main.js dispatches; main-panel.js consumes |
+| main.js | file_watcher.rs | invoke('set_project_path') | WIRED | 2 call sites |
+| right-panel.js | pty-bridge.js | connectPty + attachResizeHandler | WIRED | getElementById + connectPty + resize handler |
+| sidebar.js | git_status.rs | invoke('get_git_files') | WIRED | refreshGitFiles |
+| lib.rs | pty.rs | PtyManager via app.manage() | WIRED | setup() initializes |
 
 ### Data-Flow Trace (Level 4)
 
 | Artifact | Data Variable | Source | Produces Real Data | Status |
 |----------|--------------|--------|-------------------|--------|
-| gsd-viewer.js | contentEl innerHTML | invoke('read_file_content') -> marked.parse() | Yes — Rust reads file from disk | FLOWING |
-| diff-viewer.js | contentEl innerHTML | invoke('get_file_diff') -> renderDiffHtml() | Yes — Rust git2 diff | FLOWING |
-| file-tree.js | state.entries | invoke('list_directory') | Yes — Rust reads directory | FLOWING |
-| right-panel.js | state.activeProject | getProjects() + getActiveProject() -> Rust | Yes — project registry | FLOWING |
-| gsd-viewer.js | md-file-changed event trigger | set_project_path -> start_md_watcher -> Tauri emit | Yes — watcher now activated from main.js on startup and project switch | FLOWING |
-| main-panel.js | state.fileContent | file-opened -> invoke('read_file_content') | Yes — Rust reads file content | FLOWING |
+| gsd-viewer.js | contentEl.innerHTML | invoke('read_file_content') -> marked.parse() | Yes (Rust reads file) | FLOWING |
+| diff-viewer.js | contentEl.innerHTML | invoke('get_file_diff') -> renderDiffHtml() | Yes (Rust git2 diff) | FLOWING |
+| file-tree.js | state.entries | invoke('list_directory') | Yes (Rust reads dir) | FLOWING |
+| sidebar.js | state.gitFiles | invoke('get_git_files') | Yes (Rust git2 status) | FLOWING |
+| right-panel.js | state.activeProject | getProjects() + getActiveProject() | Yes (project registry) | FLOWING |
+| main-panel.js | state.fileContent | file-opened -> invoke('read_file_content') | Yes (Rust reads file) | FLOWING |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| cargo check passes | cargo check in src-tauri/ | "Finished `dev` profile" | PASS |
-| set_project_path called at least twice in main.js | grep -c set_project_path src/main.js | 2 | PASS |
-| file-opened handler in main.js | grep -n file-opened src/main.js | line 151: addEventListener present | PASS |
-| show-file-viewer dispatched in main.js | grep show-file-viewer src/main.js | line 155: CustomEvent dispatch | PASS |
-| file-viewer-overlay in main-panel.js | grep file-viewer-overlay src/components/main-panel.js | line 52: present | PASS |
-| show-file-viewer listener in main-panel.js | grep show-file-viewer src/components/main-panel.js | line 14: addEventListener | PASS |
-| terminal-area preserved in main-panel.js | grep terminal-area src/components/main-panel.js | line 50: present | PASS |
-| server-pane preserved in main-panel.js | grep server-pane src/components/main-panel.js | lines 126-135: present | PASS |
-| No TODO in project-changed handler | grep TODO src/main.js | no output | PASS |
+| cargo check passes | cargo check in src-tauri/ | Finished dev profile | PASS |
+| No ref= in diff-viewer.js | grep ref= diff-viewer.js | 0 matches | PASS |
+| No ref= in gsd-viewer.js | grep ref= gsd-viewer.js | 0 matches | PASS |
+| No ref= in file-tree.js | grep ref= file-tree.js | 0 matches | PASS |
+| No ref= in right-panel.js | grep ref= right-panel.js | 0 matches | PASS |
+| getElementById in diff-viewer.js | grep getElementById diff-viewer.js | Line 83 | PASS |
+| getElementById in gsd-viewer.js | grep getElementById gsd-viewer.js | Line 116 | PASS |
+| get_git_files registered | grep get_git_files lib.rs | Present | PASS |
+| save_state_sync in project.rs | grep save_state_sync project.rs | 4 calls | PASS |
+| attachResizeHandler in right-panel.js | grep attachResizeHandler right-panel.js | 2 matches | PASS |
+| set_project_path in main.js | grep set_project_path main.js | 2 calls | PASS |
 
 ### Requirements Coverage
 
 | Requirement | Source Plan | Description | Status | Evidence |
 |-------------|------------|-------------|--------|----------|
 | PANEL-01 | 06-01, 06-02 | Right panels have independent tab bars | SATISFIED | TabBar in right-panel.js for both sub-panels |
-| PANEL-02 | 06-01, 06-02 | GSD Viewer renders PLAN.md with checkboxes; write-back on check | SATISFIED | gsd-viewer.js full implementation verified |
-| PANEL-03 | 06-01, 06-02, 06-03 | GSD Viewer auto-refreshes via notify crate file watcher | SATISFIED | set_project_path now wired in main.js; full chain complete |
-| PANEL-04 | 06-01, 06-02 | Diff Viewer shows syntax-highlighted unified diffs from git2 | SATISFIED | diff-viewer.js wired to get_file_diff via open-diff event |
-| PANEL-05 | 06-02 | File Tree keyboard navigation (arrows + Enter) | SATISFIED | handleKeydown() in file-tree.js implements ArrowUp/Down/Enter/Backspace |
-| PANEL-06 | 06-02, 06-03 | Clicking file in File Tree opens it as read-only viewer in main panel | SATISFIED | file-opened chain complete: file-tree -> main.js -> main-panel overlay |
-| PANEL-07 | 06-02 | Bash Terminal tab connected to independent tmux session | SATISFIED | connectBashTerminal() in right-panel.js with session-aware connectPty |
+| PANEL-02 | 06-01, 06-02, 06-05 | GSD Viewer renders PLAN.md with checkboxes; write-back on check | SATISFIED | getElementById fix, marked.parse, write_checkbox invoke |
+| PANEL-03 | 06-01, 06-02, 06-03 | GSD Viewer auto-refreshes via notify crate file watcher | SATISFIED | Watcher chain: set_project_path -> file_watcher -> md-file-changed -> gsd-viewer |
+| PANEL-04 | 06-01, 06-02, 06-06 | Diff Viewer shows syntax-highlighted unified diffs from git2 | SATISFIED | Plan 06 fixed ref bug. getElementById + renderDiffHtml + get_file_diff |
+| PANEL-05 | 06-02, 06-05 | File Tree keyboard navigation (arrows + Enter) | SATISFIED | Keyboard handler, initial load fix, root boundary guard |
+| PANEL-06 | 06-02, 06-03 | Clicking file in File Tree opens read-only viewer in main panel | SATISFIED | file-opened chain: file-tree -> main.js -> main-panel.js overlay |
+| PANEL-07 | 06-02, 06-04 | Bash Terminal tab connected to independent tmux session | SATISFIED | getElementById fix, connectPty, attachResizeHandler |
 
 ### Anti-Patterns Found
 
-None. The TODO comment previously present in the project-changed handler (line 127) has been removed. No placeholders, stubs, or TODO comments found in Phase 6 modified files.
+| File | Line | Pattern | Severity | Impact |
+|------|------|---------|----------|--------|
+| (none) | - | - | - | All previous blockers resolved |
 
 ### Human Verification Required
 
-**1. GSD Viewer Checkbox Write-Back**
+6 items require running the app with live projects. All automated checks pass.
 
-**Test:** Open a project's PLAN.md in the GSD Viewer. Click a checkbox. Check the .md file on disk.
-**Expected:** Checkbox state toggled in the file within milliseconds.
-**Why human:** Requires running app + a project with a PLAN.md file containing task checkboxes.
+1. **GSD Viewer Checkbox Write-Back** -- Check a checkbox in the GSD Viewer; verify .md file updates on disk.
+   - Expected: Checkbox state change persists to the .md file within milliseconds.
+   - Why human: Requires running app with a project containing task checkboxes.
 
-**2. GSD Viewer Auto-Refresh**
+2. **GSD Viewer Auto-Refresh** -- Edit the .md file externally; verify viewer updates automatically.
+   - Expected: Viewer content updates within ~200ms of external save.
+   - Why human: Requires running app plus external file edit.
 
-**Test:** With a project loaded, externally edit the project's PLAN.md (or any .md file in the project dir) using a text editor. Check if the GSD Viewer updates without a manual reload.
-**Expected:** Viewer content updates automatically within ~200ms (notify debounce interval).
-**Why human:** Requires running app + set_project_path activation confirmed at runtime.
+3. **Diff Viewer Integration** -- Click a modified file in sidebar; verify diff renders with colors.
+   - Expected: Green additions, red deletions, accent hunk headers in diff output.
+   - Why human: Requires running app with uncommitted changes.
 
-**3. Diff Viewer Integration with Sidebar**
+4. **File Tree -> File Viewer** -- Navigate to a file, press Enter; verify READ-ONLY overlay appears.
+   - Expected: Overlay shows filename, READ-ONLY badge, preformatted file content. Close/Escape dismisses.
+   - Why human: Requires running app with files to browse.
 
-**Test:** Click a modified file in the sidebar git-changed section. Check the Diff tab in the right panel.
-**Expected:** Git diff renders with green additions, red deletions, accent-colored hunk headers.
-**Why human:** Requires a project with uncommitted changes.
+5. **Bash Terminal Connection** -- Switch to Bash tab; verify xterm.js terminal connects.
+   - Expected: xterm.js terminal appears and accepts input.
+   - Why human: Requires running app with tmux installed.
 
-**4. File Tree File Viewer**
-
-**Test:** Navigate to a file in the File Tree, then press Enter (or click). Verify the file viewer overlay appears in the main panel.
-**Expected:** Main panel shows READ-ONLY badge, filename, preformatted file content; Close button and Escape key both dismiss the overlay and reveal the terminal underneath.
-**Why human:** Requires running app + a project with files to browse.
-
-**5. Bash Terminal Connection**
-
-**Test:** Launch the app. Switch to the Bash tab in the right-bottom panel.
-**Expected:** An xterm.js terminal appears and connects to a tmux session (efx-mux-right or the persisted session name).
-**Why human:** Requires running app + tmux installed.
-
-**6. Tab Bar Visual State**
-
-**Test:** Click each tab in the right-top panel (GSD, Diff, File Tree).
-**Expected:** Active tab shows accent-colored bottom border; content area switches to the correct view; state is preserved when switching back (GSD Viewer does not reload from scratch on every tab switch).
-**Why human:** Visual appearance and state preservation require running app.
+6. **Tab Bar Visual State** -- Click each tab; verify active underline and content switching.
+   - Expected: Active tab shows accent-colored underline; content area switches correctly.
+   - Why human: Visual appearance requires running app.
 
 ### Gaps Summary
 
-No gaps remain. Both gaps from the initial verification (2026-04-07T18:00:00Z) were closed by Plan 03:
+No automated gaps remain. All 7 observable truths verified. All 7 requirements (PANEL-01 through PANEL-07) satisfied. All key links wired. All data flows connected. No anti-pattern blockers.
 
-- **PANEL-03 closed:** `invoke('set_project_path', { path: project.path })` is now called in `initProjects()` on app startup (if an active project exists) and in the `project-changed` event handler on every project switch. The md file watcher activation chain is now fully wired.
-
-- **PANEL-06 closed:** `document.addEventListener('file-opened', ...)` handler in `main.js` reads file content via `invoke('read_file_content')` and dispatches `show-file-viewer`. `main-panel.js` was rewritten to include a reactive file-viewer-overlay with READ-ONLY badge, filename display, `escapeHtml`-protected content, and both Close button and Escape key dismiss. The terminal `div.terminal-area` and `div.server-pane` are preserved underneath the overlay.
-
-All 7 observable truths are now VERIFIED by code inspection. The phase proceeds to human verification for runtime behavior.
+6 human verification items remain for runtime behavior confirmation.
 
 ---
 
-_Verified: 2026-04-07T18:30:00Z_
+_Verified: 2026-04-08T10:15:00Z_
 _Verifier: Claude (gsd-verifier)_
-_Re-verification after gap closure: Plan 03 (06-03-PLAN.md)_
+_Re-verification #4 after Plan 06 diff-viewer ref fix_
