@@ -18,6 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 4: Session Persistence** - state.json save/restore, tmux reattach, dead session recovery, corrupted state fallback
 - [ ] **Phase 5: Project System + Sidebar** - Project registration, sidebar with git badge, project switching, Ctrl+P switcher
 - [ ] **Phase 6: Right Panel Views** - Tab bar, GSD Markdown viewer with checkbox write-back, git diff viewer, file tree, bash terminal
+- [ ] **Phase 6.1: Migrate Arrow.js to Preact + htm** (INSERTED) - Replace Arrow.js with Preact + htm to fix template rendering bugs
 - [ ] **Phase 7: Server Pane + Agent Support** - Server pane with controls, Claude Code / OpenCode launchers, auto-detect fallback
 - [ ] **Phase 8: Keyboard + Polish** - App-level shortcut system with terminal pass-through, tab management, crash recovery, first-run wizard
 
@@ -119,13 +120,27 @@ Plans:
   5. User can navigate the project file tree with keyboard (arrows + Enter) and clicking a file opens it as a read-only tab in the main panel
   6. User can open a Bash Terminal tab in the right panel connected to an independent tmux session
 
-**Plans**: 4 plans
+**Plans**: 5 plans
 Plans:
 - [x] 06-01-PLAN.md -- Wave 1: PtyManager HashMap refactor, new Rust commands, .md file watcher
 - [x] 06-02-PLAN.md -- Wave 2: Tab bars, GSD Viewer, Diff Viewer, File Tree, Bash Terminal wiring
 - [x] 06-03-PLAN.md -- Wave 3: Gap closure: wire md file watcher activation + file-opened handler
-- [ ] 06-04-PLAN.md -- UAT gap closure: fix Add Project persistence + Bash terminal ref bug
+- [x] 06-04-PLAN.md -- UAT gap closure: fix Add Project persistence + Bash terminal ref bug
+- [ ] 06-05-PLAN.md -- UAT gap closure: fix GSD Viewer loading, sidebar git files, file tree root guard, bash resize
 
+**UI hint**: yes
+
+### Phase 6.1: Migrate Arrow.js to Preact + htm (INSERTED)
+**Goal**: Replace Arrow.js with Preact + htm to eliminate reactive template bugs (writeExpressions stringification, static-vs-reactive footguns) while keeping the no-bundler ESM setup
+**Depends on**: Phase 6
+**Requirements**: All existing UI behavior must be preserved — same layout, same reactivity, same look
+**Success Criteria** (what must be TRUE):
+  1. All Arrow.js `reactive()` + `html` templates are replaced with Preact components using `htm` tagged templates
+  2. No build step required — Preact + htm loaded via ESM import map (same pattern as current Arrow.js vendor)
+  3. All sidebar, modal, fuzzy-search, right-panel, and main-panel components render correctly
+  4. No `(el) => renderTemplate(template, el)` or similar template leak text anywhere in the UI
+  5. Conditional rendering (`{condition && <Component/>}`) works without the `() =>` reactive wrapper footgun
+**Plans**: TBD
 **UI hint**: yes
 
 ### Phase 7: Server Pane + Agent Support
@@ -158,8 +173,8 @@ Plans:
 
 **Plans**: 2 plans
 Plans:
-- [ ] 06-01-PLAN.md -- Wave 1: PtyManager HashMap refactor, new Rust commands, .md file watcher
-- [ ] 06-02-PLAN.md -- Wave 2: Tab bars, GSD Viewer, Diff Viewer, File Tree, Bash Terminal wiring
+- [x] 06-01-PLAN.md -- Wave 1: PtyManager HashMap refactor, new Rust commands, .md file watcher
+- [x] 06-02-PLAN.md -- Wave 2: Tab bars, GSD Viewer, Diff Viewer, File Tree, Bash Terminal wiring
 
 **UI hint**: yes
 
@@ -176,5 +191,6 @@ Phases execute in numeric order. Note: Phases 3 and 6 are parallelizable after P
 | 4. Session Persistence | 0/TBD | Not started | - |
 | 5. Project System + Sidebar | 0/TBD | Not started | - |
 | 6. Right Panel Views | 0/TBD | Not started | - |
+| 6.1 Migrate Arrow.js → Preact | 0/TBD | Not started | - |
 | 7. Server Pane + Agent Support | 0/TBD | Not started | - |
 | 8. Keyboard + Polish | 0/TBD | Not started | - |
