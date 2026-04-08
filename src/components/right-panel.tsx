@@ -41,9 +41,9 @@ export function RightPanel() {
       if (!container || bashConnected.current) return;
 
       try {
-        const { createTerminal } = await import('../terminal/terminal-manager.js');
-        const { connectPty } = await import('../terminal/pty-bridge.js');
-        const { attachResizeHandler } = await import('../terminal/resize-handler.js');
+        const { createTerminal } = await import('../terminal/terminal-manager');
+        const { connectPty } = await import('../terminal/pty-bridge');
+        const { attachResizeHandler } = await import('../terminal/resize-handler');
 
         // Get right-tmux-session name from persisted state
         const appState = await loadAppState();
