@@ -220,6 +220,7 @@ pub fn switch_tmux_session(
     current_session: String,
     target_session: String,
     start_dir: Option<String>,
+    shell_command: Option<String>,
 ) -> Result<(), String> {
     // Sanitize target session name
     let target: String = target_session
@@ -246,6 +247,16 @@ pub fn switch_tmux_session(
                 dir_str = dir.clone();
                 args.push("-c");
                 args.push(&dir_str);
+            }
+        }
+        // If a shell command (agent binary) is specified, pass it as the tmux
+        // session's initial command so the new session launches the agent directly
+        // instead of the default shell (AGENT-03, AGENT-04).
+        let shell_cmd_str;
+        if let Some(ref cmd) = shell_command {
+            if !cmd.is_empty() {
+                shell_cmd_str = cmd.clone();
+                args.push(&shell_cmd_str);
             }
         }
         std::process::Command::new("tmux")

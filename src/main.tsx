@@ -50,11 +50,12 @@ let rightCurrentSession = '';
  * Switch a tmux client to a different session silently via Rust system commands.
  * No PTY output — completely invisible in the terminal.
  */
-async function switchTmuxSession(currentSession: string, targetSession: string, startDir?: string): Promise<void> {
+async function switchTmuxSession(currentSession: string, targetSession: string, startDir?: string, shellCommand?: string): Promise<void> {
   await invoke('switch_tmux_session', {
     currentSession,
     targetSession,
     startDir: startDir ?? null,
+    shellCommand: shellCommand ?? null,
   });
 }
 
@@ -281,10 +282,21 @@ document.addEventListener('project-changed', async (e: Event) => {
     if (project?.path) {
       await invoke('set_project_path', { path: project.path });
 
+      // Detect agent for the new project (AGENT-03, AGENT-04)
+      let agentBinary: string | null = null;
+      if (project.agent && project.agent !== 'bash') {
+        try {
+          agentBinary = await detectAgent(project.agent);
+        } catch {
+          agentBinary = null;
+        }
+      }
+
       // Switch main terminal to new project's tmux session (silent via Rust)
+      // Agent binary is passed so new sessions launch the agent directly
       const newMainSession = projectSessionName(newProjectName);
       if (newMainSession !== mainCurrentSession) {
-        await switchTmuxSession(mainCurrentSession, newMainSession, project.path);
+        await switchTmuxSession(mainCurrentSession, newMainSession, project.path, agentBinary ?? undefined);
         mainCurrentSession = newMainSession;
       }
 
