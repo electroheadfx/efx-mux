@@ -23,6 +23,8 @@ const RIGHT_BOTTOM_TABS = ['Bash'];
 export function RightPanel() {
   const bashContainerRef = useRef<HTMLDivElement>(null);
   const bashConnected = useRef(false);
+  const bashTerminalRef = useRef<{ terminal: import('@xterm/xterm').Terminal; fitAddon: import('@xterm/addon-fit').FitAddon } | null>(null);
+  const bashDisconnectRef = useRef<(() => void) | null>(null);
 
   // Auto-switch to Diff tab when a file is clicked in sidebar GIT CHANGES
   useEffect(() => {
@@ -37,50 +39,67 @@ export function RightPanel() {
 
   // Lazy-connect bash terminal on mount
   useEffect(() => {
-    async function connectBashTerminal() {
+    async function connectBashTerminal(projectName?: string, projectPath?: string) {
       const container = bashContainerRef.current;
-      if (!container || bashConnected.current) return;
+      if (!container) return;
 
-      try {
-        const { createTerminal } = await import('../terminal/terminal-manager');
-        const { connectPty } = await import('../terminal/pty-bridge');
-        const { attachResizeHandler } = await import('../terminal/resize-handler');
+      const { createTerminal } = await import('../terminal/terminal-manager');
+      const { connectPty } = await import('../terminal/pty-bridge');
+      const { attachResizeHandler } = await import('../terminal/resize-handler');
 
-        // Use project-specific tmux session name (with -right suffix)
-        const activeName = activeProjectName.value;
-        const appState = await loadAppState();
-        const sessionName = activeName
-          ? activeName.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase() + '-right'
-          : (appState?.session?.['right-tmux-session'] || 'efx-mux-right');
-
+      // Create terminal only once
+      if (!bashTerminalRef.current) {
         const theme = getTheme();
-        const { terminal, fitAddon } = createTerminal(container, {
+        bashTerminalRef.current = createTerminal(container, {
           theme: theme?.terminal,
           font: theme?.chrome?.font,
           fontSize: theme?.chrome?.fontSize || 13,
         });
-        registerTerminal(terminal, fitAddon);
+        registerTerminal(bashTerminalRef.current.terminal, bashTerminalRef.current.fitAddon);
+      }
 
-        const activeProject = activeName ? projects.value.find(p => p.name === activeName) : null;
-        await connectPty(terminal, sessionName, activeProject?.path);
+      const { terminal, fitAddon } = bashTerminalRef.current;
+      const activeName = projectName || activeProjectName.value;
+      const appState = await loadAppState();
+      const sessionName = activeName
+        ? activeName.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase() + '-right'
+        : (appState?.session?.['right-tmux-session'] || 'efx-mux-right');
+
+      try {
+        const activeProject = projectPath || (activeName ? projects.value.find(p => p.name === activeName)?.path : undefined);
+        const conn = await connectPty(terminal, sessionName, activeProject);
+        bashDisconnectRef.current = conn.disconnect;
         bashConnected.current = true;
 
-        // Fit after a short delay to ensure container has dimensions
         setTimeout(() => {
           fitAddon.fit();
-          // Attach resize observer for responsive resize
           attachResizeHandler(container, terminal, fitAddon, sessionName);
         }, 100);
       } catch (err) {
         console.error('[efxmux] Failed to connect bash terminal:', err);
-        if (bashContainerRef.current) {
-          bashContainerRef.current.innerHTML = `<div class="p-4 text-[#dc322f] text-[13px]">Failed to connect terminal: ${err}</div>`;
-        }
       }
     }
 
-    // Schedule after initial render
+    // Listen for project reconnect events
+    async function handleReconnectBash(e: Event) {
+      const { projectName, projectPath } = (e as CustomEvent).detail;
+      // Disconnect current
+      if (bashDisconnectRef.current) bashDisconnectRef.current();
+      if (bashTerminalRef.current) {
+        bashTerminalRef.current.terminal.clear();
+        bashTerminalRef.current.terminal.reset();
+      }
+      await connectBashTerminal(projectName, projectPath);
+    }
+
+    document.addEventListener('reconnect-bash', handleReconnectBash);
+
+    // Initial connection
     setTimeout(() => connectBashTerminal(), 200);
+
+    return () => {
+      document.removeEventListener('reconnect-bash', handleReconnectBash);
+    };
   }, []);
 
   return (

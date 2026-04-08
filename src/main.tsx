@@ -36,6 +36,31 @@ function projectSessionName(projectName: string, suffix?: string): string {
   return suffix ? `${base}-${suffix}` : base;
 }
 
+// Module-level state for main terminal reconnection on project switch
+let mainTerminal: ReturnType<typeof createTerminal> | null = null;
+let mainDisconnect: (() => void) | null = null;
+let mainContainer: HTMLElement | null = null;
+let mainSessionName = '';
+
+async function reconnectMainTerminal(newSessionName: string, startDir?: string) {
+  if (!mainTerminal || !mainContainer) return;
+  // Disconnect current PTY
+  if (mainDisconnect) mainDisconnect();
+  // Clear terminal and connect to new session
+  mainTerminal.terminal.clear();
+  mainTerminal.terminal.reset();
+  try {
+    const conn = await connectPty(mainTerminal.terminal, newSessionName, startDir);
+    mainDisconnect = conn.disconnect;
+    mainSessionName = newSessionName;
+    updateSession({ 'main-tmux-session': newSessionName });
+    attachResizeHandler(mainContainer, mainTerminal.terminal, mainTerminal.fitAddon, newSessionName);
+    setTimeout(() => mainTerminal!.fitAddon.fit(), 50);
+  } catch (err) {
+    console.error('[efxmux] Failed to reconnect main terminal:', err);
+  }
+}
+
 function App() {
   return (
     <div id="app-root" class="flex w-screen h-screen overflow-hidden bg-bg text-text-bright font-mono text-sm font-light antialiased">
@@ -120,37 +145,38 @@ async function bootstrap() {
       console.warn('[efxmux] Theme init failed, using defaults:', err);
     }
 
-    const container = document.querySelector('.terminal-area') as HTMLElement;
-    if (!container) {
+    mainContainer = document.querySelector('.terminal-area') as HTMLElement;
+    if (!mainContainer) {
       console.error('[efxmux] .terminal-area not found in DOM');
       return;
     }
 
-    const { terminal, fitAddon } = createTerminal(container, {
+    mainTerminal = createTerminal(mainContainer, {
       theme: loadedTheme?.terminal,
       font: loadedTheme?.chrome?.font,
       fontSize: loadedTheme?.chrome?.fontSize,
     });
 
-    registerTerminal(terminal, fitAddon);
+    registerTerminal(mainTerminal.terminal, mainTerminal.fitAddon);
 
     // Use project-specific tmux session name (or fallback)
     const activeName = activeProjectName.value;
     const activeProject = activeName ? projects.value.find(p => p.name === activeName) : null;
-    const sessionName = activeName
+    mainSessionName = activeName
       ? projectSessionName(activeName)
       : (appState?.session?.['main-tmux-session'] ?? 'efx-mux');
     try {
-      await connectPty(terminal, sessionName, activeProject?.path);
-      updateSession({ 'main-tmux-session': sessionName });
+      const conn = await connectPty(mainTerminal.terminal, mainSessionName, activeProject?.path);
+      mainDisconnect = conn.disconnect;
+      updateSession({ 'main-tmux-session': mainSessionName });
     } catch (err) {
       console.error('[efxmux] Failed to connect PTY:', err);
-      terminal.writeln('\r\n\x1b[33mWarning: Could not attach to tmux session "' + sessionName + '":\x1b[0m ' + err);
-      terminal.writeln('\r\n\x1b[33mIf tmux is not installed, run: brew install tmux\x1b[0m');
+      mainTerminal.terminal.writeln('\r\n\x1b[33mWarning: Could not attach to tmux session "' + mainSessionName + '":\x1b[0m ' + err);
+      mainTerminal.terminal.writeln('\r\n\x1b[33mIf tmux is not installed, run: brew install tmux\x1b[0m');
     }
 
-    attachResizeHandler(container, terminal, fitAddon, sessionName);
-    setTimeout(() => fitAddon.fit(), 100);
+    attachResizeHandler(mainContainer, mainTerminal.terminal, mainTerminal.fitAddon, mainSessionName);
+    setTimeout(() => mainTerminal!.fitAddon.fit(), 100);
 
     // Apply right-h-pct after DOM is ready
     if (appState?.layout?.['right-h-pct']) {
@@ -166,7 +192,7 @@ async function bootstrap() {
       }
     }
 
-    terminal.focus();
+    mainTerminal.terminal.focus();
   });
 }
 
@@ -191,7 +217,7 @@ async function initProjects() {
   }
 }
 
-// project-changed listener for md file watcher
+// project-changed listener: reconnect terminals + update file watcher
 document.addEventListener('project-changed', async (e: Event) => {
   const newProjectName = (e as CustomEvent).detail.name;
   try {
@@ -199,9 +225,20 @@ document.addEventListener('project-changed', async (e: Event) => {
     const project = projectList.find(p => p.name === newProjectName);
     if (project?.path) {
       await invoke('set_project_path', { path: project.path });
+
+      // Reconnect main terminal to new project's tmux session
+      const newSession = projectSessionName(newProjectName);
+      if (newSession !== mainSessionName) {
+        await reconnectMainTerminal(newSession, project.path);
+      }
+
+      // Tell right panel to reconnect its bash terminal
+      document.dispatchEvent(new CustomEvent('reconnect-bash', {
+        detail: { projectName: newProjectName, projectPath: project.path }
+      }));
     }
   } catch (err) {
-    console.warn('[efxmux] Failed to set project path for watcher:', err);
+    console.warn('[efxmux] Failed to switch project:', err);
   }
 });
 

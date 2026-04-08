@@ -59,7 +59,7 @@ export function MainPanel() {
 
   return (
     <main class="main-panel relative" aria-label="Main panel">
-      <div class="terminal-area flex-1 bg-bg overflow-hidden relative min-h-[100px] p-1" data-handle="main-h"></div>
+      <div class="terminal-area flex-1 bg-bg overflow-hidden relative min-h-[100px]" data-handle="main-h"></div>
 
       {fileViewerVisible.value && (
         <div class="absolute inset-0 flex flex-col bg-bg z-10">
