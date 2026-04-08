@@ -29,7 +29,8 @@ export const FileTree = (activeProject) => {
    */
   async function loadDir(path) {
     try {
-      const entries = await invoke('list_directory', { path });
+      const project = activeProject();
+      const entries = await invoke('list_directory', { path, projectRoot: project?.path || null });
       state.entries = entries;
       state.currentPath = path;
       state.selectedIndex = 0;
@@ -82,9 +83,16 @@ export const FileTree = (activeProject) => {
         break;
       case 'Backspace': {
         e.preventDefault();
-        // Go up one directory level
+        const project = activeProject();
+        const rootPath = project?.path;
         const parent = state.currentPath.split('/').slice(0, -1).join('/');
-        if (parent) loadDir(parent);
+        // Only navigate up if parent is still within (or equal to) the project root
+        if (parent && rootPath && parent.startsWith(rootPath)) {
+          loadDir(parent);
+        } else if (parent && !rootPath) {
+          // No project context, allow navigation (fallback)
+          loadDir(parent);
+        }
         break;
       }
     }
@@ -98,6 +106,12 @@ export const FileTree = (activeProject) => {
     }, 50);
   });
 
+  // Schedule initial load after Arrow.js renders (getElementById pattern, not ref)
+  setTimeout(() => {
+    const project = activeProject();
+    if (project && project.path) loadDir(project.path);
+  }, 0);
+
   return html`
     <div
       class="file-tree"
@@ -110,11 +124,6 @@ export const FileTree = (activeProject) => {
         outline: none;
         background: var(--bg-base);
       "
-      ref="${(el) => {
-        // Initial load when element mounts
-        const project = activeProject();
-        if (project && project.path) loadDir(project.path);
-      }}"
     >
       ${() => {
         if (!state.loaded) {

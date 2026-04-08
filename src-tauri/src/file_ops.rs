@@ -81,10 +81,20 @@ pub async fn get_file_diff(path: String) -> Result<String, String> {
 }
 
 /// List directory contents sorted: directories first, then files, alphabetically (D-06).
+/// Optionally validates that path is within project_root (T-06-05-01 mitigation).
 #[tauri::command]
-pub async fn list_directory(path: String) -> Result<Vec<FileEntry>, String> {
+pub async fn list_directory(path: String, project_root: Option<String>) -> Result<Vec<FileEntry>, String> {
     if !is_safe_path(&path) {
         return Err("Invalid path: directory traversal not allowed".to_string());
+    }
+
+    // Validate path is within project root if provided (T-06-05-01)
+    if let Some(ref root) = project_root {
+        let canonical_path = std::fs::canonicalize(&path).map_err(|e| e.to_string())?;
+        let canonical_root = std::fs::canonicalize(root).map_err(|e| e.to_string())?;
+        if !canonical_path.starts_with(&canonical_root) {
+            return Err("Path is outside project root".to_string());
+        }
     }
 
     spawn_blocking(move || {

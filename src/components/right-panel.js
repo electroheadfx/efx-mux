@@ -10,6 +10,7 @@ import { GSDViewer } from './gsd-viewer.js';
 import { DiffViewer } from './diff-viewer.js';
 import { FileTree } from './file-tree.js';
 import { connectPty } from '../terminal/pty-bridge.js';
+import { attachResizeHandler } from '../terminal/resize-handler.js';
 import { getActiveProject, getProjects, loadAppState } from '../state-manager.js';
 
 const RIGHT_TOP_TABS = ['GSD', 'Diff', 'File Tree'];
@@ -72,7 +73,11 @@ export const RightPanel = () => {
       bashTerminalConnected = true;
 
       // Fit after a short delay to ensure container has dimensions
-      setTimeout(() => fitAddon.fit(), 100);
+      setTimeout(() => {
+        fitAddon.fit();
+        // Attach resize observer for responsive resize (same mechanism as main terminal)
+        attachResizeHandler(bashContainerEl, terminal, fitAddon, sessionName);
+      }, 100);
     } catch (err) {
       console.error('[efxmux] Failed to connect bash terminal:', err);
       if (bashContainerEl) {
