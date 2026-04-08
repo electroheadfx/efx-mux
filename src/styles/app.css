@@ -1,0 +1,134 @@
+@import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
+
+@theme {
+  --color-bg: #282d3a;
+  --color-bg-raised: #363b3d;
+  --color-border: #3e454a;
+  --color-text: #8d999a;
+  --color-text-bright: #92a0a0;
+  --color-accent: #258ad1;
+
+  /* Light mode values (used by [data-theme="light"] override below) */
+  --color-bg-light: #fdf6e3;
+  --color-bg-raised-light: #eee8d5;
+  --color-border-light: #d3cfc2;
+  --color-text-light: #657b83;
+  --color-text-bright-light: #586e75;
+  --color-accent-light: #268bd2;
+
+  --font-family-mono: 'FiraCode', 'Fira Code', 'JetBrains Mono', monospace;
+}
+
+@font-face {
+  font-family: 'FiraCode';
+  src: url('/fonts/FiraCode-Light.woff2') format('woff2');
+  font-weight: 300;
+  font-style: normal;
+  font-display: block;
+}
+
+/* Light mode override (data-theme attribute on :root) */
+[data-theme="light"] {
+  --color-bg: var(--color-bg-light);
+  --color-bg-raised: var(--color-bg-raised-light);
+  --color-border: var(--color-border-light);
+  --color-text: var(--color-text-light);
+  --color-text-bright: var(--color-text-bright-light);
+  --color-accent: var(--color-accent-light);
+}
+
+/* Dynamic layout properties (set by JS drag-manager) */
+:root {
+  --sidebar-w: 200px;
+  --right-w: 25%;
+  --handle-size: 4px;
+  --handle-hit: 8px;
+}
+
+/* Global reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ─── xterm.js scrollbar overrides (cannot be Tailwind-ized) ─── */
+.xterm-viewport::-webkit-scrollbar { width: 8px; }
+.xterm-viewport::-webkit-scrollbar-track { background: var(--color-bg); }
+.xterm-viewport::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 4px; }
+.xterm-viewport::-webkit-scrollbar-thumb:hover { background: var(--color-text); }
+
+/* ─── Drag state overlay (applied by drag-manager) ─── */
+.app-dragging .sidebar,
+.app-dragging .main-panel,
+.app-dragging .right-panel {
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ─── GSD Viewer content styles ─── */
+.gsd-content h1, .gsd-content h2, .gsd-content h3 { color: var(--color-text-bright); margin: 16px 0 8px; }
+.gsd-content h1 { font-size: 20px; }
+.gsd-content h2 { font-size: 16px; }
+.gsd-content h3 { font-size: 14px; }
+.gsd-content .task-checkbox { margin-right: 8px; cursor: pointer; accent-color: var(--color-accent); }
+.gsd-content li { list-style: none; margin: 4px 0; }
+.gsd-content ul { padding-left: 16px; }
+.gsd-content p { margin: 8px 0; }
+.gsd-content code { background: var(--color-bg-raised); padding: 2px 4px; border-radius: 2px; font-size: 13px; }
+.gsd-content pre { background: var(--color-bg-raised); padding: 12px; border-radius: 2px; overflow-x: auto; }
+.gsd-content pre code { background: none; padding: 0; }
+
+/* ─── Diff Viewer color classes ─── */
+.diff-add { border-left: 3px solid #859900; }
+.diff-del { border-left: 3px solid #dc322f; }
+
+/* ─── File Tree focus ─── */
+.file-tree:focus { outline: 1px solid var(--color-accent); outline-offset: -1px; }
+
+/* ─── Vertical split handle (sidebar<->main, main<->right) ─── */
+.split-handle-v {
+  width: var(--handle-size);
+  min-width: var(--handle-size);
+  height: 100%;
+  cursor: col-resize;
+  background: var(--color-border);
+  flex-shrink: 0;
+  /* Widen hit target with negative margin + transparent padding trick */
+  margin: 0 calc((var(--handle-hit) - var(--handle-size)) / -2);
+  padding: 0 calc((var(--handle-hit) - var(--handle-size)) / 2);
+  z-index: 10;
+  transition: background 0.1s ease;
+}
+
+.split-handle-v:hover,
+.split-handle-v.dragging {
+  background: var(--color-accent);
+}
+
+/* ─── Horizontal split handle between right sub-panels ─── */
+.split-handle-h {
+  width: 100%;
+  height: var(--handle-size);
+  min-height: var(--handle-size);
+  cursor: row-resize;
+  background: var(--color-border);
+  flex-shrink: 0;
+  /* Widen vertical hit target */
+  margin: calc((var(--handle-hit) - var(--handle-size)) / -2) 0;
+  padding: calc((var(--handle-hit) - var(--handle-size)) / 2) 0;
+  z-index: 10;
+  transition: background 0.1s ease;
+}
+
+.split-handle-h:hover,
+.split-handle-h.dragging {
+  background: var(--color-accent);
+}
