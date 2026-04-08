@@ -48,6 +48,16 @@ export async function initSidebar() {
     await refreshAllGitStatus();
   });
 
+  // Refresh project list when a new project is added
+  document.addEventListener('project-added', async () => {
+    try {
+      const projects = await getProjects();
+      state.projects = projects;
+    } catch (err) {
+      console.warn('[efxmux] Failed to refresh projects after add:', err);
+    }
+  });
+
   // Listen for open-modal events (from "+" button)
   document.addEventListener('open-add-project', () => {
     openProjectModal();
@@ -122,21 +132,36 @@ const ProjectRow = (project, index) => {
           console.warn('[efxmux] Failed to switch project:', err);
         }
       }}"
+      @contextmenu="${(e) => {
+        e.preventDefault();
+        state.removeTarget = project.name;
+      }}"
       @mouseenter="${(e) => {
         if (!isActive()) e.currentTarget.style.background = 'var(--bg-raised)';
+        e.currentTarget.querySelector('.sidebar-remove-btn')?.style.setProperty('opacity', '1');
       }}"
       @mouseleave="${(e) => {
         if (!isActive()) e.currentTarget.style.background = 'transparent';
+        e.currentTarget.querySelector('.sidebar-remove-btn')?.style.setProperty('opacity', '0');
       }}"
     >
       <span style="flex: 1; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
         ${project.name}
       </span>
-      ${git().branch ? html`
+      ${() => git().branch ? html`
         <span style="font-size: 11px; color: var(--accent); margin-left: 8px; flex-shrink: 0;">
           ${git().branch}
         </span>
       ` : ''}
+      <span
+        class="sidebar-remove-btn"
+        style="opacity: 0; font-size: 12px; color: var(--text); cursor: pointer; margin-left: 4px; flex-shrink: 0; transition: opacity 100ms;"
+        title="Remove project"
+        @click="${(e) => {
+          e.stopPropagation();
+          state.removeTarget = project.name;
+        }}"
+      >\u2715</span>
     </div>
   `;
 };
@@ -196,11 +221,11 @@ const GitFileRow = (file) => {
 };
 
 /** Remove project confirmation dialog */
-const RemoveDialog = () => {
-  if (!state.removeTarget) return html``;
-  const name = state.removeTarget;
-
-  return html`
+const RemoveDialog = () => html`
+  ${() => {
+    if (!state.removeTarget) return html``;
+    const name = state.removeTarget;
+    return html`
     <div
       style="
         position: fixed; inset: 0;
@@ -271,7 +296,8 @@ const RemoveDialog = () => {
       </div>
     </div>
   `;
-};
+  }}
+`;
 
 // ============================================================================
 // Main Sidebar component
@@ -308,7 +334,7 @@ export const Sidebar = ({ collapsed }) => {
       ${RemoveDialog()}
 
       <div class="sidebar-content">
-        ${state.collapsed ? html`
+        ${() => state.collapsed ? html`
           <div class="sidebar-icons" style="
             display: flex;
             flex-direction: column;
@@ -358,17 +384,21 @@ export const Sidebar = ({ collapsed }) => {
             ">PROJECTS</div>
 
             <div style="flex: 1; overflow-y: auto;">
-              ${state.projects.length === 0 ? html`
+              ${() => state.projects.length === 0 ? html`
                 <div style="padding: 16px 8px; font-size: 14px; color: var(--text); text-align: center;">
                   No projects yet
                 </div>
-              ` : () => state.projects.map((p, i) => ProjectRow(p, i))}
+              ` : state.projects.map((p, i) => ProjectRow(p, i))}
             </div>
 
             <div style="
               border-top: 1px solid var(--border);
               margin-top: 8px;
               padding-top: 8px;
+              flex: 1;
+              min-height: 0;
+              display: flex;
+              flex-direction: column;
             ">
               <div style="
                 display: flex;
@@ -392,29 +422,29 @@ export const Sidebar = ({ collapsed }) => {
                 >\u21BB</div>
               </div>
 
-              ${git().branch ? html`
+              ${() => git().branch ? html`
                 <div style="padding: 2px 8px; font-size: 11px; color: var(--accent);">
                   ${git().branch}
                 </div>
               ` : ''}
 
               <div style="display: flex; gap: 8px; padding: 4px 8px; flex-wrap: wrap;">
-                ${git().modified > 0 ? html`
-                  <span style="font-size: 12px; color: #b58900;">M ${git().modified}</span>
+                ${() => git().modified > 0 ? html`
+                  <span style="font-size: 12px; color: #b58900;">M ${() => git().modified}</span>
                 ` : ''}
-                ${git().staged > 0 ? html`
-                  <span style="font-size: 12px; color: #859900;">S ${git().staged}</span>
+                ${() => git().staged > 0 ? html`
+                  <span style="font-size: 12px; color: #859900;">S ${() => git().staged}</span>
                 ` : ''}
-                ${git().untracked > 0 ? html`
-                  <span style="font-size: 12px; color: #6c7b83;">U ${git().untracked}</span>
+                ${() => git().untracked > 0 ? html`
+                  <span style="font-size: 12px; color: #6c7b83;">U ${() => git().untracked}</span>
                 ` : ''}
-                ${totalChanges() === 0 ? html`
+                ${() => totalChanges() === 0 ? html`
                   <span style="font-size: 12px; color: var(--text);">No changes</span>
                 ` : ''}
               </div>
 
-              ${gitFiles().length > 0 ? html`
-                <div style="max-height: 120px; overflow-y: auto;">
+              ${() => gitFiles().length > 0 ? html`
+                <div style="flex: 1; overflow-y: auto; min-height: 0;">
                   ${gitFiles().map(f => GitFileRow(f))}
                 </div>
               ` : ''}

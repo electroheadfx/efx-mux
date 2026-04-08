@@ -54,6 +54,11 @@ export const RightPanel = () => {
     loadActiveProject();
   });
 
+  // Auto-switch to Diff tab when a file is clicked in sidebar GIT CHANGES
+  document.addEventListener('open-diff', () => {
+    state.rightTopTab = 'Diff';
+  });
+
   // Lazy-connect bash terminal when Bash tab is first selected
   async function connectBashTerminal() {
     if (bashTerminalConnected || !bashContainerEl) return;

@@ -123,7 +123,7 @@ const SearchResult = (project, index) => {
       <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
         ${project.name}
       </span>
-      ${branch() ? html`
+      ${() => branch() ? html`
         <span style="font-size: 11px; color: var(--accent); margin-left: 16px; flex-shrink: 0;">
           ${branch()}
         </span>
@@ -133,11 +133,12 @@ const SearchResult = (project, index) => {
 };
 
 export const FuzzySearch = () => {
-  if (!state.visible) return html``;
-
   const results = () => fuzzyMatch(state.projects, state.query);
 
   return html`
+    ${() => {
+      if (!state.visible) return html``;
+      return html`
     <div
       style="
         position: fixed; inset: 0;
@@ -202,16 +203,18 @@ export const FuzzySearch = () => {
         </div>
 
         <div style="overflow-y: auto; max-height: 360px;">
-          ${results().length === 0 ? html`
+          ${() => results().length === 0 ? html`
             <div style="
               padding: 16px;
               font-size: 14px;
               color: var(--text);
               text-align: center;
             ">No matching projects</div>
-          ` : () => results().map((p, i) => SearchResult(p, i))}
+          ` : results().map((p, i) => SearchResult(p, i))}
         </div>
       </div>
     </div>
+  `;
+    }}
   `;
 };

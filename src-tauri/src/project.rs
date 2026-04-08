@@ -10,6 +10,10 @@ pub async fn add_project(
 ) -> Result<(), String> {
     let updated = {
         let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+        // Prevent duplicate project names
+        if guard.project.projects.iter().any(|p| p.name == entry.name) {
+            return Err(format!("Project '{}' already exists", entry.name));
+        }
         guard.project.projects.push(entry);
         guard.clone()
     };

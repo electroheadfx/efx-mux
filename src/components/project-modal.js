@@ -1,7 +1,7 @@
 // project-modal.js -- Add Project modal (Phase 5)
 import { html } from '@arrow-js/core';
 import { reactive } from '@arrow-js/core';
-import { addProject, getProjects } from '../state-manager.js';
+import { addProject, getProjects, switchProject } from '../state-manager.js';
 
 const TNS = window.__TAURI__.core;
 
@@ -70,14 +70,11 @@ async function handleSubmit() {
     };
     await addProject(entry);
 
-    // Re-sync projects with sidebar
-    const projects = await getProjects();
-
-    // Notify sidebar to re-render
+    // Notify sidebar to refresh its project list BEFORE switching
     document.dispatchEvent(new CustomEvent('project-added', { detail: { entry } }));
 
-    // Auto-switch to the new project
-    document.dispatchEvent(new CustomEvent('project-changed', { detail: { name: entry.name } }));
+    // Switch to the new project via state-manager (sets Rust active field + emits project-changed)
+    await switchProject(entry.name);
 
     state.visible = false;
     document.removeEventListener('keydown', handleKeydown);
@@ -88,14 +85,32 @@ async function handleSubmit() {
 
 async function handleBrowse() {
   try {
-    const { open } = await import('@tauri-apps/plugin-dialog');
-    const selected = await open({ directory: true, multiple: false });
+    // Use invoke directly -- dynamic import('@tauri-apps/plugin-dialog') fails
+    // in no-bundler ESM because the bare specifier is not in the import map.
+    const selected = await TNS.invoke('plugin:dialog|open', {
+      options: { directory: true, multiple: false },
+    });
     if (selected) {
       state.directory = selected;
       // Auto-fill name from directory basename if empty
       if (!state.name) {
         const parts = selected.split('/');
         state.name = parts[parts.length - 1] || '';
+      }
+      // Auto-detect GSD planning directory
+      try {
+        const entries = await TNS.invoke('list_directory', { path: selected });
+        const hasPlanningDir = entries.some(e => e.is_dir && e.name === '.planning');
+        if (hasPlanningDir) {
+          // Look for a roadmap or plan file inside .planning/
+          const planningEntries = await TNS.invoke('list_directory', { path: selected + '/.planning' });
+          const roadmap = planningEntries.find(e => !e.is_dir && /^(ROADMAP|PLAN)\.md$/i.test(e.name));
+          if (roadmap) {
+            state.gsdFile = '.planning/' + roadmap.name;
+          }
+        }
+      } catch {
+        // Silently ignore -- GSD detection is optional
       }
     }
   } catch (err) {
@@ -104,15 +119,15 @@ async function handleBrowse() {
 }
 
 export const ProjectModal = () => {
-  // Register/escape key listener when visible
-  if (state.visible) {
-    document.removeEventListener('keydown', handleKeydown);
-    document.addEventListener('keydown', handleKeydown);
-  }
-
-  if (!state.visible) return html``;
-
   return html`
+    ${() => {
+      if (!state.visible) return html``;
+
+      // Register escape key listener when visible
+      document.removeEventListener('keydown', handleKeydown);
+      document.addEventListener('keydown', handleKeydown);
+
+      return html`
     <div
       style="
         position: fixed; inset: 0;
@@ -337,7 +352,7 @@ export const ProjectModal = () => {
             />
           </div>
 
-          ${state.error ? html`
+          ${() => state.error ? html`
             <div style="
               font-size: 12px;
               color: #dc322f;
@@ -351,7 +366,7 @@ export const ProjectModal = () => {
             justify-content: flex-end;
             gap: 8px;
           ">
-            ${!state.isFirstRun ? html`
+            ${() => !state.isFirstRun ? html`
               <button
                 type="button"
                 style="
@@ -378,5 +393,7 @@ export const ProjectModal = () => {
         </form>
       </div>
     </div>
+  `;
+    }}
   `;
 };

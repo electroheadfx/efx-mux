@@ -62,7 +62,7 @@ pub fn start_md_watcher(app_handle: tauri::AppHandle, project_path: PathBuf) {
         // Watch the project directory (NonRecursive to match theme/watcher.rs pattern)
         if let Err(e) = debouncer
             .watcher()
-            .watch(&watch_dir, RecursiveMode::NonRecursive)
+            .watch(&watch_dir, RecursiveMode::Recursive)
         {
             eprintln!(
                 "[efxmux] Failed to watch project dir {:?}: {:?}",

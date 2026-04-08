@@ -155,13 +155,9 @@
   background: var(--bg);
   overflow: hidden;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
   color: var(--text);
   font-size: 12px;
-  border: 1px dashed var(--border);
-  margin: 8px;
-  border-radius: 2px;
 }
 
 /* ─── Tab bar (D-11, PANEL-01) ────────────────────── */
