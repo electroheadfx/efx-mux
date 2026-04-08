@@ -54,6 +54,12 @@ pub struct LayoutState {
 
     #[serde(default, rename = "sidebar-collapsed")]
     pub sidebar_collapsed: bool,
+
+    #[serde(default = "default_server_pane_height", rename = "server-pane-height")]
+    pub server_pane_height: String,
+
+    #[serde(default = "default_server_pane_state", rename = "server-pane-state")]
+    pub server_pane_state: String,
 }
 
 impl Default for LayoutState {
@@ -63,6 +69,8 @@ impl Default for LayoutState {
             right_w: default_right_w(),
             right_h_pct: default_right_h_pct(),
             sidebar_collapsed: false,
+            server_pane_height: default_server_pane_height(),
+            server_pane_state: default_server_pane_state(),
         }
     }
 }
@@ -118,6 +126,8 @@ pub struct ProjectEntry {
     pub gsd_file: Option<String>,
     #[serde(default)]
     pub server_cmd: Option<String>,
+    #[serde(default)]
+    pub server_url: Option<String>,
 }
 
 impl Default for ProjectEntry {
@@ -128,6 +138,7 @@ impl Default for ProjectEntry {
             agent: String::new(),
             gsd_file: None,
             server_cmd: None,
+            server_url: None,
         }
     }
 }
@@ -174,6 +185,12 @@ fn default_right_top_tab() -> String {
 }
 fn default_right_bottom_tab() -> String {
     "git".into()
+}
+fn default_server_pane_height() -> String {
+    "200px".into()
+}
+fn default_server_pane_state() -> String {
+    "strip".into()
 }
 fn default_version() -> u32 {
     1
