@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-07)
 Phase: 06.1 (Migrate Arrow.js to Preact + htm) — EXECUTING
 Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-04-08 - Completed quick task 260408-r16: UI fixes - nicer tabs/top bar, fix scroll regression, custom scrollbars
+Last activity: 2026-04-08 - Completed quick task 260408-rco: UI fixes round 2 - terminal scroll, white flash, bash theme
 
 Progress: [████████████████████] 15/15 plans (100%)
 
@@ -86,6 +86,7 @@ None yet.
 |---|-------------|------|--------|-----------|
 | 260407-di0 | Fix phase 2 issues: LOW watermark hysteresis, terminal padding, key repeat, word navigation, line cursor, scrollbar | 2026-04-07 | 62c653c | [260407-di0-fix-phase-2-issues-low-watermark-hystere](./quick/260407-di0-fix-phase-2-issues-low-watermark-hystere/) |
 | 260408-r16 | UI fixes - nicer tabs/top bar, fix scroll regression, custom scrollbars | 2026-04-08 | 981d54b | [260408-r16-ui-fixes-nicer-tabs-top-bar-in-left-side](./quick/260408-r16-ui-fixes-nicer-tabs-top-bar-in-left-side/) |
+| 260408-rco | UI fixes round 2: terminal scroll, white flash, bash theme | 2026-04-08 | cd00f6e | [260408-rco-ui-fixes-round-2-fix-terminal-scroll-reg](./quick/260408-rco-ui-fixes-round-2-fix-terminal-scroll-reg/) |
 
 ## Session Continuity
 
