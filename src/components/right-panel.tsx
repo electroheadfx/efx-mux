@@ -83,7 +83,7 @@ export function RightPanel() {
       const ptyKey = bashSessionRef.current; // Original PTY session key — never update
       if (!ptyKey) return;
       const escaped = startDir ? ` -c '${startDir.replace(/'/g, "'\\''")}'` : '';
-      const cmd = `tmux has-session -t ${targetSession} 2>/dev/null || tmux new-session -d -s ${targetSession}${escaped}; tmux switch-client -t ${targetSession}\n`;
+      const cmd = `tmux has-session -t ${targetSession} 2>/dev/null || tmux new-session -d -s ${targetSession}${escaped}; tmux set-option -t ${targetSession} mouse on 2>/dev/null; tmux switch-client -t ${targetSession}\n`;
       invoke('write_pty', { data: cmd, sessionName: ptyKey }).catch(() => {});
     }
 

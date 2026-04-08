@@ -49,7 +49,7 @@ let rightPtyKey = '';
  */
 async function switchTmuxSession(ptyKey: string, targetSession: string, startDir?: string): Promise<void> {
   const escaped = startDir ? ` -c '${startDir.replace(/'/g, "'\\''")}'` : '';
-  const cmd = `tmux has-session -t ${targetSession} 2>/dev/null || tmux new-session -d -s ${targetSession}${escaped}; tmux switch-client -t ${targetSession}\n`;
+  const cmd = `tmux has-session -t ${targetSession} 2>/dev/null || tmux new-session -d -s ${targetSession}${escaped}; tmux set-option -t ${targetSession} mouse on 2>/dev/null; tmux switch-client -t ${targetSession}\n`;
   await invoke('write_pty', { data: cmd, sessionName: ptyKey });
 }
 
