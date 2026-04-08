@@ -162,10 +162,11 @@ Plans:
   4. App detects and launches `claude` or `opencode` binary directly in a tmux PTY (verified: no wrapping or protocol modification)
   5. If neither agent binary is found, app falls back to a plain bash session with a banner explaining the situation
 
-**Plans**: 2 plans
+**Plans**: 3 plans
 Plans:
-- [ ] 07-01-PLAN.md -- Rust server process manager + frontend bridge modules
-- [ ] 07-02-PLAN.md -- Server pane UI component + agent detection + Ctrl+` handler
+- [x] 07-01-PLAN.md -- Rust server process manager + frontend bridge modules
+- [x] 07-02-PLAN.md -- Server pane UI component + agent detection + Ctrl+` handler
+- [ ] 07-03-PLAN.md -- Gap closure: install plugin-opener + agent detection on project switch
 
 **UI hint**: yes
 
@@ -199,7 +200,7 @@ Phases execute in numeric order. Note: Phases 3 and 6 are parallelizable after P
 | 4. Session Persistence | 4/4 | Complete | 2026-04-07 |
 | 5. Project System + Sidebar | 2/2 | Complete | 2026-04-07 |
 | 6. Right Panel Views | 7/7 | Complete | 2026-04-08 |
-| 6.1 Migrate Arrow.js → Preact | 6/6 | Complete | 2026-04-08 |
+| 6.1 Migrate Arrow.js -> Preact | 6/6 | Complete | 2026-04-08 |
 | 7. Server Pane + Agent Support | 0/TBD | Not started | - |
 | 8. Keyboard + Polish | 0/TBD | Not started | - |
 
