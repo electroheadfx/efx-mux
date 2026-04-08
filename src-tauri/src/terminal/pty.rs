@@ -52,6 +52,7 @@ pub async fn spawn_terminal(
     app: tauri::AppHandle,
     on_output: tauri::ipc::Channel<Vec<u8>>,
     session_name: String,
+    start_dir: Option<String>,
 ) -> Result<(), String> {
     // Sanitize session_name: allow only alphanumeric, hyphen, underscore (T-02-01 mitigation)
     let sanitized: String = session_name
@@ -74,8 +75,20 @@ pub async fn spawn_terminal(
 
     let mut cmd = CommandBuilder::new("tmux");
     cmd.args(["new-session", "-A", "-s", &sanitized]);
+    // Set tmux session start directory if provided (workspace-aware sessions)
+    if let Some(ref dir) = start_dir {
+        if std::path::Path::new(dir).is_dir() {
+            cmd.args(["-c", dir]);
+        }
+    }
 
     let _child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+
+    // Enable tmux mouse mode so mouse wheel scrolls the buffer (not sent as arrow keys)
+    std::process::Command::new("tmux")
+        .args(["set-option", "-t", &sanitized, "mouse", "on"])
+        .output()
+        .ok();
 
     // take_writer() is one-shot -- store in Arc<Mutex<>> for reuse (CLAUDE.md gotcha)
     let writer = pair

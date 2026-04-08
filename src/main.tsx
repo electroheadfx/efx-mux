@@ -27,6 +27,15 @@ import {
 } from './state-manager';
 import { openProjectModal } from './components/project-modal';
 
+/**
+ * Derive a tmux session name from a project name.
+ * Sanitizes to alphanumeric + hyphen + underscore (matching pty.rs sanitization).
+ */
+function projectSessionName(projectName: string, suffix?: string): string {
+  const base = projectName.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
+  return suffix ? `${base}-${suffix}` : base;
+}
+
 function App() {
   return (
     <div id="app-root" class="flex w-screen h-screen overflow-hidden bg-bg text-text-bright font-mono text-sm font-light antialiased">
@@ -125,21 +134,19 @@ async function bootstrap() {
 
     registerTerminal(terminal, fitAddon);
 
-    const sessionName = appState?.session?.['main-tmux-session'] ?? 'efx-mux';
+    // Use project-specific tmux session name (or fallback)
+    const activeName = activeProjectName.value;
+    const activeProject = activeName ? projects.value.find(p => p.name === activeName) : null;
+    const sessionName = activeName
+      ? projectSessionName(activeName)
+      : (appState?.session?.['main-tmux-session'] ?? 'efx-mux');
     try {
-      await connectPty(terminal, sessionName);
+      await connectPty(terminal, sessionName, activeProject?.path);
+      updateSession({ 'main-tmux-session': sessionName });
     } catch (err) {
       console.error('[efxmux] Failed to connect PTY:', err);
       terminal.writeln('\r\n\x1b[33mWarning: Could not attach to tmux session "' + sessionName + '":\x1b[0m ' + err);
-      terminal.writeln('\r\n\x1b[33mA fresh session will be created automatically.\x1b[0m');
-      const freshSession = sessionName + '-new';
-      try {
-        await connectPty(terminal, freshSession);
-        updateSession({ 'main-tmux-session': freshSession });
-      } catch (err2) {
-        terminal.writeln('\r\n\x1b[31mFailed to create fresh session: ' + err2 + '\x1b[0m');
-        terminal.writeln('\r\n\x1b[33mIf tmux is not installed, run: brew install tmux\x1b[0m');
-      }
+      terminal.writeln('\r\n\x1b[33mIf tmux is not installed, run: brew install tmux\x1b[0m');
     }
 
     attachResizeHandler(container, terminal, fitAddon, sessionName);

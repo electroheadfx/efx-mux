@@ -4,7 +4,7 @@
 // Migrated from Arrow.js to Preact TSX (Phase 6.1)
 
 import { useEffect, useRef } from 'preact/hooks';
-import { rightTopTab, rightBottomTab, loadAppState } from '../state-manager';
+import { rightTopTab, rightBottomTab, loadAppState, activeProjectName, projects } from '../state-manager';
 import { getTheme, registerTerminal } from '../theme/theme-manager';
 import { TabBar } from './tab-bar';
 import { GSDViewer } from './gsd-viewer';
@@ -46,9 +46,12 @@ export function RightPanel() {
         const { connectPty } = await import('../terminal/pty-bridge');
         const { attachResizeHandler } = await import('../terminal/resize-handler');
 
-        // Get right-tmux-session name from persisted state
+        // Use project-specific tmux session name (with -right suffix)
+        const activeName = activeProjectName.value;
         const appState = await loadAppState();
-        const sessionName = appState?.session?.['right-tmux-session'] || 'efx-mux-right';
+        const sessionName = activeName
+          ? activeName.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase() + '-right'
+          : (appState?.session?.['right-tmux-session'] || 'efx-mux-right');
 
         const theme = getTheme();
         const { terminal, fitAddon } = createTerminal(container, {
@@ -58,7 +61,8 @@ export function RightPanel() {
         });
         registerTerminal(terminal, fitAddon);
 
-        await connectPty(terminal, sessionName);
+        const activeProject = activeName ? projects.value.find(p => p.name === activeName) : null;
+        await connectPty(terminal, sessionName, activeProject?.path);
         bashConnected.current = true;
 
         // Fit after a short delay to ensure container has dimensions

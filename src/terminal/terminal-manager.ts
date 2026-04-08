@@ -85,15 +85,6 @@ export function createTerminal(container: HTMLElement, options: TerminalOptions 
   // Mount to DOM
   terminal.open(container);
 
-  // Fix: tmux uses alternate screen buffer, causing xterm.js to convert wheel
-  // events to arrow key sequences. Intercept wheel events and scroll the
-  // xterm viewport (scrollback buffer) directly instead.
-  terminal.attachCustomWheelEventHandler((ev: WheelEvent): boolean => {
-    const lines = Math.round(ev.deltaY / 25) || (ev.deltaY > 0 ? 1 : -1);
-    terminal.scrollLines(lines);
-    return false; // Prevent xterm.js default handling (arrow keys to tmux)
-  });
-
   // Attempt WebGL renderer (D-06: retry once on context loss)
   let webglAttempts = 0;
   function tryWebGL(): void {
