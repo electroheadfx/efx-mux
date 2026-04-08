@@ -53,6 +53,7 @@ pub async fn spawn_terminal(
     on_output: tauri::ipc::Channel<Vec<u8>>,
     session_name: String,
     start_dir: Option<String>,
+    shell_command: Option<String>,
     cols: Option<u16>,
     rows: Option<u16>,
 ) -> Result<(), String> {
@@ -81,6 +82,13 @@ pub async fn spawn_terminal(
     if let Some(ref dir) = start_dir {
         if std::path::Path::new(dir).is_dir() {
             cmd.args(["-c", dir]);
+        }
+    }
+    // If shell_command is provided (e.g., agent binary), tmux runs it as the session command
+    // instead of the default shell (AGENT-03/04: agent launches in tmux PTY)
+    if let Some(ref shell_cmd) = shell_command {
+        if !shell_cmd.is_empty() {
+            cmd.arg(shell_cmd);
         }
     }
 

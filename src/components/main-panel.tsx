@@ -1,10 +1,12 @@
 // main-panel.tsx -- Main panel with terminal-area + file viewer overlay + server-pane
 // Phase 2: terminal-area is empty -- xterm.js mounts via querySelector (D-08)
 // Phase 6 gap closure: file viewer overlay for read-only file display (PANEL-06)
+// Phase 7: Server pane component with 3-state collapse
 // Migrated from Arrow.js to Preact TSX (Phase 6.1)
 
 import { signal } from '@preact/signals';
 import { useEffect } from 'preact/hooks';
+import { ServerPane, serverPaneState } from './server-pane';
 
 // Module-level signals for file viewer state
 const fileViewerVisible = signal(false);
@@ -59,7 +61,7 @@ export function MainPanel() {
 
   return (
     <main class="main-panel relative" aria-label="Main panel">
-      <div class="terminal-area flex-1 bg-bg overflow-hidden relative min-h-[100px]" data-handle="main-h"></div>
+      <div class="terminal-area flex-1 bg-bg overflow-hidden relative min-h-[100px]"></div>
 
       {fileViewerVisible.value && (
         <div class="absolute inset-0 flex flex-col bg-bg z-10">
@@ -80,27 +82,16 @@ export function MainPanel() {
         </div>
       )}
 
-      <div
-        class="split-handle-h"
-        data-handle="main-h"
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label="Resize server pane"
-      ></div>
-
-      <div class="server-pane" aria-label="Server pane">
-        <div class="server-pane-toolbar">
-          <span class="text-text-bright text-[11px] tracking-wider uppercase">Server</span>
-          <div class="flex gap-1.5 items-center">
-            <button class="server-btn" title="Start server">Start</button>
-            <button class="server-btn" title="Stop server" disabled>Stop</button>
-            <button class="server-btn" title="Open in browser" disabled>Open</button>
-          </div>
-        </div>
-        <div class="server-pane-logs">
-          <span class="text-text text-[11px] opacity-60">[ Server logs -- Phase 7 ]</span>
-        </div>
-      </div>
+      {serverPaneState.value === 'expanded' && (
+        <div
+          class="split-handle-h"
+          data-handle="main-h"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize server pane"
+        />
+      )}
+      <ServerPane />
     </main>
   );
 }

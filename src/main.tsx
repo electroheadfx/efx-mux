@@ -26,6 +26,8 @@ import {
   getProjects, getActiveProject, projects, activeProjectName
 } from './state-manager';
 import { openProjectModal } from './components/project-modal';
+import { serverPaneState } from './components/server-pane';
+import { detectAgent } from './server/server-bridge';
 
 /**
  * Derive a tmux session name from a project name.
@@ -118,6 +120,35 @@ async function bootstrap() {
     }
   });
 
+  // Ctrl+` handler for server pane 3-state cycle (D-01)
+  // MUST use capture: true to fire before xterm.js (RESEARCH.md Pitfall 3)
+  document.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.ctrlKey && e.key === '`') {
+      e.preventDefault();
+      e.stopPropagation();
+      const current = serverPaneState.value;
+      if (current === 'strip') serverPaneState.value = 'expanded';
+      else if (current === 'expanded') serverPaneState.value = 'collapsed';
+      else serverPaneState.value = 'strip';
+      updateLayout({ 'server-pane-state': serverPaneState.value });
+      // Re-init drag manager when expanding so main-h handle gets wired
+      if (serverPaneState.value === 'expanded') {
+        requestAnimationFrame(() => initDragManager());
+      }
+    }
+  }, { capture: true });
+
+  // Restore server pane state from persisted state
+  if (appState?.layout?.['server-pane-state']) {
+    const saved = appState.layout['server-pane-state'] as string;
+    if (['strip', 'expanded', 'collapsed'].includes(saved)) {
+      serverPaneState.value = saved as 'strip' | 'expanded' | 'collapsed';
+    }
+  }
+  if (appState?.layout?.['server-pane-height']) {
+    document.documentElement.style.setProperty('--server-pane-h', String(appState.layout['server-pane-height']));
+  }
+
   // Step 7: file-opened handler (PANEL-06)
   document.addEventListener('file-opened', async (e: Event) => {
     const { path, name } = (e as CustomEvent).detail;
@@ -166,13 +197,37 @@ async function bootstrap() {
     rightCurrentSession = activeName
       ? projectSessionName(activeName, 'right')
       : (appState?.session?.['right-tmux-session'] ?? 'efx-mux-right');
+
+    // Agent detection (D-10, D-11, AGENT-03/04/05)
+    let agentBinary: string | null = null;
+    if (activeProject?.agent && activeProject.agent !== 'bash') {
+      try {
+        agentBinary = await detectAgent(activeProject.agent);
+      } catch {
+        // Agent binary not found -- will show banner (D-13, AGENT-05)
+        agentBinary = null;
+      }
+    }
+
     try {
-      await connectPty(terminal, sessionName, activeProject?.path);
+      await connectPty(terminal, sessionName, activeProject?.path, agentBinary ?? undefined);
       updateSession({ 'main-tmux-session': sessionName });
     } catch (err) {
       console.error('[efxmux] Failed to connect PTY:', err);
       terminal.writeln('\r\n\x1b[33mWarning: Could not attach to tmux session "' + sessionName + '":\x1b[0m ' + err);
       terminal.writeln('\r\n\x1b[33mIf tmux is not installed, run: brew install tmux\x1b[0m');
+    }
+
+    // Agent fallback banner (D-13, AGENT-05, per UI-SPEC copywriting)
+    if (activeProject?.agent && activeProject.agent !== 'bash' && !agentBinary) {
+      terminal.writeln('');
+      terminal.writeln('');
+      terminal.writeln('');
+      terminal.writeln('\x1b[33mNo agent binary found.\x1b[0m');
+      terminal.writeln('\x1b[33mInstall claude or opencode to enable AI assistance.\x1b[0m');
+      terminal.writeln('\x1b[33mStarting plain bash session...\x1b[0m');
+      terminal.writeln('');
+      terminal.writeln('');
     }
 
     attachResizeHandler(container, terminal, fitAddon, sessionName);
@@ -217,7 +272,7 @@ async function initProjects() {
   }
 }
 
-// project-changed listener: switch tmux sessions + update file watcher
+// project-changed listener: switch tmux sessions + update file watcher + agent detection
 document.addEventListener('project-changed', async (e: Event) => {
   const newProjectName = (e as CustomEvent).detail.name;
   try {
@@ -239,6 +294,12 @@ document.addEventListener('project-changed', async (e: Event) => {
         detail: { currentSession: rightCurrentSession, targetSession: newRightSession, startDir: project.path }
       }));
       rightCurrentSession = newRightSession;
+
+      // Stop any running server on project switch, then check new project's server config
+      try {
+        const { stopServer } = await import('./server/server-bridge');
+        await stopServer();
+      } catch { /* no server running, ignore */ }
     }
   } catch (err) {
     console.warn('[efxmux] Failed to switch project:', err);

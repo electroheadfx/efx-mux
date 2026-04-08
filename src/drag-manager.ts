@@ -61,6 +61,32 @@ export function initDragManager(): void {
     });
   }
 
+  // -- Main terminal <-> Server pane horizontal handle (D-03) ------------------
+  const mainHHandle = document.querySelector<HTMLElement>('[data-handle="main-h"]');
+  if (mainHHandle && !mainHHandle.dataset.dragInit) {
+    mainHHandle.dataset.dragInit = 'true';
+    makeDragH(mainHHandle, {
+      onDrag(clientY: number) {
+        // Server pane is at the bottom of .main-panel. Its height = container bottom - clientY.
+        const mainPanel = document.querySelector<HTMLElement>('.main-panel');
+        if (!mainPanel) return;
+        const rect = mainPanel.getBoundingClientRect();
+        const newHeight = rect.bottom - clientY;
+        // Clamp: min 100px, max 50% of main panel height
+        const clamped = Math.min(rect.height * 0.5, Math.max(100, newHeight));
+        document.documentElement.style.setProperty('--server-pane-h', `${Math.round(clamped)}px`);
+      },
+      onEnd(clientY: number) {
+        const mainPanel = document.querySelector<HTMLElement>('.main-panel');
+        if (!mainPanel) return;
+        const rect = mainPanel.getBoundingClientRect();
+        const newHeight = rect.bottom - clientY;
+        const clamped = Math.min(rect.height * 0.5, Math.max(100, newHeight));
+        updateLayout({ 'server-pane-height': `${Math.round(clamped)}px` });
+      },
+    });
+  }
+
   // -- Right top <-> Right bottom horizontal handle ----------------------------
   const rightHHandle = document.querySelector<HTMLElement>('[data-handle="right-h"]');
   if (rightHHandle) {

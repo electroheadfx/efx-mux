@@ -11,7 +11,7 @@ import type { Terminal } from '@xterm/xterm';
 /**
  * Connect an xterm.js Terminal to a PTY backend via Tauri Channel.
  */
-export async function connectPty(terminal: Terminal, sessionName: string, startDir?: string): Promise<{ disconnect: () => void }> {
+export async function connectPty(terminal: Terminal, sessionName: string, startDir?: string, shellCommand?: string): Promise<{ disconnect: () => void }> {
   // Create Channel for PTY output streaming (D-05, TERM-06)
   const channel = new Channel<number[]>();
 
@@ -32,6 +32,7 @@ export async function connectPty(terminal: Terminal, sessionName: string, startD
     onOutput: channel,
     sessionName,
     startDir: startDir ?? null,
+    shellCommand: shellCommand ?? null,
     cols: terminal.cols,
     rows: terminal.rows,
   });
