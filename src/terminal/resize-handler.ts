@@ -22,23 +22,25 @@ export function attachResizeHandler(
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
   const observer = new ResizeObserver(() => {
-    // Instant visual reflow (D-12)
-    fitAddon.fit();
+    // Defer fit() to next frame to avoid ResizeObserver infinite loop (UAT gap test 5)
+    requestAnimationFrame(() => {
+      fitAddon.fit();
 
-    const { cols, rows } = terminal;
+      const { cols, rows } = terminal;
 
-    // Guard against infinite loop (Pitfall 4):
-    // Only send IPC if dimensions actually changed
-    if (cols === lastCols && rows === lastRows) return;
+      // Guard against infinite loop (Pitfall 4):
+      // Only send IPC if dimensions actually changed
+      if (cols === lastCols && rows === lastRows) return;
 
-    lastCols = cols;
-    lastRows = rows;
+      lastCols = cols;
+      lastRows = rows;
 
-    // Debounced IPC to Rust (D-12: 150ms trailing)
-    if (resizeTimer) clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-      invoke('resize_pty', { cols, rows, sessionName });
-    }, 150);
+      // Debounced IPC to Rust (D-12: 150ms trailing)
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        invoke('resize_pty', { cols, rows, sessionName });
+      }, 150);
+    });
   });
 
   observer.observe(container);
