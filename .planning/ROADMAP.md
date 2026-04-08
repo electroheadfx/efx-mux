@@ -141,13 +141,14 @@ Plans:
   3. All sidebar, modal, fuzzy-search, right-panel, and main-panel components render correctly
   4. No `(el) => renderTemplate(template, el)` or similar template leak text anywhere in the UI
   5. Conditional rendering (`{condition && <Component/>}`) works without the `() =>` reactive wrapper footgun
-**Plans**: 5 plans
+**Plans**: 6 plans
 Plans:
-- [ ] 06.1-01-PLAN.md -- Vite + Preact + Tailwind scaffold (config, app.css, index.html)
-- [ ] 06.1-02-PLAN.md -- State manager signals + utility module TS conversions
-- [ ] 06.1-03-PLAN.md -- Simple components (tab-bar, main-panel, diff-viewer, gsd-viewer, file-tree)
-- [ ] 06.1-04-PLAN.md -- Complex components (sidebar, project-modal, fuzzy-search, right-panel)
-- [ ] 06.1-05-PLAN.md -- main.tsx wiring + cleanup + UAT
+- [x] 06.1-01-PLAN.md -- Vite + Preact + Tailwind scaffold (config, app.css, index.html)
+- [x] 06.1-02-PLAN.md -- State manager signals + utility module TS conversions
+- [x] 06.1-03-PLAN.md -- Simple components (tab-bar, main-panel, diff-viewer, gsd-viewer, file-tree)
+- [x] 06.1-04-PLAN.md -- Complex components (sidebar, project-modal, fuzzy-search, right-panel)
+- [x] 06.1-05-PLAN.md -- main.tsx wiring + cleanup + UAT
+- [ ] 06.1-06-PLAN.md -- UAT gap closure: layout CSS, drag resize, modal + tab styling
 **UI hint**: yes
 
 ### Phase 7: Server Pane + Agent Support
