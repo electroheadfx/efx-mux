@@ -109,6 +109,14 @@ export function getTerminalTheme(): Record<string, string> | null {
   return currentTheme?.terminal ?? null;
 }
 
+/**
+ * Get the full cached theme data (terminal + chrome).
+ * Used by components that need both terminal colors and chrome font/fontSize.
+ */
+export function getTheme(): ThemeData | null {
+  return currentTheme;
+}
+
 /** Chrome CSS properties set by applyTheme() -- must be cleared for light mode CSS to take effect */
 const CHROME_PROPS = ['--bg', '--bg-raised', '--border', '--text', '--text-bright', '--accent'];
 

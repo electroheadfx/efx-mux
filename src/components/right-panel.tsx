@@ -5,6 +5,7 @@
 
 import { useEffect, useRef } from 'preact/hooks';
 import { rightTopTab, rightBottomTab, loadAppState } from '../state-manager';
+import { getTheme, registerTerminal } from '../theme/theme-manager';
 import { TabBar } from './tab-bar';
 import { GSDViewer } from './gsd-viewer';
 import { DiffViewer } from './diff-viewer';
@@ -49,9 +50,13 @@ export function RightPanel() {
         const appState = await loadAppState();
         const sessionName = appState?.session?.['right-tmux-session'] || 'efx-mux-right';
 
+        const theme = getTheme();
         const { terminal, fitAddon } = createTerminal(container, {
-          fontSize: 13,
+          theme: theme?.terminal,
+          font: theme?.chrome?.font,
+          fontSize: theme?.chrome?.fontSize || 13,
         });
+        registerTerminal(terminal, fitAddon);
 
         await connectPty(terminal, sessionName);
         bashConnected.current = true;
