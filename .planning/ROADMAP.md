@@ -164,8 +164,8 @@ Plans:
 
 **Plans**: 2 plans
 Plans:
-- [x] 06-01-PLAN.md -- Wave 1: PtyManager HashMap refactor, new Rust commands, .md file watcher
-- [x] 06-02-PLAN.md -- Wave 2: Tab bars, GSD Viewer, Diff Viewer, File Tree, Bash Terminal wiring
+- [ ] 07-01-PLAN.md -- Rust server process manager + frontend bridge modules
+- [ ] 07-02-PLAN.md -- Server pane UI component + agent detection + Ctrl+` handler
 
 **UI hint**: yes
 
