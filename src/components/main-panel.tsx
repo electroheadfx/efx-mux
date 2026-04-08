@@ -70,7 +70,7 @@ export function MainPanel() {
             </div>
             <button
               onClick={closeFileViewer}
-              class="bg-transparent border border-border text-text cursor-pointer px-2 py-0.5 rounded-sm text-xs font-mono"
+              class="bg-transparent border border-border text-text cursor-pointer px-2.5 py-1 rounded text-xs font-mono transition-colors duration-150 hover:bg-bg hover:text-text-bright hover:border-accent"
               title="Close file viewer (Esc)"
             >Close</button>
           </div>

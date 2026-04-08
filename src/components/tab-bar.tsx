@@ -11,12 +11,12 @@ interface TabBarProps {
 
 export function TabBar({ tabs, activeTab, onSwitch }: TabBarProps) {
   return (
-    <div class="flex gap-0.5 px-2 pt-1 bg-bg border-b border-border shrink-0">
+    <div class="flex gap-1 px-2 pt-1.5 pb-0 bg-bg border-b border-border shrink-0">
       {tabs.map(tab => (
         <button
           class={activeTab.value === tab
-            ? 'px-4 py-1.5 text-xs cursor-pointer font-[inherit] bg-bg-raised border-b-2 border-accent text-text-bright -mb-px'
-            : 'px-4 py-1.5 text-xs cursor-pointer font-[inherit] bg-transparent border-b-2 border-transparent text-text -mb-px hover:bg-bg-raised'}
+            ? 'px-3 py-1.5 text-xs cursor-pointer font-[inherit] bg-bg-raised text-text-bright rounded-t border border-border border-b-0 -mb-px relative z-[1] transition-colors duration-150'
+            : 'px-3 py-1.5 text-xs cursor-pointer font-[inherit] bg-transparent text-text rounded-t border border-transparent border-b-0 -mb-px transition-colors duration-150 hover:text-text-bright hover:bg-bg-raised/50'}
           onClick={() => onSwitch(tab)}
         >{tab}</button>
       ))}
