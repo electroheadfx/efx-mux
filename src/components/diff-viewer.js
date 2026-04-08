@@ -78,6 +78,11 @@ export const DiffViewer = () => {
     }
   });
 
+  // Schedule DOM discovery after Arrow.js renders (same pattern as gsd-viewer.js)
+  setTimeout(() => {
+    contentEl = document.getElementById('diff-viewer-content');
+  }, 0);
+
   return html`
     <div
       class="diff-viewer"
@@ -91,7 +96,7 @@ export const DiffViewer = () => {
       "
     >
       <div
-        ref="${(el) => { contentEl = el; }}"
+        id="diff-viewer-content"
       >
         <div style="color: var(--text-muted);">Click a file in the sidebar to view its diff</div>
       </div>
