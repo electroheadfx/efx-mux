@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-07)
 Phase: 06.1 (Migrate Arrow.js to Preact + htm) — EXECUTING
 Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-04-08 - Completed quick task 260408-rco: UI fixes round 2 - terminal scroll, white flash, bash theme
+Last activity: 2026-04-08 - Completed quick task 260408-w4c: Mark Phase 6.1 complete in ROADMAP.md
 
 Progress: [████████████████████] 15/15 plans (100%)
 
@@ -88,6 +88,7 @@ None yet.
 | 260408-r16 | UI fixes - nicer tabs/top bar, fix scroll regression, custom scrollbars | 2026-04-08 | 981d54b | [260408-r16-ui-fixes-nicer-tabs-top-bar-in-left-side](./quick/260408-r16-ui-fixes-nicer-tabs-top-bar-in-left-side/) |
 | 260408-rco | UI fixes round 2: terminal scroll, white flash, bash theme | 2026-04-08 | cd00f6e | [260408-rco-ui-fixes-round-2-fix-terminal-scroll-reg](./quick/260408-rco-ui-fixes-round-2-fix-terminal-scroll-reg/) |
 | 260408-dbg | Debug: tmux mouse scroll, project-specific sessions, silent switch | 2026-04-08 | 8c6c1f0 | [debug/ui-regressions-round3](./debug/ui-regressions-round3.md) |
+| 260408-w4c | Mark Phase 6.1 complete in ROADMAP.md | 2026-04-08 | - | [260408-w4c-mark-phase-6-1-complete-in-roadmap-md](./quick/260408-w4c-mark-phase-6-1-complete-in-roadmap-md/) |
 
 ## Session Continuity
 

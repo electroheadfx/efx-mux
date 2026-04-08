@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Session Persistence** - state.json save/restore, tmux reattach, dead session recovery, corrupted state fallback
 - [x] **Phase 5: Project System + Sidebar** - Project registration, sidebar with git badge, project switching, Ctrl+P switcher
 - [x] **Phase 6: Right Panel Views** - Tab bar, GSD Markdown viewer with checkbox write-back, git diff viewer, file tree, bash terminal
-- [ ] **Phase 6.1: Migrate Arrow.js to Preact + Vite + TS + Tailwind 4** (INSERTED) - Replace Arrow.js with Preact + Vite + TypeScript + Tailwind 4
+- [x] **Phase 6.1: Migrate Arrow.js to Preact + Vite + TS + Tailwind 4** (INSERTED) - Replace Arrow.js with Preact + Vite + TypeScript + Tailwind 4
 - [ ] **Phase 7: Server Pane + Agent Support** - Server pane with controls, Claude Code / OpenCode launchers, auto-detect fallback
 - [ ] **Phase 8: Keyboard + Polish** - App-level shortcut system with terminal pass-through, tab management, crash recovery, first-run wizard
 
@@ -199,6 +199,6 @@ Phases execute in numeric order. Note: Phases 3 and 6 are parallelizable after P
 | 4. Session Persistence | 4/4 | Complete | 2026-04-07 |
 | 5. Project System + Sidebar | 2/2 | Complete | 2026-04-07 |
 | 6. Right Panel Views | 7/7 | Complete | 2026-04-08 |
-| 6.1 Migrate Arrow.js → Preact | 0/TBD | Not started | - |
+| 6.1 Migrate Arrow.js → Preact | 6/6 | Complete | 2026-04-08 |
 | 7. Server Pane + Agent Support | 0/TBD | Not started | - |
 | 8. Keyboard + Polish | 0/TBD | Not started | - |
