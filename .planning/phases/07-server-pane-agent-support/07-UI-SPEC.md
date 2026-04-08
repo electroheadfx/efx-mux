@@ -111,7 +111,7 @@ Source: All hex values from existing `src/styles/app.css` `@theme` block and dif
 background: var(--color-bg-raised)
 border: 1px solid var(--color-border)
 color: var(--color-text)
-padding: 2px 8px
+padding: 4px 8px
 border-radius: 2px
 font-size: 11px
 font-weight: 600
