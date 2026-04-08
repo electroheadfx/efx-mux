@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 6.1 context gathered
-last_updated: "2026-04-08T13:46:57.826Z"
-last_activity: 2026-04-08 -- Phase 6.1 planning complete
+stopped_at: Completed 06.1-06-PLAN.md
+last_updated: "2026-04-08T17:12:33.758Z"
+last_activity: 2026-04-08
 progress:
   total_phases: 9
-  completed_phases: 6
-  total_plans: 29
-  completed_plans: 24
-  percent: 83
+  completed_phases: 7
+  total_plans: 30
+  completed_plans: 30
+  percent: 100
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-07)
 
 **Core value:** A single native macOS window that co-locates AI agent terminals alongside live GSD progress, git diff, and file tree -- all persisted across restarts via tmux.
-**Current focus:** Phase 07 — next phase
+**Current focus:** Phase 06.1 — Migrate Arrow.js to Preact + htm
 
 ## Current Position
 
-Phase: 7
-Plan: Not started
+Phase: 06.1 (Migrate Arrow.js to Preact + htm) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-04-08 -- Phase 6.1 planning complete
+Last activity: 2026-04-08
 
 Progress: [████████████████████] 15/15 plans (100%)
 
@@ -54,6 +54,7 @@ Progress: [████████████████████] 15/15 p
 - Trend: -
 
 *Updated after each plan completion*
+| Phase 06.1 P06 | 3min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,7 @@ Recent decisions affecting current work:
 - [Phase 2]: tmux via `std::process::Command` (no Rust crate). xterm.js 6.0 only (no canvas addon, WebGL + DOM fallback).
 - [Phase 4]: State persisted to ~/.config/efxmux/state.json via Rust atomic write (tmp+rename). JS state-manager.js bridges frontend to Rust.
 - [Phase 4]: Theme persistence uses session-scoped module variable for manual toggle (not localStorage) so OS listener resets on restart.
+- [Phase 06.1]: Added vite-env.d.ts for CSS import type declarations (missing from Preact migration setup)
 
 ### Pending Todos
 
@@ -86,6 +88,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-08T13:12:08.626Z
-Stopped at: Phase 6.1 context gathered
-Resume file: .planning/phases/06.1-migrate-arrow-js-to-preact-htm-inserted/06.1-CONTEXT.md
+Last session: 2026-04-08T17:12:33.755Z
+Stopped at: Completed 06.1-06-PLAN.md
+Resume file: None

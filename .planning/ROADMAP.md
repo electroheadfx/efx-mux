@@ -148,7 +148,7 @@ Plans:
 - [x] 06.1-03-PLAN.md -- Simple components (tab-bar, main-panel, diff-viewer, gsd-viewer, file-tree)
 - [x] 06.1-04-PLAN.md -- Complex components (sidebar, project-modal, fuzzy-search, right-panel)
 - [x] 06.1-05-PLAN.md -- main.tsx wiring + cleanup + UAT
-- [ ] 06.1-06-PLAN.md -- UAT gap closure: layout CSS, drag resize, modal + tab styling
+- [x] 06.1-06-PLAN.md -- UAT gap closure: layout CSS, drag resize, modal + tab styling
 **UI hint**: yes
 
 ### Phase 7: Server Pane + Agent Support
