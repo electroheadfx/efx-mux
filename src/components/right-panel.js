@@ -81,6 +81,14 @@ export const RightPanel = () => {
     }
   }
 
+  // Schedule bash terminal discovery after Arrow.js renders the DOM
+  setTimeout(() => {
+    bashContainerEl = document.getElementById('bash-terminal-container');
+    if (bashContainerEl && !bashTerminalConnected) {
+      setTimeout(() => connectBashTerminal(), 200);
+    }
+  }, 0);
+
   // Build view components once (they manage their own state internally)
   const gsdViewer = GSDViewer(() => state.activeProject);
   const diffViewer = DiffViewer();
@@ -114,17 +122,7 @@ export const RightPanel = () => {
       <div class="right-bottom" style="display: flex; flex-direction: column; min-height: 0;">
         ${TabBar(RIGHT_BOTTOM_TABS, () => state.rightBottomTab, (tab) => { state.rightBottomTab = tab; })}
         <div class="right-bottom-content" style="flex: 1; min-height: 0; overflow: hidden;">
-          <div
-            class="bash-terminal"
-            ref="${(el) => {
-              bashContainerEl = el;
-              // Auto-connect on mount since Bash is the default tab
-              if (state.rightBottomTab === 'Bash') {
-                setTimeout(() => connectBashTerminal(), 200);
-              }
-            }}"
-            style="height: 100%;"
-          ></div>
+          <div id="bash-terminal-container" class="bash-terminal" style="height: 100%;"></div>
         </div>
       </div>
     </aside>
