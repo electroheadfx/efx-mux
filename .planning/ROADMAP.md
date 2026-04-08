@@ -202,3 +202,13 @@ Phases execute in numeric order. Note: Phases 3 and 6 are parallelizable after P
 | 6.1 Migrate Arrow.js → Preact | 6/6 | Complete | 2026-04-08 |
 | 7. Server Pane + Agent Support | 0/TBD | Not started | - |
 | 8. Keyboard + Polish | 0/TBD | Not started | - |
+
+### Phase 9: Rich Dashboard Views — Parse STATE.md and ROADMAP.md as structured data, render as designed Preact dashboard with progress bars, phase cards, status badges, decision logs
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 8
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 9 to break down)

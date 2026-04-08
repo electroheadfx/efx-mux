@@ -75,6 +75,10 @@ Recent decisions affecting current work:
 
 None yet.
 
+### Roadmap Evolution
+
+- Phase 9 added: Rich Dashboard Views — parse .planning markdown as structured data, render as Preact dashboard
+
 ### Blockers/Concerns
 
 - [Phase 2]: Two spikes required before production code -- `Channel<Vec<u8>>` binary encoding behavior and Arrow.js `ref` attribute in WKWebView. If either fails, architecture must adapt.
