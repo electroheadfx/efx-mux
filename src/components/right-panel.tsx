@@ -4,6 +4,7 @@
 // Migrated from Arrow.js to Preact TSX (Phase 6.1)
 
 import { useEffect, useRef } from 'preact/hooks';
+import { invoke } from '@tauri-apps/api/core';
 import { rightTopTab, rightBottomTab, loadAppState, activeProjectName, projects } from '../state-manager';
 import { getTheme, registerTerminal } from '../theme/theme-manager';
 import { TabBar } from './tab-bar';
@@ -23,8 +24,7 @@ const RIGHT_BOTTOM_TABS = ['Bash'];
 export function RightPanel() {
   const bashContainerRef = useRef<HTMLDivElement>(null);
   const bashConnected = useRef(false);
-  const bashTerminalRef = useRef<{ terminal: import('@xterm/xterm').Terminal; fitAddon: import('@xterm/addon-fit').FitAddon } | null>(null);
-  const bashDisconnectRef = useRef<(() => void) | null>(null);
+  const bashSessionRef = useRef('');
 
   // Auto-switch to Diff tab when a file is clicked in sidebar GIT CHANGES
   useEffect(() => {
@@ -39,36 +39,32 @@ export function RightPanel() {
 
   // Lazy-connect bash terminal on mount
   useEffect(() => {
-    async function connectBashTerminal(projectName?: string, projectPath?: string) {
+    async function connectBashTerminal() {
       const container = bashContainerRef.current;
-      if (!container) return;
+      if (!container || bashConnected.current) return;
 
-      const { createTerminal } = await import('../terminal/terminal-manager');
-      const { connectPty } = await import('../terminal/pty-bridge');
-      const { attachResizeHandler } = await import('../terminal/resize-handler');
+      try {
+        const { createTerminal } = await import('../terminal/terminal-manager');
+        const { connectPty } = await import('../terminal/pty-bridge');
+        const { attachResizeHandler } = await import('../terminal/resize-handler');
 
-      // Create terminal only once
-      if (!bashTerminalRef.current) {
+        const activeName = activeProjectName.value;
+        const appState = await loadAppState();
+        const sessionName = activeName
+          ? activeName.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase() + '-right'
+          : (appState?.session?.['right-tmux-session'] || 'efx-mux-right');
+        bashSessionRef.current = sessionName;
+
         const theme = getTheme();
-        bashTerminalRef.current = createTerminal(container, {
+        const { terminal, fitAddon } = createTerminal(container, {
           theme: theme?.terminal,
           font: theme?.chrome?.font,
           fontSize: theme?.chrome?.fontSize || 13,
         });
-        registerTerminal(bashTerminalRef.current.terminal, bashTerminalRef.current.fitAddon);
-      }
+        registerTerminal(terminal, fitAddon);
 
-      const { terminal, fitAddon } = bashTerminalRef.current;
-      const activeName = projectName || activeProjectName.value;
-      const appState = await loadAppState();
-      const sessionName = activeName
-        ? activeName.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase() + '-right'
-        : (appState?.session?.['right-tmux-session'] || 'efx-mux-right');
-
-      try {
-        const activeProject = projectPath || (activeName ? projects.value.find(p => p.name === activeName)?.path : undefined);
-        const conn = await connectPty(terminal, sessionName, activeProject);
-        bashDisconnectRef.current = conn.disconnect;
+        const activeProject = activeName ? projects.value.find(p => p.name === activeName) : null;
+        await connectPty(terminal, sessionName, activeProject?.path);
         bashConnected.current = true;
 
         setTimeout(() => {
@@ -80,25 +76,24 @@ export function RightPanel() {
       }
     }
 
-    // Listen for project reconnect events
-    async function handleReconnectBash(e: Event) {
-      const { projectName, projectPath } = (e as CustomEvent).detail;
-      // Disconnect current
-      if (bashDisconnectRef.current) bashDisconnectRef.current();
-      if (bashTerminalRef.current) {
-        bashTerminalRef.current.terminal.clear();
-        bashTerminalRef.current.terminal.reset();
-      }
-      await connectBashTerminal(projectName, projectPath);
+    // Listen for project switch events (tmux switch-client)
+    function handleSwitchBash(e: Event) {
+      const { targetSession, startDir } = (e as CustomEvent).detail;
+      const currentSession = bashSessionRef.current;
+      if (!currentSession || currentSession === targetSession) return;
+      const escaped = startDir ? ` -c '${startDir.replace(/'/g, "'\\''")}'` : '';
+      const cmd = `tmux has-session -t ${targetSession} 2>/dev/null || tmux new-session -d -s ${targetSession}${escaped}; tmux switch-client -t ${targetSession}\n`;
+      invoke('write_pty', { data: cmd, sessionName: currentSession }).catch(() => {});
+      bashSessionRef.current = targetSession;
     }
 
-    document.addEventListener('reconnect-bash', handleReconnectBash);
+    document.addEventListener('switch-bash-session', handleSwitchBash);
 
     // Initial connection
     setTimeout(() => connectBashTerminal(), 200);
 
     return () => {
-      document.removeEventListener('reconnect-bash', handleReconnectBash);
+      document.removeEventListener('switch-bash-session', handleSwitchBash);
     };
   }, []);
 

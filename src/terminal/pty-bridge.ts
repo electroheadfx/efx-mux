@@ -27,10 +27,13 @@ export async function connectPty(terminal: Terminal, sessionName: string, startD
   };
 
   // Spawn PTY with tmux session (D-03, D-04)
+  // Pass actual terminal dimensions to avoid initial 80x24 mismatch with tmux
   await invoke('spawn_terminal', {
     onOutput: channel,
     sessionName,
     startDir: startDir ?? null,
+    cols: terminal.cols,
+    rows: terminal.rows,
   });
 
   // Wire terminal input -> PTY write (D-10: pass sessionName)

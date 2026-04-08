@@ -53,6 +53,8 @@ pub async fn spawn_terminal(
     on_output: tauri::ipc::Channel<Vec<u8>>,
     session_name: String,
     start_dir: Option<String>,
+    cols: Option<u16>,
+    rows: Option<u16>,
 ) -> Result<(), String> {
     // Sanitize session_name: allow only alphanumeric, hyphen, underscore (T-02-01 mitigation)
     let sanitized: String = session_name
@@ -66,8 +68,8 @@ pub async fn spawn_terminal(
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(PtySize {
-            rows: 24,
-            cols: 80,
+            rows: rows.unwrap_or(24),
+            cols: cols.unwrap_or(80),
             pixel_width: 0,
             pixel_height: 0,
         })
