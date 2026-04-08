@@ -14,10 +14,10 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Scaffold + Entitlements** - Tauri 2 init, 3-zone CSS layout, Arrow.js import map, macOS entitlements locked, Cmd+C/V clipboard
 - [x] **Phase 2: Terminal Integration** - PTY Channel pipeline, xterm.js 6.0 + WebGL/DOM fallback, tmux session, flow control, resize
-- [ ] **Phase 3: Terminal Theming** - theme.json schema, iTerm2 importer, hot reload, dark/light toggle
-- [ ] **Phase 4: Session Persistence** - state.json save/restore, tmux reattach, dead session recovery, corrupted state fallback
-- [ ] **Phase 5: Project System + Sidebar** - Project registration, sidebar with git badge, project switching, Ctrl+P switcher
-- [ ] **Phase 6: Right Panel Views** - Tab bar, GSD Markdown viewer with checkbox write-back, git diff viewer, file tree, bash terminal
+- [x] **Phase 3: Terminal Theming** - theme.json schema, iTerm2 importer, hot reload, dark/light toggle
+- [x] **Phase 4: Session Persistence** - state.json save/restore, tmux reattach, dead session recovery, corrupted state fallback
+- [x] **Phase 5: Project System + Sidebar** - Project registration, sidebar with git badge, project switching, Ctrl+P switcher
+- [x] **Phase 6: Right Panel Views** - Tab bar, GSD Markdown viewer with checkbox write-back, git diff viewer, file tree, bash terminal
 - [ ] **Phase 6.1: Migrate Arrow.js to Preact + htm** (INSERTED) - Replace Arrow.js with Preact + htm to fix template rendering bugs
 - [ ] **Phase 7: Server Pane + Agent Support** - Server pane with controls, Claude Code / OpenCode launchers, auto-detect fallback
 - [ ] **Phase 8: Keyboard + Polish** - App-level shortcut system with terminal pass-through, tab management, crash recovery, first-run wizard
@@ -127,7 +127,7 @@ Plans:
 - [x] 06-03-PLAN.md -- Wave 3: Gap closure: wire md file watcher activation + file-opened handler
 - [x] 06-04-PLAN.md -- UAT gap closure: fix Add Project persistence + Bash terminal ref bug
 - [x] 06-05-PLAN.md -- UAT gap closure: fix GSD Viewer loading, sidebar git files, file tree root guard, bash resize
-- [ ] 06-06-PLAN.md -- Gap closure: fix diff-viewer.js Arrow.js ref bug (PANEL-04)
+- [x] 06-06-PLAN.md -- Gap closure: fix diff-viewer.js Arrow.js ref bug (PANEL-04)
 
 **UI hint**: yes
 
@@ -187,11 +187,11 @@ Phases execute in numeric order. Note: Phases 3 and 6 are parallelizable after P
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Scaffold + Entitlements | 4/4 | Complete | 2026-04-06 |
-| 2. Terminal Integration | 0/3 | Planned | - |
-| 3. Terminal Theming | 0/3 | Planned | - |
-| 4. Session Persistence | 0/TBD | Not started | - |
-| 5. Project System + Sidebar | 0/TBD | Not started | - |
-| 6. Right Panel Views | 0/TBD | Not started | - |
+| 2. Terminal Integration | 3/3 | Complete | 2026-04-07 |
+| 3. Terminal Theming | 3/3 | Complete | 2026-04-07 |
+| 4. Session Persistence | 4/4 | Complete | 2026-04-07 |
+| 5. Project System + Sidebar | 2/2 | Complete | 2026-04-07 |
+| 6. Right Panel Views | 7/7 | Complete | 2026-04-08 |
 | 6.1 Migrate Arrow.js → Preact | 0/TBD | Not started | - |
 | 7. Server Pane + Agent Support | 0/TBD | Not started | - |
 | 8. Keyboard + Polish | 0/TBD | Not started | - |
