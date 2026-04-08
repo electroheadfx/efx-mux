@@ -37,20 +37,23 @@ function projectSessionName(projectName: string, suffix?: string): string {
 }
 
 // Module-level state for terminal session tracking
-// ptyKey = the session name used when the PTY was spawned (never changes, used for write_pty)
-// currentTmuxSession = which tmux session the client is currently showing (changes on switch)
+// *PtyKey = original PTY spawn session (for write_pty)
+// *CurrentSession = which tmux session the client currently shows (for switch-client)
 let mainPtyKey = '';
+let mainCurrentSession = '';
 let rightPtyKey = '';
+let rightCurrentSession = '';
 
 /**
- * Switch a tmux client to a different session via the existing PTY writer.
- * Uses ptyKey (the original spawn session name) for write_pty — this key
- * never changes in Rust's PtyManager even after tmux switch-client.
+ * Switch a tmux client to a different session silently via Rust system commands.
+ * No PTY output — completely invisible in the terminal.
  */
-async function switchTmuxSession(ptyKey: string, targetSession: string, startDir?: string): Promise<void> {
-  const escaped = startDir ? ` -c '${startDir.replace(/'/g, "'\\''")}'` : '';
-  const cmd = `tmux has-session -t ${targetSession} 2>/dev/null || tmux new-session -d -s ${targetSession}${escaped}; tmux set-option -t ${targetSession} mouse on 2>/dev/null; tmux switch-client -t ${targetSession}\n`;
-  await invoke('write_pty', { data: cmd, sessionName: ptyKey });
+async function switchTmuxSession(currentSession: string, targetSession: string, startDir?: string): Promise<void> {
+  await invoke('switch_tmux_session', {
+    currentSession,
+    targetSession,
+    startDir: startDir ?? null,
+  });
 }
 
 function App() {
@@ -158,6 +161,11 @@ async function bootstrap() {
       ? projectSessionName(activeName)
       : (appState?.session?.['main-tmux-session'] ?? 'efx-mux');
     mainPtyKey = sessionName; // Store PTY key (never changes)
+    mainCurrentSession = sessionName;
+    // Right panel uses same project but with -right suffix
+    rightCurrentSession = activeName
+      ? projectSessionName(activeName, 'right')
+      : (appState?.session?.['right-tmux-session'] ?? 'efx-mux-right');
     try {
       await connectPty(terminal, sessionName, activeProject?.path);
       updateSession({ 'main-tmux-session': sessionName });
@@ -218,16 +226,19 @@ document.addEventListener('project-changed', async (e: Event) => {
     if (project?.path) {
       await invoke('set_project_path', { path: project.path });
 
-      // Switch main terminal to new project's tmux session
-      // Always use mainPtyKey for write_pty (the original PTY session key)
+      // Switch main terminal to new project's tmux session (silent via Rust)
       const newMainSession = projectSessionName(newProjectName);
-      await switchTmuxSession(mainPtyKey, newMainSession, project.path);
+      if (newMainSession !== mainCurrentSession) {
+        await switchTmuxSession(mainCurrentSession, newMainSession, project.path);
+        mainCurrentSession = newMainSession;
+      }
 
-      // Switch right panel bash terminal
+      // Switch right panel bash terminal (silent via Rust)
       const newRightSession = projectSessionName(newProjectName, 'right');
       document.dispatchEvent(new CustomEvent('switch-bash-session', {
-        detail: { targetSession: newRightSession, startDir: project.path }
+        detail: { currentSession: rightCurrentSession, targetSession: newRightSession, startDir: project.path }
       }));
+      rightCurrentSession = newRightSession;
     }
   } catch (err) {
     console.warn('[efxmux] Failed to switch project:', err);

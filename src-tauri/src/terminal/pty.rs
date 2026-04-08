@@ -204,6 +204,82 @@ pub fn ack_bytes(count: u64, session_name: String, manager: tauri::State<'_, Pty
     Ok(())
 }
 
+/// Switch a tmux client from one session to another without PTY output.
+/// Creates the target session (detached) if it doesn't exist.
+/// Runs tmux commands as system processes — completely silent in the terminal.
+#[tauri::command]
+pub fn switch_tmux_session(
+    current_session: String,
+    target_session: String,
+    start_dir: Option<String>,
+) -> Result<(), String> {
+    // Sanitize target session name
+    let target: String = target_session
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
+    if target.is_empty() {
+        return Err("Invalid target session name".to_string());
+    }
+
+    // Create target session if it doesn't exist
+    let has = std::process::Command::new("tmux")
+        .args(["has-session", "-t", &target])
+        .output();
+    let needs_create = match has {
+        Ok(out) => !out.status.success(),
+        Err(_) => true,
+    };
+    if needs_create {
+        let mut args = vec!["new-session", "-d", "-s", &target];
+        let dir_str;
+        if let Some(ref dir) = start_dir {
+            if std::path::Path::new(dir).is_dir() {
+                dir_str = dir.clone();
+                args.push("-c");
+                args.push(&dir_str);
+            }
+        }
+        std::process::Command::new("tmux")
+            .args(&args)
+            .output()
+            .map_err(|e| e.to_string())?;
+    }
+
+    // Enable mouse mode on target session
+    std::process::Command::new("tmux")
+        .args(["set-option", "-t", &target, "mouse", "on"])
+        .output()
+        .ok();
+
+    // Find the client attached to the current session
+    let clients_out = std::process::Command::new("tmux")
+        .args(["list-clients", "-t", &current_session, "-F", "#{client_name}"])
+        .output();
+    let client_name = match clients_out {
+        Ok(out) => {
+            let s = String::from_utf8_lossy(&out.stdout);
+            s.lines().next().unwrap_or("").to_string()
+        }
+        Err(_) => String::new(),
+    };
+
+    if client_name.is_empty() {
+        // Fallback: try switching without specifying client (works if only one client)
+        std::process::Command::new("tmux")
+            .args(["switch-client", "-t", &target])
+            .output()
+            .map_err(|e| e.to_string())?;
+    } else {
+        std::process::Command::new("tmux")
+            .args(["switch-client", "-c", &client_name, "-t", &target])
+            .output()
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
 /// List active PTY session names (debugging utility).
 #[tauri::command]
 pub fn get_pty_sessions(manager: tauri::State<'_, PtyManager>) -> Result<Vec<String>, String> {

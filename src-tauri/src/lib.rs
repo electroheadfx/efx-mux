@@ -113,6 +113,9 @@ pub fn run() {
 
             // Phase 6: File watcher (D-02)
             file_watcher::set_project_path,
+
+            // Workspace switching
+            terminal::pty::switch_tmux_session,
         ])
         .plugin(tauri_plugin_dialog::init())
         .on_window_event(|window, event| {
