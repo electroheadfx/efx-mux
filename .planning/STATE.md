@@ -87,9 +87,10 @@ None yet.
 | 260407-di0 | Fix phase 2 issues: LOW watermark hysteresis, terminal padding, key repeat, word navigation, line cursor, scrollbar | 2026-04-07 | 62c653c | [260407-di0-fix-phase-2-issues-low-watermark-hystere](./quick/260407-di0-fix-phase-2-issues-low-watermark-hystere/) |
 | 260408-r16 | UI fixes - nicer tabs/top bar, fix scroll regression, custom scrollbars | 2026-04-08 | 981d54b | [260408-r16-ui-fixes-nicer-tabs-top-bar-in-left-side](./quick/260408-r16-ui-fixes-nicer-tabs-top-bar-in-left-side/) |
 | 260408-rco | UI fixes round 2: terminal scroll, white flash, bash theme | 2026-04-08 | cd00f6e | [260408-rco-ui-fixes-round-2-fix-terminal-scroll-reg](./quick/260408-rco-ui-fixes-round-2-fix-terminal-scroll-reg/) |
+| 260408-dbg | Debug: tmux mouse scroll, project-specific sessions, silent switch | 2026-04-08 | 8c6c1f0 | [debug/ui-regressions-round3](./debug/ui-regressions-round3.md) |
 
 ## Session Continuity
 
-Last session: 2026-04-08T17:12:33.755Z
-Stopped at: Completed 06.1-06-PLAN.md
+Last session: 2026-04-08T22:52:00.000Z
+Stopped at: Debug session - UI regressions round 3 resolved
 Resume file: None
