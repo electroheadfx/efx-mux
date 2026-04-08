@@ -130,8 +130,8 @@ export async function getActiveProject() {
  */
 export async function addProject(entry) {
   await invoke('add_project', { entry });
-  // Persist state after mutation
-  if (currentState) await invoke('save_state', { stateJson: JSON.stringify(currentState) });
+  // Reload state from Rust to pick up the persisted mutation
+  currentState = await invoke('load_state');
 }
 
 /**
@@ -140,8 +140,8 @@ export async function addProject(entry) {
  */
 export async function removeProject(name) {
   await invoke('remove_project', { name });
-  // Persist state after mutation
-  if (currentState) await invoke('save_state', { stateJson: JSON.stringify(currentState) });
+  // Reload state from Rust to pick up the persisted mutation
+  currentState = await invoke('load_state');
 }
 
 /**
@@ -151,8 +151,8 @@ export async function removeProject(name) {
  */
 export async function switchProject(name) {
   await invoke('switch_project', { name });
-  // Persist state after mutation
-  if (currentState) await invoke('save_state', { stateJson: JSON.stringify(currentState) });
+  // Reload state from Rust to pick up the persisted mutation
+  currentState = await invoke('load_state');
   document.dispatchEvent(new CustomEvent('project-changed', { detail: { name } }));
 }
 
