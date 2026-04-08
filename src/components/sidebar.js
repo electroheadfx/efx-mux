@@ -6,6 +6,8 @@ import { openProjectModal } from './project-modal.js';
 
 /** @typedef {{ branch: string, modified: number, staged: number, untracked: number }} GitData */
 
+const { invoke } = window.__TAURI__.core;
+
 // Reactive sidebar state
 const state = reactive({
   projects: /** @type {Array<{path: string, name: string, agent: string, gsd_file?: string, server_cmd?: string}>} */ ([]),
@@ -17,6 +19,8 @@ const state = reactive({
   removeTarget: null,
   showModal: false,
   selectedIndex: -1,
+  /** @type {Array<{name: string, path: string, status: string}>} */
+  gitFiles: [],
 });
 
 /**
@@ -62,8 +66,30 @@ async function refreshAllGitStatus() {
       }
     })
   );
+  // Full reassignment to trigger Arrow.js reactive proxy (not in-place mutation)
+  const newGitData = { ...state.gitData };
   for (const { name, git } of entries) {
-    state.gitData[name] = git;
+    newGitData[name] = git;
+  }
+  state.gitData = newGitData;
+
+  // Fetch file-level git data for the active project
+  await refreshGitFiles();
+}
+
+/** Refresh file-level git entries for the active project. */
+async function refreshGitFiles() {
+  const activeProject = state.projects.find(p => p.name === state.activeProject);
+  if (!activeProject) {
+    state.gitFiles = [];
+    return;
+  }
+  try {
+    const files = await invoke('get_git_files', { path: activeProject.path });
+    state.gitFiles = files;
+  } catch (err) {
+    console.warn('[efxmux] Failed to fetch git files:', err);
+    state.gitFiles = [];
   }
 }
 
@@ -266,11 +292,7 @@ export const Sidebar = ({ collapsed }) => {
   };
 
   const gitFiles = () => {
-    const g = git();
-    if (!state.activeProject) return [];
-    const project = state.projects.find(p => p.name === state.activeProject);
-    if (!project) return [];
-    return [];
+    return state.gitFiles;
   };
 
   const totalChanges = () => {
@@ -363,18 +385,7 @@ export const Sidebar = ({ collapsed }) => {
                   title="Refresh git status"
                   aria-label="Refresh git status"
                   @click="${async () => {
-                    const { getGitStatus } = await import('../state-manager.js');
-                    if (state.activeProject) {
-                      const project = state.projects.find(p => p.name === state.activeProject);
-                      if (project) {
-                        try {
-                          const g = await getGitStatus(project.path);
-                          state.gitData[state.activeProject] = g;
-                        } catch {
-                          // ignore
-                        }
-                      }
-                    }
+                    await refreshAllGitStatus();
                   }}"
                   @mouseenter="${(e) => { e.currentTarget.style.color = 'var(--accent)'; }}"
                   @mouseleave="${(e) => { e.currentTarget.style.color = 'var(--text)'; }}"

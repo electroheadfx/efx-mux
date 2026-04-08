@@ -95,6 +95,7 @@ pub fn run() {
 
             // Git
             git_status::get_git_status,
+            git_status::get_git_files,
 
             // Projects
             project::add_project,

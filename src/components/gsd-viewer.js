@@ -111,6 +111,15 @@ export const GSDViewer = (activeProject) => {
     }, 50);
   });
 
+  // Schedule DOM discovery after Arrow.js renders (06-04 pattern: getElementById, not ref)
+  setTimeout(() => {
+    contentEl = document.getElementById('gsd-viewer-content');
+    if (contentEl) {
+      const project = activeProject();
+      if (project) loadGSD(project);
+    }
+  }, 0);
+
   /**
    * Handle checkbox click events (D-01: write-back).
    * Delegates from container to avoid per-checkbox listeners.
@@ -135,13 +144,8 @@ export const GSDViewer = (activeProject) => {
       style="height: 100%; overflow-y: auto; padding: 16px;"
     >
       <div
+        id="gsd-viewer-content"
         class="gsd-viewer-content"
-        ref="${(el) => {
-          contentEl = el;
-          // Initial load when element mounts
-          const project = activeProject();
-          if (project) loadGSD(project);
-        }}"
         style="color: var(--text); font-size: 14px; line-height: 1.6;"
       >
         <div style="color: var(--text-muted); font-size: 13px;">Loading GSD...</div>
