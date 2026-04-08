@@ -112,7 +112,7 @@
 .right-bottom-content {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .terminal-area {
@@ -144,6 +144,12 @@ html, body {
 .xterm-viewport::-webkit-scrollbar-track { background: var(--color-bg); }
 .xterm-viewport::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 4px; }
 .xterm-viewport::-webkit-scrollbar-thumb:hover { background: var(--color-text); }
+
+/* ─── Global custom scrollbars (match xterm style) ─── */
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 4px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--color-text); }
 
 /* ─── Drag state overlay (applied by drag-manager) ─── */
 .app-dragging .sidebar,
