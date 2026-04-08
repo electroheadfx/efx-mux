@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Session Persistence** - state.json save/restore, tmux reattach, dead session recovery, corrupted state fallback
 - [x] **Phase 5: Project System + Sidebar** - Project registration, sidebar with git badge, project switching, Ctrl+P switcher
 - [x] **Phase 6: Right Panel Views** - Tab bar, GSD Markdown viewer with checkbox write-back, git diff viewer, file tree, bash terminal
-- [ ] **Phase 6.1: Migrate Arrow.js to Preact + htm** (INSERTED) - Replace Arrow.js with Preact + htm to fix template rendering bugs
+- [ ] **Phase 6.1: Migrate Arrow.js to Preact + Vite + TS + Tailwind 4** (INSERTED) - Replace Arrow.js with Preact + Vite + TypeScript + Tailwind 4
 - [ ] **Phase 7: Server Pane + Agent Support** - Server pane with controls, Claude Code / OpenCode launchers, auto-detect fallback
 - [ ] **Phase 8: Keyboard + Polish** - App-level shortcut system with terminal pass-through, tab management, crash recovery, first-run wizard
 
@@ -131,8 +131,8 @@ Plans:
 
 **UI hint**: yes
 
-### Phase 6.1: Migrate Arrow.js to Preact + htm (INSERTED)
-**Goal**: Replace Arrow.js with Preact + htm to eliminate reactive template bugs (writeExpressions stringification, static-vs-reactive footguns) while keeping the no-bundler ESM setup
+### Phase 6.1: Migrate Arrow.js to Preact + Vite + TypeScript + Tailwind 4 (INSERTED)
+**Goal**: Replace Arrow.js with Preact + Vite + TypeScript + Tailwind 4 to eliminate reactive template bugs and modernize the frontend toolchain
 **Depends on**: Phase 6
 **Requirements**: All existing UI behavior must be preserved — same layout, same reactivity, same look
 **Success Criteria** (what must be TRUE):
@@ -141,7 +141,13 @@ Plans:
   3. All sidebar, modal, fuzzy-search, right-panel, and main-panel components render correctly
   4. No `(el) => renderTemplate(template, el)` or similar template leak text anywhere in the UI
   5. Conditional rendering (`{condition && <Component/>}`) works without the `() =>` reactive wrapper footgun
-**Plans**: TBD
+**Plans**: 5 plans
+Plans:
+- [ ] 06.1-01-PLAN.md -- Vite + Preact + Tailwind scaffold (config, app.css, index.html)
+- [ ] 06.1-02-PLAN.md -- State manager signals + utility module TS conversions
+- [ ] 06.1-03-PLAN.md -- Simple components (tab-bar, main-panel, diff-viewer, gsd-viewer, file-tree)
+- [ ] 06.1-04-PLAN.md -- Complex components (sidebar, project-modal, fuzzy-search, right-panel)
+- [ ] 06.1-05-PLAN.md -- main.tsx wiring + cleanup + UAT
 **UI hint**: yes
 
 ### Phase 7: Server Pane + Agent Support
