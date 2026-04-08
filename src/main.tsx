@@ -37,18 +37,20 @@ function projectSessionName(projectName: string, suffix?: string): string {
 }
 
 // Module-level state for terminal session tracking
-let mainSessionName = '';
-let rightSessionName = '';
+// ptyKey = the session name used when the PTY was spawned (never changes, used for write_pty)
+// currentTmuxSession = which tmux session the client is currently showing (changes on switch)
+let mainPtyKey = '';
+let rightPtyKey = '';
 
 /**
  * Switch a tmux client to a different session via the existing PTY writer.
- * Creates the target session (detached) if it doesn't exist.
+ * Uses ptyKey (the original spawn session name) for write_pty — this key
+ * never changes in Rust's PtyManager even after tmux switch-client.
  */
-async function switchTmuxSession(currentSession: string, targetSession: string, startDir?: string): Promise<void> {
-  // Ensure target session exists (create detached if needed)
+async function switchTmuxSession(ptyKey: string, targetSession: string, startDir?: string): Promise<void> {
   const escaped = startDir ? ` -c '${startDir.replace(/'/g, "'\\''")}'` : '';
   const cmd = `tmux has-session -t ${targetSession} 2>/dev/null || tmux new-session -d -s ${targetSession}${escaped}; tmux switch-client -t ${targetSession}\n`;
-  await invoke('write_pty', { data: cmd, sessionName: currentSession });
+  await invoke('write_pty', { data: cmd, sessionName: ptyKey });
 }
 
 function App() {
@@ -152,19 +154,20 @@ async function bootstrap() {
     // Use project-specific tmux session name (or fallback)
     const activeName = activeProjectName.value;
     const activeProject = activeName ? projects.value.find(p => p.name === activeName) : null;
-    mainSessionName = activeName
+    const sessionName = activeName
       ? projectSessionName(activeName)
       : (appState?.session?.['main-tmux-session'] ?? 'efx-mux');
+    mainPtyKey = sessionName; // Store PTY key (never changes)
     try {
-      await connectPty(terminal, mainSessionName, activeProject?.path);
-      updateSession({ 'main-tmux-session': mainSessionName });
+      await connectPty(terminal, sessionName, activeProject?.path);
+      updateSession({ 'main-tmux-session': sessionName });
     } catch (err) {
       console.error('[efxmux] Failed to connect PTY:', err);
-      terminal.writeln('\r\n\x1b[33mWarning: Could not attach to tmux session "' + mainSessionName + '":\x1b[0m ' + err);
+      terminal.writeln('\r\n\x1b[33mWarning: Could not attach to tmux session "' + sessionName + '":\x1b[0m ' + err);
       terminal.writeln('\r\n\x1b[33mIf tmux is not installed, run: brew install tmux\x1b[0m');
     }
 
-    attachResizeHandler(container, terminal, fitAddon, mainSessionName);
+    attachResizeHandler(container, terminal, fitAddon, sessionName);
     setTimeout(() => fitAddon.fit(), 100);
 
     // Apply right-h-pct after DOM is ready
@@ -216,21 +219,15 @@ document.addEventListener('project-changed', async (e: Event) => {
       await invoke('set_project_path', { path: project.path });
 
       // Switch main terminal to new project's tmux session
+      // Always use mainPtyKey for write_pty (the original PTY session key)
       const newMainSession = projectSessionName(newProjectName);
-      if (newMainSession !== mainSessionName) {
-        await switchTmuxSession(mainSessionName, newMainSession, project.path);
-        mainSessionName = newMainSession;
-        updateSession({ 'main-tmux-session': newMainSession });
-      }
+      await switchTmuxSession(mainPtyKey, newMainSession, project.path);
 
       // Switch right panel bash terminal
       const newRightSession = projectSessionName(newProjectName, 'right');
-      if (newRightSession !== rightSessionName) {
-        document.dispatchEvent(new CustomEvent('switch-bash-session', {
-          detail: { targetSession: newRightSession, startDir: project.path }
-        }));
-        rightSessionName = newRightSession;
-      }
+      document.dispatchEvent(new CustomEvent('switch-bash-session', {
+        detail: { targetSession: newRightSession, startDir: project.path }
+      }));
     }
   } catch (err) {
     console.warn('[efxmux] Failed to switch project:', err);

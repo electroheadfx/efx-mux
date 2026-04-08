@@ -77,14 +77,14 @@ export function RightPanel() {
     }
 
     // Listen for project switch events (tmux switch-client)
+    // Always use bashSessionRef.current (the original PTY key) for write_pty
     function handleSwitchBash(e: Event) {
       const { targetSession, startDir } = (e as CustomEvent).detail;
-      const currentSession = bashSessionRef.current;
-      if (!currentSession || currentSession === targetSession) return;
+      const ptyKey = bashSessionRef.current; // Original PTY session key — never update
+      if (!ptyKey) return;
       const escaped = startDir ? ` -c '${startDir.replace(/'/g, "'\\''")}'` : '';
       const cmd = `tmux has-session -t ${targetSession} 2>/dev/null || tmux new-session -d -s ${targetSession}${escaped}; tmux switch-client -t ${targetSession}\n`;
-      invoke('write_pty', { data: cmd, sessionName: currentSession }).catch(() => {});
-      bashSessionRef.current = targetSession;
+      invoke('write_pty', { data: cmd, sessionName: ptyKey }).catch(() => {});
     }
 
     document.addEventListener('switch-bash-session', handleSwitchBash);
