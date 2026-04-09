@@ -13,7 +13,7 @@ use tauri::Manager;
 use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
 use terminal::pty::{ack_bytes, check_tmux, get_pty_sessions, resize_pty, spawn_terminal, write_pty, PtyManager};
 use theme::iterm2::import_iterm2_theme;
-use server::{detect_agent, restart_server, start_server, stop_server, ServerProcess};
+use server::{detect_agent, kill_all_servers, restart_server, start_server, stop_server, ServerProcesses};
 use state::{get_config_dir, load_state, save_state, ManagedAppState};
 use theme::types::load_theme;
 
@@ -65,8 +65,8 @@ pub fn run() {
             // Initialize PtyManager for multi-session PTY support (D-09)
             app.manage(PtyManager(std::sync::Mutex::new(HashMap::new())));
 
-            // Initialize ServerProcess managed state for server pane (Phase 7)
-            app.manage(ServerProcess(std::sync::Mutex::new(None)));
+            // Initialize ServerProcesses managed state for per-project server management (Phase 7, 07-06)
+            app.manage(ServerProcesses(std::sync::Mutex::new(HashMap::new())));
 
             // Start theme file watcher (D-09: watch theme.json for changes)
             let app_handle = app.handle().clone();
@@ -132,14 +132,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Kill server process on close (D-06: server dies with app)
-                if let Ok(mut guard) = window.state::<ServerProcess>().0.lock() {
-                    if let Some(ref mut child) = *guard {
-                        let pid = child.id() as i32;
-                        unsafe { libc::killpg(pid, libc::SIGTERM); }
-                    }
-                    *guard = None;
-                }
+                // Kill ALL server processes on close (07-06: per-project HashMap, T-07-10)
+                kill_all_servers(&window.app_handle());
 
                 // Synchronously save the latest in-memory state to disk.
                 // This guarantees state.json is written even if the JS

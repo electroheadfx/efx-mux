@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::Read;
 use std::os::unix::process::CommandExt;
 use std::process::{Command, Stdio};
@@ -5,15 +6,23 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
 
-/// Tauri-managed wrapper for the server child process.
-pub struct ServerProcess(pub Mutex<Option<std::process::Child>>);
+/// Per-project server entry storing the child process and its PID.
+pub struct ServerEntry {
+    pub child: std::process::Child,
+    pub pid: u32,
+}
 
-/// Start a server process, streaming stdout/stderr to the frontend via events.
-/// Kills any existing server process first.
+/// Tauri-managed wrapper for per-project server processes.
+/// Key = project name (String), Value = ServerEntry.
+pub struct ServerProcesses(pub Mutex<HashMap<String, ServerEntry>>);
+
+/// Start a server process for a specific project, streaming stdout/stderr to the frontend via events.
+/// Kills any existing server process for that project first.
 #[tauri::command]
 pub async fn start_server(
     cmd: String,
     cwd: String,
+    project_id: String,
     app: AppHandle,
 ) -> Result<(), String> {
     // Validate cwd exists and is a directory (T-07-02 mitigation)
@@ -22,8 +31,8 @@ pub async fn start_server(
         return Err(format!("Working directory '{}' does not exist or is not a directory", cwd));
     }
 
-    // Kill existing server process first
-    stop_server_inner(&app)?;
+    // Kill existing server process for this project first
+    stop_server_for_project(&app, &project_id)?;
 
     // Spawn the server process in its own process group
     let mut child = Command::new("sh")
@@ -40,24 +49,22 @@ pub async fn start_server(
     let stderr = child.stderr.take();
     let pid = child.id();
 
-    // Store child in managed state
+    // Store child in managed state under project_id
     {
-        let sp = app.state::<ServerProcess>();
+        let sp = app.state::<ServerProcesses>();
         let mut guard = sp.0.lock().map_err(|e| e.to_string())?;
-        *guard = Some(child);
+        guard.insert(project_id.clone(), ServerEntry { child, pid });
     }
 
     // 07-05: EOF-based process exit detection instead of premature waitpid.
-    // Stdout/stderr pipes stay open as long as ANY process in the group holds them.
-    // When ALL processes exit, pipes close and readers get EOF.
-    // The last reader to finish emits server-stopped with the exit code.
     let reader_count = Arc::new(AtomicU8::new(
         (stdout.is_some() as u8) + (stderr.is_some() as u8),
     ));
 
     // Guard: if no readers at all, emit stopped immediately
     if reader_count.load(Ordering::SeqCst) == 0 {
-        let _ = app.emit("server-stopped", 0i32);
+        let payload = serde_json::json!({ "project": project_id, "code": 0 });
+        let _ = app.emit("server-stopped", payload);
         return Ok(());
     }
 
@@ -66,6 +73,7 @@ pub async fn start_server(
         let app_clone = app.clone();
         let count = reader_count.clone();
         let pid_for_wait = pid;
+        let project_id_clone = project_id.clone();
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
             loop {
@@ -73,7 +81,8 @@ pub async fn start_server(
                     Ok(0) => break, // EOF
                     Ok(n) => {
                         let text = String::from_utf8_lossy(&buf[..n]).to_string();
-                        let _ = app_clone.emit("server-output", &text);
+                        let payload = serde_json::json!({ "project": project_id_clone, "text": text });
+                        let _ = app_clone.emit("server-output", payload);
                     }
                     Err(_) => break,
                 }
@@ -88,10 +97,11 @@ pub async fn start_server(
                 } else {
                     0 // Pipes closed, process exited normally
                 };
-                let _ = app_clone.emit("server-stopped", exit_code);
-                // Clear stored child since process is gone
-                if let Ok(mut guard) = app_clone.state::<ServerProcess>().0.lock() {
-                    *guard = None;
+                let payload = serde_json::json!({ "project": project_id_clone, "code": exit_code });
+                let _ = app_clone.emit("server-stopped", payload);
+                // Clear stored entry since process is gone
+                if let Ok(mut guard) = app_clone.state::<ServerProcesses>().0.lock() {
+                    guard.remove(&project_id_clone);
                 }
             }
         });
@@ -102,6 +112,7 @@ pub async fn start_server(
         let app_clone = app.clone();
         let count = reader_count.clone();
         let pid_for_wait = pid;
+        let project_id_clone = project_id.clone();
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
             loop {
@@ -109,7 +120,8 @@ pub async fn start_server(
                     Ok(0) => break, // EOF
                     Ok(n) => {
                         let text = String::from_utf8_lossy(&buf[..n]).to_string();
-                        let _ = app_clone.emit("server-output", &text);
+                        let payload = serde_json::json!({ "project": project_id_clone, "text": text });
+                        let _ = app_clone.emit("server-output", payload);
                     }
                     Err(_) => break,
                 }
@@ -123,9 +135,10 @@ pub async fn start_server(
                 } else {
                     0
                 };
-                let _ = app_clone.emit("server-stopped", exit_code);
-                if let Ok(mut guard) = app_clone.state::<ServerProcess>().0.lock() {
-                    *guard = None;
+                let payload = serde_json::json!({ "project": project_id_clone, "code": exit_code });
+                let _ = app_clone.emit("server-stopped", payload);
+                if let Ok(mut guard) = app_clone.state::<ServerProcesses>().0.lock() {
+                    guard.remove(&project_id_clone);
                 }
             }
         });
@@ -134,22 +147,24 @@ pub async fn start_server(
     Ok(())
 }
 
-/// Stop the running server process.
+/// Stop the running server process for a specific project.
 #[tauri::command]
-pub async fn stop_server(app: AppHandle) -> Result<(), String> {
-    stop_server_inner(&app)
+pub async fn stop_server(project_id: String, app: AppHandle) -> Result<(), String> {
+    stop_server_for_project(&app, &project_id)
 }
 
-/// Restart the server: stop existing, emit restart marker, start new.
+/// Restart the server for a specific project: stop existing, emit restart marker, start new.
 #[tauri::command]
 pub async fn restart_server(
     cmd: String,
     cwd: String,
+    project_id: String,
     app: AppHandle,
 ) -> Result<(), String> {
-    stop_server_inner(&app)?;
-    let _ = app.emit("server-output", "[server] --- Restarting ---\n");
-    start_server(cmd, cwd, app).await
+    stop_server_for_project(&app, &project_id)?;
+    let payload = serde_json::json!({ "project": project_id, "text": "[server] --- Restarting ---\n" });
+    let _ = app.emit("server-output", payload);
+    start_server(cmd, cwd, project_id, app).await
 }
 
 /// Detect whether an agent binary exists in PATH.
@@ -169,25 +184,70 @@ pub fn detect_agent(agent: String) -> Result<String, String> {
     }
 }
 
-/// Internal helper to kill the running server process (SIGTERM + SIGKILL fallback).
-fn stop_server_inner(app: &AppHandle) -> Result<(), String> {
-    let sp = app.state::<ServerProcess>();
+/// Kill the server process for a specific project (SIGTERM + SIGKILL fallback).
+fn stop_server_for_project(app: &AppHandle, project_id: &str) -> Result<(), String> {
+    let sp = app.state::<ServerProcesses>();
     let mut guard = sp.0.lock().map_err(|e| e.to_string())?;
-    if let Some(ref mut child) = *guard {
-        let pid = child.id() as i32;
+    if let Some(entry) = guard.remove(project_id) {
+        let pid = entry.pid as i32;
         // Send SIGTERM to the entire process group
         unsafe {
             libc::killpg(pid, libc::SIGTERM);
         }
-        // Spawn a thread for SIGKILL fallback after 3 seconds
+        // Reap the process in a background thread to prevent zombies
         std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_secs(3));
-            // SIGKILL if still alive
+            let mut status: libc::c_int = 0;
+            // Wait up to 3 seconds for graceful shutdown
+            for _ in 0..30 {
+                let result = unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) };
+                if result != 0 {
+                    return; // Process reaped (either exited or error)
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            // SIGKILL if still alive after 3 seconds
             unsafe {
                 libc::killpg(pid, libc::SIGKILL);
             }
+            // Final waitpid to reap after SIGKILL
+            unsafe {
+                libc::waitpid(pid, &mut status, 0);
+            }
         });
     }
-    *guard = None;
     Ok(())
+}
+
+/// Kill ALL running server processes across all projects.
+/// Used by close handler to ensure no zombie servers survive app exit.
+pub fn kill_all_servers(app: &AppHandle) {
+    // Collect PIDs under lock, then release lock before spawning threads
+    let pids: Vec<u32> = {
+        let sp = app.state::<ServerProcesses>();
+        let Ok(mut guard) = sp.0.lock() else { return };
+        guard.drain().map(|(_, entry)| entry.pid).collect()
+    };
+    for pid in pids {
+        let pid = pid as i32;
+        unsafe {
+            libc::killpg(pid, libc::SIGTERM);
+        }
+        // Spawn reaper thread for each
+        std::thread::spawn(move || {
+            let mut status: libc::c_int = 0;
+            for _ in 0..30 {
+                let result = unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) };
+                if result != 0 {
+                    return;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            unsafe {
+                libc::killpg(pid, libc::SIGKILL);
+            }
+            unsafe {
+                libc::waitpid(pid, &mut status, 0);
+            }
+        });
+    }
 }
