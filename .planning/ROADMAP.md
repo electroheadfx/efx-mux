@@ -166,7 +166,7 @@ Plans:
 Plans:
 - [x] 07-01-PLAN.md -- Rust server process manager + frontend bridge modules
 - [x] 07-02-PLAN.md -- Server pane UI component + agent detection + Ctrl+` handler
-- [ ] 07-03-PLAN.md -- Gap closure: install plugin-opener + agent detection on project switch
+- [x] 07-03-PLAN.md -- Gap closure: install plugin-opener + agent detection on project switch
 
 **UI hint**: yes
 
