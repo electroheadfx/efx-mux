@@ -147,6 +147,21 @@ pub fn run() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application")
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { .. } = &event {
+                // Kill ALL server processes on Cmd+Q / app quit (07-09: T-07-10)
+                kill_all_servers(app_handle);
+
+                // Synchronously save the latest in-memory state to disk.
+                let managed = app_handle.state::<ManagedAppState>();
+                let snapshot = managed.0.lock().ok().map(|g| g.clone());
+                if let Some(ref s) = snapshot {
+                    if let Err(e) = state::save_state_sync(s) {
+                        eprintln!("[efxmux] WARNING: Failed to save state on quit: {}", e);
+                    }
+                }
+            }
+        });
 }
