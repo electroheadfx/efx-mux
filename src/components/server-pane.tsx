@@ -149,6 +149,7 @@ export function ServerPane() {
   };
 
   const handleStop = async () => {
+    isRestarting = false; // 07-04: Cancel any active restart guard
     serverLogs.value = [...serverLogs.value, ansiToHtml('[server] Stopped\n')];
     serverStatus.value = 'stopped';
     try {
@@ -161,6 +162,7 @@ export function ServerPane() {
   const handleRestart = async () => {
     const proj = getActiveProjectEntry();
     if (!proj?.server_cmd) return;
+    isRestarting = true; // 07-04: Suppress stale server-stopped events during restart
     serverLogs.value = [...serverLogs.value, ansiToHtml('[server] --- Restarting ---\n')];
     serverStatus.value = 'running';
     try {
@@ -168,6 +170,8 @@ export function ServerPane() {
     } catch (err) {
       serverLogs.value = [...serverLogs.value, ansiToHtml(`[server] Restart failed: ${err}\n`)];
       serverStatus.value = 'crashed';
+    } finally {
+      setTimeout(() => { isRestarting = false; }, 2000);
     }
   };
 
