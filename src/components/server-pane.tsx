@@ -17,7 +17,7 @@ import { projects, activeProjectName, updateLayout } from '../state-manager';
 import { initDragManager } from '../drag-manager';
 
 // ---------------------------------------------------------------------------
-// Module-level signals (exported for main.tsx Ctrl+` handler and state restore)
+// Module-level signals (exported for main.tsx Ctrl+S handler and state restore)
 // ---------------------------------------------------------------------------
 
 export const serverPaneState = signal<'strip' | 'expanded' | 'collapsed'>('strip');
