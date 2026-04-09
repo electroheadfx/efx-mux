@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-07)
 Phase: 09
 Plan: Not started
 Status: Ready to execute
-Last activity: 2026-04-09
+Last activity: 2026-04-09 - Completed quick task 260409-ciq: Replace Ctrl+` with Ctrl+S, fix terminal exit, free-text agent input
 
 Progress: [████████████████████] 15/15 plans (100%)
 
@@ -94,6 +94,7 @@ None yet.
 | 260408-rco | UI fixes round 2: terminal scroll, white flash, bash theme | 2026-04-08 | cd00f6e | [260408-rco-ui-fixes-round-2-fix-terminal-scroll-reg](./quick/260408-rco-ui-fixes-round-2-fix-terminal-scroll-reg/) |
 | 260408-dbg | Debug: tmux mouse scroll, project-specific sessions, silent switch | 2026-04-08 | 8c6c1f0 | [debug/ui-regressions-round3](./debug/ui-regressions-round3.md) |
 | 260408-w4c | Mark Phase 6.1 complete in ROADMAP.md | 2026-04-08 | - | [260408-w4c-mark-phase-6-1-complete-in-roadmap-md](./quick/260408-w4c-mark-phase-6-1-complete-in-roadmap-md/) |
+| 260409-ciq | Replace Ctrl+` with Ctrl+S, fix terminal exit, free-text agent input | 2026-04-09 | 4d824b3 | [260409-ciq-replace-ctrl-backtick-with-ctrl-s-for-se](./quick/260409-ciq-replace-ctrl-backtick-with-ctrl-s-for-se/) |
 
 ## Session Continuity
 
