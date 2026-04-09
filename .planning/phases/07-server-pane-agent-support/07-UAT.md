@@ -58,11 +58,35 @@ result: pass
 expected: Switch to a different project (via project switcher). Agent detection runs for the new project directory and the correct agent binary is used for the new tmux session.
 result: pass
 
+### 11. Server Pane Per-Workspace Isolation
+expected: Each workspace/project has its own independent server pane. Switching workspaces should show/hide the corresponding server pane with its own process and logs.
+result: issue
+reported: "server pane doesn't change with workspace project change, each workspace has its own pane server"
+severity: major
+
+### 12. Clear Server Pane Log
+expected: A way to clear the server pane log output (button or shortcut). After clearing, the pane is empty and new output appends fresh.
+result: issue
+reported: "should be able to clear the pane server log"
+severity: minor
+
+### 13. Server Pane Header Shows Project Name
+expected: The server pane header shows "SERVER <Project Name>" instead of just "SERVER", so the user knows which project's server is running.
+result: issue
+reported: "server pane header should show SERVER <Project Name> instead of just SERVER"
+severity: minor
+
+### 14. Server Status Indicator on Tauri Project
+expected: When starting a Tauri project server (pnpm tauri dev), the status indicator shows green (running). When the app quits, status and buttons update correctly to stopped.
+result: issue
+reported: "when I start server on Tauri project: pnpm tauri dev, if I quit the app, the pane server doesn't update well in buttons and status. At first server open it shows red instead of green"
+severity: major
+
 ## Summary
 
-total: 10
+total: 14
 passed: 7
-issues: 3
+issues: 7
 pending: 0
 skipped: 0
 blocked: 0
@@ -111,4 +135,44 @@ blocked: 0
       issue: "restart_server waiter thread emits server-stopped for old process after new process starts"
   missing:
     - "Add isRestarting flag or PID tracking to suppress crash detection during restart window"
+  debug_session: ""
+
+- truth: "Each workspace/project has its own independent server pane with separate process and logs"
+  status: failed
+  reason: "User reported: server pane doesn't change with workspace project change, each workspace has its own pane server"
+  severity: major
+  test: 11
+  root_cause: ""
+  artifacts: []
+  missing: []
+  debug_session: ""
+
+- truth: "User can clear the server pane log output"
+  status: failed
+  reason: "User reported: should be able to clear the pane server log"
+  severity: minor
+  test: 12
+  root_cause: ""
+  artifacts: []
+  missing: []
+  debug_session: ""
+
+- truth: "Server pane header displays SERVER <Project Name>"
+  status: failed
+  reason: "User reported: server pane header should show SERVER <Project Name> instead of just SERVER"
+  severity: minor
+  test: 13
+  root_cause: ""
+  artifacts: []
+  missing: []
+  debug_session: ""
+
+- truth: "Server status indicator and buttons update correctly for Tauri projects (pnpm tauri dev)"
+  status: failed
+  reason: "User reported: when starting pnpm tauri dev, status shows red instead of green at first, and buttons/status don't update correctly when app quits"
+  severity: major
+  test: 14
+  root_cause: ""
+  artifacts: []
+  missing: []
   debug_session: ""
