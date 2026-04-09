@@ -162,13 +162,15 @@ Plans:
   4. App detects and launches `claude` or `opencode` binary directly in a tmux PTY (verified: no wrapping or protocol modification)
   5. If neither agent binary is found, app falls back to a plain bash session with a banner explaining the situation
 
-**Plans**: 5 plans
+**Plans**: 7 plans
 Plans:
 - [x] 07-01-PLAN.md -- Rust server process manager + frontend bridge modules
 - [x] 07-02-PLAN.md -- Server pane UI component + agent detection + Ctrl+` handler
 - [x] 07-03-PLAN.md -- Gap closure: install plugin-opener + agent detection on project switch
-- [ ] 07-04-PLAN.md -- UAT gap closure: ANSI colors, clean SIGTERM stop, restart toolbar race
-- [ ] 07-05-PLAN.md -- UAT gap closure: workspace isolation, clear button, project name, waitpid fix
+- [x] 07-04-PLAN.md -- UAT gap closure: ANSI colors, clean SIGTERM stop, restart toolbar race
+- [x] 07-05-PLAN.md -- UAT gap closure: workspace isolation, clear button, project name, waitpid fix
+- [ ] 07-06-PLAN.md -- UAT gap closure: per-project server HashMap, reliable kill, close-all
+- [ ] 07-07-PLAN.md -- UAT gap closure: ANSI color visibility, auto-scroll, full project name
 
 **UI hint**: yes
 
@@ -203,7 +205,7 @@ Phases execute in numeric order. Note: Phases 3 and 6 are parallelizable after P
 | 5. Project System + Sidebar | 2/2 | Complete | 2026-04-07 |
 | 6. Right Panel Views | 7/7 | Complete | 2026-04-08 |
 | 6.1 Migrate Arrow.js -> Preact | 6/6 | Complete | 2026-04-08 |
-| 7. Server Pane + Agent Support | 0/TBD | Not started | - |
+| 7. Server Pane + Agent Support | 5/7 | In Progress | - |
 | 8. Keyboard + Polish | 0/TBD | Not started | - |
 
 ### Phase 9: Rich Dashboard Views — Parse STATE.md and ROADMAP.md as structured data, render as designed Preact dashboard with progress bars, phase cards, status badges, decision logs
