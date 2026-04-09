@@ -67,7 +67,7 @@
 - [ ] **AGENT-03**: App detects `claude` binary and launches it directly in a tmux PTY (no wrapping, no protocol modification)
 - [ ] **AGENT-04**: App detects `opencode` binary and launches it directly in a tmux PTY (no wrapping, no protocol modification)
 - [ ] **AGENT-05**: If neither `claude` nor `opencode` is found, app falls back to spawning a plain bash session with a banner message
-- [ ] **AGENT-06**: Per-project config specifies which agent to launch (claude / opencode / custom / bash)
+- [x] **AGENT-06**: Per-project config specifies which agent to launch (claude / opencode / custom / bash)
 
 ### Keyboard & UX
 
@@ -155,7 +155,7 @@
 | AGENT-03 | Phase 7 | Pending |
 | AGENT-04 | Phase 7 | Pending |
 | AGENT-05 | Phase 7 | Pending |
-| AGENT-06 | Phase 7 | Pending |
+| AGENT-06 | Phase 7 | Complete |
 | UX-01 | Phase 8 | Pending |
 | UX-02 | Phase 8 | Pending |
 | UX-03 | Phase 8 | Pending |

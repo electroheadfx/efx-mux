@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 7 UI-SPEC approved
-last_updated: "2026-04-09T12:31:17.634Z"
+stopped_at: Completed 07-09-PLAN.md
+last_updated: "2026-04-09T15:57:20.207Z"
 last_activity: 2026-04-09
 progress:
   total_phases: 10
-  completed_phases: 8
-  total_plans: 37
-  completed_plans: 37
-  percent: 100
+  completed_phases: 7
+  total_plans: 39
+  completed_plans: 38
+  percent: 97
 ---
 
 # Project State
@@ -56,6 +56,7 @@ Progress: [████████████████████] 15/15 p
 
 *Updated after each plan completion*
 | Phase 06.1 P06 | 3min | 2 tasks | 5 files |
+| Phase 07 P09 | 96s | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,7 @@ Recent decisions affecting current work:
 - [Phase 4]: State persisted to ~/.config/efxmux/state.json via Rust atomic write (tmp+rename). JS state-manager.js bridges frontend to Rust.
 - [Phase 4]: Theme persistence uses session-scoped module variable for manual toggle (not localStorage) so OS listener resets on restart.
 - [Phase 06.1]: Added vite-env.d.ts for CSS import type declarations (missing from Preact migration setup)
+- [Phase 07]: Intentional redundancy: both CloseRequested and ExitRequested handlers call kill_all_servers
 
 ### Pending Todos
 
@@ -99,6 +101,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-08T21:51:16.399Z
-Stopped at: Phase 7 UI-SPEC approved
-Resume file: .planning/phases/07-server-pane-agent-support/07-UI-SPEC.md
+Last session: 2026-04-09T15:57:20.204Z
+Stopped at: Completed 07-09-PLAN.md
+Resume file: None
