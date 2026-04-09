@@ -170,7 +170,7 @@
   font-family: var(--font-family-mono);
   font-size: 12px;
   line-height: 1.5;
-  color: inherit;
+  color: var(--color-text);
   white-space: pre-wrap;
   word-break: break-all;
 }

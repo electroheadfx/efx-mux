@@ -126,15 +126,14 @@ export function ServerPane() {
     'currentColor';
   const dotOpacity = (status === 'stopped' || status === 'unconfigured') ? '0.4' : '1';
 
-  // Auto-scroll on new logs
+  // Auto-scroll on new logs (07-07: unconditional + requestAnimationFrame for correct timing)
   useEffect(() => {
     const el = logRef.current;
     if (!el) return;
-    // Auto-scroll if user is near the bottom
-    const isNearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
-    if (isNearBottom) {
+    requestAnimationFrame(() => {
+      if (!el) return;
       el.scrollTop = el.scrollHeight;
-    }
+    });
   }, [serverLogs.value]);
 
   // Server output + stopped listeners (07-06: filter by active project)
