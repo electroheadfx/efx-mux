@@ -44,6 +44,13 @@ export function createTerminal(container: HTMLElement, options: TerminalOptions 
   terminal.attachCustomKeyEventHandler((ev: KeyboardEvent): boolean => {
     if (ev.type !== 'keydown') return true;
 
+    // Cmd+K -> clear terminal scrollback (standard macOS shortcut)
+    if (ev.metaKey && !ev.ctrlKey && !ev.altKey && (ev.key === 'k' || ev.key === 'K')) {
+      ev.preventDefault();
+      terminal.clear();
+      return false;
+    }
+
     // Cmd+Left -> beginning of line (Ctrl+A)
     if (ev.metaKey && ev.key === 'ArrowLeft') {
       ev.preventDefault();
