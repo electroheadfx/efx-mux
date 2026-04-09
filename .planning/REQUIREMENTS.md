@@ -62,9 +62,9 @@
 
 ### Server Pane & Agent Launcher
 
-- [ ] **AGENT-01**: Main panel has a collapsable server pane (bottom split, Ctrl+\` toggle) with Open in Browser / Restart / Stop actions
+- [x] **AGENT-01**: Main panel has a collapsable server pane (bottom split, Ctrl+\` toggle) with Open in Browser / Restart / Stop actions
 - [ ] **AGENT-02**: Open in Browser launches the dev server URL in the system default browser via Tauri `shell::open`
-- [ ] **AGENT-03**: App detects `claude` binary and launches it directly in a tmux PTY (no wrapping, no protocol modification)
+- [x] **AGENT-03**: App detects `claude` binary and launches it directly in a tmux PTY (no wrapping, no protocol modification)
 - [ ] **AGENT-04**: App detects `opencode` binary and launches it directly in a tmux PTY (no wrapping, no protocol modification)
 - [ ] **AGENT-05**: If neither `claude` nor `opencode` is found, app falls back to spawning a plain bash session with a banner message
 - [ ] **AGENT-06**: Per-project config specifies which agent to launch (claude / opencode / custom / bash)
@@ -150,9 +150,9 @@
 | PANEL-05 | Phase 6 | Pending |
 | PANEL-06 | Phase 6 | Pending |
 | PANEL-07 | Phase 6 | Pending |
-| AGENT-01 | Phase 7 | Pending |
+| AGENT-01 | Phase 7 | Complete |
 | AGENT-02 | Phase 7 | Pending |
-| AGENT-03 | Phase 7 | Pending |
+| AGENT-03 | Phase 7 | Complete |
 | AGENT-04 | Phase 7 | Pending |
 | AGENT-05 | Phase 7 | Pending |
 | AGENT-06 | Phase 7 | Pending |
