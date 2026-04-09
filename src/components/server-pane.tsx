@@ -34,6 +34,20 @@ const MAX_LOG_LINES = 5000;
 // 07-04: Guard flag for restart race condition (not a signal -- no re-render needed)
 let isRestarting = false;
 
+// 07-05: Timestamp of last server start (for grace period on multi-stage commands)
+let serverStartedAt = 0;
+
+// ---------------------------------------------------------------------------
+// Public API for workspace isolation (07-05, gap 11)
+// ---------------------------------------------------------------------------
+
+/** Reset all server pane signals to defaults. Called on project switch. */
+export function resetServerPane() {
+  serverStatus.value = 'stopped';
+  serverLogs.value = [];
+  detectedUrl.value = null;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -211,6 +225,11 @@ export function ServerPane() {
               aria-label={`Server status: ${status}`}
             />
             <span class="text-text-bright text-[11px] tracking-wider uppercase">Server</span>
+            {activeProjectName.value && (
+              <span class="text-text text-[11px] opacity-70 normal-case ml-1">
+                {activeProjectName.value}
+              </span>
+            )}
             <button
               class="server-btn"
               title={paneState === 'expanded' ? 'Collapse server pane' : 'Expand server pane'}
@@ -218,6 +237,11 @@ export function ServerPane() {
             >{paneState === 'expanded' ? '▾' : '▸'}</button>
           </div>
           <div class="flex gap-1.5 items-center">
+            <button
+              class="server-btn"
+              title="Clear server log"
+              onClick={() => { serverLogs.value = []; }}
+            >Clear</button>
             <button
               class="server-btn"
               title="Start server"

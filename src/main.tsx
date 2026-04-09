@@ -26,7 +26,7 @@ import {
   getProjects, getActiveProject, projects, activeProjectName
 } from './state-manager';
 import { openProjectModal } from './components/project-modal';
-import { serverPaneState } from './components/server-pane';
+import { serverPaneState, resetServerPane } from './components/server-pane';
 import { detectAgent } from './server/server-bridge';
 
 /**
@@ -308,11 +308,13 @@ document.addEventListener('project-changed', async (e: Event) => {
       }));
       rightCurrentSession = newRightSession;
 
-      // Stop any running server on project switch, then check new project's server config
+      // Stop any running server on project switch, then reset pane state (07-05, gap 11)
       try {
         const { stopServer } = await import('./server/server-bridge');
         await stopServer();
       } catch { /* no server running, ignore */ }
+      // Reset frontend server pane signals for clean workspace isolation
+      resetServerPane();
     }
   } catch (err) {
     console.warn('[efxmux] Failed to switch project:', err);
