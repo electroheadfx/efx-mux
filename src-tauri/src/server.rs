@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::io::Read;
+use std::io::BufRead;
 use std::os::unix::process::CommandExt;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -68,19 +68,18 @@ pub async fn start_server(
         return Ok(());
     }
 
-    // Spawn stdout reader thread
-    if let Some(mut stdout) = stdout {
+    // Spawn stdout reader thread (line-buffered to preserve ANSI sequences)
+    if let Some(stdout) = stdout {
         let app_clone = app.clone();
         let count = reader_count.clone();
         let pid_for_wait = pid;
         let project_id_clone = project_id.clone();
         std::thread::spawn(move || {
-            let mut buf = [0u8; 4096];
-            loop {
-                match stdout.read(&mut buf) {
-                    Ok(0) => break, // EOF
-                    Ok(n) => {
-                        let text = String::from_utf8_lossy(&buf[..n]).to_string();
+            let reader = std::io::BufReader::new(stdout);
+            for line in reader.lines() {
+                match line {
+                    Ok(text) => {
+                        let text = text + "\n"; // Restore newline stripped by lines()
                         let payload = serde_json::json!({ "project": project_id_clone, "text": text });
                         let _ = app_clone.emit("server-output", payload);
                     }
@@ -111,19 +110,18 @@ pub async fn start_server(
         });
     }
 
-    // Spawn stderr reader thread (same EOF pattern)
-    if let Some(mut stderr) = stderr {
+    // Spawn stderr reader thread (line-buffered, same EOF pattern)
+    if let Some(stderr) = stderr {
         let app_clone = app.clone();
         let count = reader_count.clone();
         let pid_for_wait = pid;
         let project_id_clone = project_id.clone();
         std::thread::spawn(move || {
-            let mut buf = [0u8; 4096];
-            loop {
-                match stderr.read(&mut buf) {
-                    Ok(0) => break, // EOF
-                    Ok(n) => {
-                        let text = String::from_utf8_lossy(&buf[..n]).to_string();
+            let reader = std::io::BufReader::new(stderr);
+            for line in reader.lines() {
+                match line {
+                    Ok(text) => {
+                        let text = text + "\n"; // Restore newline stripped by lines()
                         let payload = serde_json::json!({ "project": project_id_clone, "text": text });
                         let _ = app_clone.emit("server-output", payload);
                     }
