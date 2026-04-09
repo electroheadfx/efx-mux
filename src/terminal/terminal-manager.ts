@@ -75,13 +75,17 @@ export function createTerminal(container: HTMLElement, options: TerminalOptions 
       terminal.write('\x1bf'); // ESC f - word forward
       return false;
     }
-    // Ctrl+Shift+T -> let document handler toggle dark/light mode (THEME-04)
-    if (ev.ctrlKey && ev.shiftKey && ev.key === 'T') {
-      return false;
-    }
-    // Ctrl+B -> let document handler toggle sidebar (LAYOUT-03)
-    if (ev.ctrlKey && ev.key === 'b') {
-      return false;
+    // Block all Ctrl+key app shortcuts from reaching terminal (D-01, UX-01)
+    if (ev.ctrlKey && !ev.metaKey) {
+      const k = ev.key.toLowerCase();
+      // App-claimed non-shift keys
+      if (!ev.shiftKey && !ev.altKey && ['t', 'w', 'b', 's', 'p', 'k'].includes(k)) return false;
+      // Ctrl+Tab
+      if (ev.key === 'Tab' && !ev.shiftKey) return false;
+      // Ctrl+? (Ctrl+Shift+/) and Ctrl+/
+      if (k === '/' || ev.key === '?') return false;
+      // Ctrl+Shift+T (theme toggle)
+      if (k === 't' && ev.shiftKey) return false;
     }
     return true;
   });

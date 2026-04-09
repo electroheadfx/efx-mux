@@ -16,6 +16,7 @@ import { MainPanel } from './components/main-panel';
 import { RightPanel } from './components/right-panel';
 import { ProjectModal } from './components/project-modal';
 import { FuzzySearch } from './components/fuzzy-search';
+import { ShortcutCheatsheet, toggleCheatsheet } from './components/shortcut-cheatsheet';
 import { initDragManager } from './drag-manager';
 import { createTerminal } from './terminal/terminal-manager';
 import { connectPty } from './terminal/pty-bridge';
@@ -69,6 +70,7 @@ function App() {
       <RightPanel />
       <ProjectModal />
       <FuzzySearch />
+      <ShortcutCheatsheet />
     </div>
   );
 }
@@ -109,31 +111,63 @@ async function bootstrap() {
   // Step 5: Init project system
   initProjects();
 
-  // Step 6: Keyboard handlers
-  document.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.ctrlKey && e.key === 'b') {
-      e.preventDefault();
-      sidebarCollapsed.value = !sidebarCollapsed.value;
-    }
-    if (e.ctrlKey && e.shiftKey && e.key === 'T') {
-      e.preventDefault();
-      toggleThemeMode();
-    }
-  });
+  // Step 6: Consolidated keyboard handler (D-01, D-02, UX-01)
+  // Single capture-phase listener fires before xterm.js
+  // Terminal passthrough set (D-02): c, d, z, l, r always reach terminal
+  const TERMINAL_PASSTHROUGH = new Set(['c', 'd', 'z', 'l', 'r']);
 
-  // Ctrl+S handler for server pane 2-state toggle (D-01)
-  // Replaces Ctrl+` which is broken on French AZERTY keyboards
-  // MUST use capture: true to fire before xterm.js (RESEARCH.md Pitfall 3)
   document.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === 's' || e.key === 'S')) {
-      e.preventDefault();
-      e.stopPropagation();
-      serverPaneState.value = serverPaneState.value === 'strip' ? 'expanded' : 'strip';
-      updateLayout({ 'server-pane-state': serverPaneState.value });
-      // Re-init drag manager when expanding so main-h handle gets wired
-      if (serverPaneState.value === 'expanded') {
-        requestAnimationFrame(() => initDragManager());
-      }
+    if (!e.ctrlKey || e.metaKey) return;
+
+    const key = e.key.toLowerCase();
+
+    // Terminal passthrough: never intercept Ctrl+C/D/Z/L/R (D-02)
+    if (TERMINAL_PASSTHROUGH.has(key) && !e.shiftKey && !e.altKey) return;
+
+    // App shortcuts
+    switch (true) {
+      case key === 'b' && !e.shiftKey && !e.altKey:
+        e.preventDefault(); e.stopPropagation();
+        sidebarCollapsed.value = !sidebarCollapsed.value;
+        break;
+      case key === 's' && !e.shiftKey && !e.altKey:
+        e.preventDefault(); e.stopPropagation();
+        serverPaneState.value = serverPaneState.value === 'strip' ? 'expanded' : 'strip';
+        updateLayout({ 'server-pane-state': serverPaneState.value });
+        if (serverPaneState.value === 'expanded') {
+          requestAnimationFrame(() => initDragManager());
+        }
+        break;
+      case key === 't' && !e.shiftKey && !e.altKey:
+        e.preventDefault(); e.stopPropagation();
+        // createNewTab() -- wired in Plan 02
+        break;
+      case key === 'w' && !e.shiftKey && !e.altKey:
+        e.preventDefault(); e.stopPropagation();
+        // closeActiveTab() -- wired in Plan 02
+        break;
+      case e.key === 'Tab' && e.ctrlKey && !e.shiftKey && !e.altKey:
+        e.preventDefault(); e.stopPropagation();
+        // cycleToNextTab() -- wired in Plan 02
+        break;
+      case key === 'p' && !e.shiftKey && !e.altKey:
+        e.preventDefault(); e.stopPropagation();
+        // fuzzy search is handled by its own module-scope listener
+        break;
+      case (key === '/' && e.shiftKey) || (e.key === '?' && !e.altKey):
+        // Ctrl+? = Ctrl+Shift+/ on US layout, also handle e.key === '?' for AZERTY (D-03)
+        e.preventDefault(); e.stopPropagation();
+        toggleCheatsheet();
+        break;
+      case key === '/' && !e.shiftKey && !e.altKey:
+        // Ctrl+/ as AZERTY fallback for cheatsheet (UI-SPEC)
+        e.preventDefault(); e.stopPropagation();
+        toggleCheatsheet();
+        break;
+      case key === 't' && e.shiftKey && !e.altKey:
+        e.preventDefault(); e.stopPropagation();
+        toggleThemeMode();
+        break;
     }
   }, { capture: true });
 
