@@ -169,8 +169,8 @@ Plans:
 - [x] 07-03-PLAN.md -- Gap closure: install plugin-opener + agent detection on project switch
 - [x] 07-04-PLAN.md -- UAT gap closure: ANSI colors, clean SIGTERM stop, restart toolbar race
 - [x] 07-05-PLAN.md -- UAT gap closure: workspace isolation, clear button, project name, waitpid fix
-- [ ] 07-06-PLAN.md -- UAT gap closure: per-project server HashMap, reliable kill, close-all
-- [ ] 07-07-PLAN.md -- UAT gap closure: ANSI color visibility, auto-scroll, full project name
+- [x] 07-06-PLAN.md -- UAT gap closure: per-project server HashMap, reliable kill, close-all
+- [x] 07-07-PLAN.md -- UAT gap closure: ANSI color visibility, auto-scroll, full project name
 
 **UI hint**: yes
 
