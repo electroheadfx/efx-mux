@@ -17,6 +17,7 @@ import { RightPanel } from './components/right-panel';
 import { ProjectModal } from './components/project-modal';
 import { FuzzySearch } from './components/fuzzy-search';
 import { ShortcutCheatsheet, toggleCheatsheet } from './components/shortcut-cheatsheet';
+import { FirstRunWizard, openWizard } from './components/first-run-wizard';
 import { initDragManager } from './drag-manager';
 import { initTheme, registerTerminal, toggleThemeMode } from './theme/theme-manager';
 import { createNewTab, closeActiveTab, cycleToNextTab, initFirstTab, clearAllTabs } from './components/terminal-tabs';
@@ -55,6 +56,7 @@ function App() {
       <ProjectModal />
       <FuzzySearch />
       <ShortcutCheatsheet />
+      <FirstRunWizard />
     </div>
   );
 }
@@ -264,7 +266,7 @@ async function initProjects() {
     const projectList = await getProjects();
     projects.value = projectList;
     if (projectList.length === 0) {
-      openProjectModal({ firstRun: true });
+      openWizard();
       return;
     }
     const activeName = await getActiveProject();
