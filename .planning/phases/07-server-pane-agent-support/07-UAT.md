@@ -142,9 +142,17 @@ blocked: 0
   reason: "User reported: server pane doesn't change with workspace project change, each workspace has its own pane server"
   severity: major
   test: 11
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "Server state (serverStatus, serverLogs, detectedUrl) stored as global singleton signals in server-pane.tsx. Rust backend uses single ServerProcess(Mutex<Option<Child>>). Project-changed listener stops old server but never resets frontend signals."
+  artifacts:
+    - path: "src/components/server-pane.tsx"
+      issue: "serverPaneState, serverStatus, serverLogs are module-level singletons shared across all workspaces"
+    - path: "src/main.tsx"
+      issue: "project-changed listener stops server but doesn't reset server pane signals"
+    - path: "src-tauri/src/server.rs"
+      issue: "Single global ServerProcess state, not per-project"
+  missing:
+    - "Reset serverStatus, serverLogs, detectedUrl in project-changed listener after stopServer()"
+    - "Consider per-workspace server state map for full isolation"
   debug_session: ""
 
 - truth: "User can clear the server pane log output"
@@ -152,9 +160,12 @@ blocked: 0
   reason: "User reported: should be able to clear the pane server log"
   severity: minor
   test: 12
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "No clear button or shortcut exists in the server pane toolbar. Missing feature."
+  artifacts:
+    - path: "src/components/server-pane.tsx"
+      issue: "No clear log action in toolbar"
+  missing:
+    - "Add Clear button to server pane toolbar that resets serverLogs signal to empty array"
   debug_session: ""
 
 - truth: "Server pane header displays SERVER <Project Name>"
@@ -162,9 +173,12 @@ blocked: 0
   reason: "User reported: server pane header should show SERVER <Project Name> instead of just SERVER"
   severity: minor
   test: 13
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "Header hardcoded as 'SERVER' in server-pane.tsx. Missing feature."
+  artifacts:
+    - path: "src/components/server-pane.tsx"
+      issue: "Header text is hardcoded 'SERVER' without project name"
+  missing:
+    - "Use activeProjectName signal to display 'SERVER <Project Name>' in header"
   debug_session: ""
 
 - truth: "Server status indicator and buttons update correctly for Tauri projects (pnpm tauri dev)"
@@ -172,7 +186,13 @@ blocked: 0
   reason: "User reported: when starting pnpm tauri dev, status shows red instead of green at first, and buttons/status don't update correctly when app quits"
   severity: major
   test: 14
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "waitpid waiter thread fires prematurely for multi-stage commands like pnpm tauri dev. Process group leader can exit before Vite server fully initializes, causing server-stopped event while status is 'running', flipping to 'crashed'. On quit, handleStop sets status to 'stopped' before stopServer() completes, leaving buttons in stale state."
+  artifacts:
+    - path: "src-tauri/src/server.rs"
+      issue: "waitpid fires prematurely for composite commands (pnpm tauri dev spawns child processes in stages)"
+    - path: "src/components/server-pane.tsx"
+      issue: "listenServerStopped flips to 'crashed' on premature waitpid exit; handleStop sets 'stopped' before cleanup completes"
+  missing:
+    - "Make waiter thread more resilient to multi-stage process launches"
+    - "Sync status state machine with actual process lifecycle events"
   debug_session: ""
