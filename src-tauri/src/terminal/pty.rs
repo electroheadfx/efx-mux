@@ -84,12 +84,13 @@ pub async fn spawn_terminal(
             cmd.args(["-c", dir]);
         }
     }
-    // If shell_command is provided (e.g., agent binary), wrap it so bash survives
-    // after the agent exits (Ctrl+C, /exit, etc.) — user lands in bash instead of
-    // the tmux session dying (AGENT-03/04: agent launches in tmux PTY)
+    // If shell_command is provided (e.g., agent binary), wrap it so the user's shell
+    // survives after the agent exits (Ctrl+C, /exit, etc.) — user lands in their
+    // default shell instead of the tmux session dying (AGENT-03/04)
     if let Some(ref shell_cmd) = shell_command {
         if !shell_cmd.is_empty() {
-            let wrapped = format!("bash -c '{}; exec bash'", shell_cmd);
+            let user_shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+            let wrapped = format!("{} -c '{}; exec {}'", user_shell, shell_cmd, user_shell);
             cmd.arg(&wrapped);
         }
     }
@@ -251,12 +252,13 @@ pub fn switch_tmux_session(
                 args.push(&dir_str);
             }
         }
-        // If a shell command (agent binary) is specified, wrap it so bash survives
-        // after the agent exits — same wrapping as spawn_terminal (AGENT-03, AGENT-04).
+        // If a shell command (agent binary) is specified, wrap it so the user's shell
+        // survives after the agent exits — same wrapping as spawn_terminal (AGENT-03, AGENT-04).
         let shell_cmd_str;
         if let Some(ref cmd) = shell_command {
             if !cmd.is_empty() {
-                shell_cmd_str = format!("bash -c '{}; exec bash'", cmd);
+                let user_shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+                shell_cmd_str = format!("{} -c '{}; exec {}'", user_shell, cmd, user_shell);
                 args.push(&shell_cmd_str);
             }
         }
