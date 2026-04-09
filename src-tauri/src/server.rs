@@ -35,9 +35,13 @@ pub async fn start_server(
     stop_server_for_project(&app, &project_id)?;
 
     // Spawn the server process in its own process group
+    // FORCE_COLOR=1: piped stdout is not a TTY, so most tools (Node/chalk/npm)
+    // disable ANSI colors. This env var re-enables them.
     let mut child = Command::new("sh")
         .args(["-c", &cmd])
         .current_dir(&cwd)
+        .env("FORCE_COLOR", "1")
+        .env("CLICOLOR_FORCE", "1")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .process_group(0)

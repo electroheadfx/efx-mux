@@ -298,7 +298,7 @@ export function ServerPane() {
   return (
     <div class={`server-pane ${stateClass}`} aria-label="Server pane">
         <div class="server-pane-toolbar">
-          <div class="flex items-center gap-2 min-w-0 overflow-hidden">
+          <div class="flex items-center gap-2 min-w-0 overflow-hidden flex-1">
             <span
               class="inline-block w-2 h-2 rounded-full flex-shrink-0"
               style={{ backgroundColor: dotColor, opacity: dotOpacity }}
