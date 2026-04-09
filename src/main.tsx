@@ -18,16 +18,14 @@ import { ProjectModal } from './components/project-modal';
 import { FuzzySearch } from './components/fuzzy-search';
 import { ShortcutCheatsheet, toggleCheatsheet } from './components/shortcut-cheatsheet';
 import { initDragManager } from './drag-manager';
-import { createTerminal } from './terminal/terminal-manager';
-import { connectPty } from './terminal/pty-bridge';
-import { attachResizeHandler } from './terminal/resize-handler';
 import { initTheme, registerTerminal, toggleThemeMode } from './theme/theme-manager';
+import { createNewTab, closeActiveTab, cycleToNextTab, initFirstTab, clearAllTabs } from './components/terminal-tabs';
 import {
   loadAppState, initBeforeUnload, sidebarCollapsed, updateLayout, updateSession,
   getProjects, getActiveProject, projects, activeProjectName
 } from './state-manager';
 import { openProjectModal } from './components/project-modal';
-import { serverPaneState, resetServerPane, saveCurrentProjectState, restoreProjectState } from './components/server-pane';
+import { serverPaneState, saveCurrentProjectState, restoreProjectState } from './components/server-pane';
 import { detectAgent } from './server/server-bridge';
 
 /**
@@ -44,21 +42,7 @@ function projectSessionName(projectName: string, suffix?: string): string {
 // *CurrentSession = which tmux session the client currently shows (for switch-client)
 let mainPtyKey = '';
 let mainCurrentSession = '';
-let rightPtyKey = '';
 let rightCurrentSession = '';
-
-/**
- * Switch a tmux client to a different session silently via Rust system commands.
- * No PTY output — completely invisible in the terminal.
- */
-async function switchTmuxSession(currentSession: string, targetSession: string, startDir?: string, shellCommand?: string): Promise<void> {
-  await invoke('switch_tmux_session', {
-    currentSession,
-    targetSession,
-    startDir: startDir ?? null,
-    shellCommand: shellCommand ?? null,
-  });
-}
 
 function App() {
   return (
@@ -140,15 +124,15 @@ async function bootstrap() {
         break;
       case key === 't' && !e.shiftKey && !e.altKey:
         e.preventDefault(); e.stopPropagation();
-        // createNewTab() -- wired in Plan 02
+        createNewTab();
         break;
       case key === 'w' && !e.shiftKey && !e.altKey:
         e.preventDefault(); e.stopPropagation();
-        // closeActiveTab() -- wired in Plan 02
+        closeActiveTab();
         break;
       case e.key === 'Tab' && e.ctrlKey && !e.shiftKey && !e.altKey:
         e.preventDefault(); e.stopPropagation();
-        // cycleToNextTab() -- wired in Plan 02
+        cycleToNextTab();
         break;
       case key === 'p' && !e.shiftKey && !e.altKey:
         e.preventDefault(); e.stopPropagation();
@@ -206,20 +190,6 @@ async function bootstrap() {
       console.warn('[efxmux] Theme init failed, using defaults:', err);
     }
 
-    const container = document.querySelector('.terminal-area') as HTMLElement;
-    if (!container) {
-      console.error('[efxmux] .terminal-area not found in DOM');
-      return;
-    }
-
-    const { terminal, fitAddon } = createTerminal(container, {
-      theme: loadedTheme?.terminal,
-      font: loadedTheme?.chrome?.font,
-      fontSize: loadedTheme?.chrome?.fontSize,
-    });
-
-    registerTerminal(terminal, fitAddon);
-
     // Use project-specific tmux session name (or fallback)
     const activeName = activeProjectName.value;
     const activeProject = activeName ? projects.value.find(p => p.name === activeName) : null;
@@ -244,29 +214,34 @@ async function bootstrap() {
       }
     }
 
-    try {
-      await connectPty(terminal, sessionName, activeProject?.path, agentBinary ?? undefined);
+    // Initialize first terminal tab (replaces inline createTerminal + connectPty)
+    const themeOptions = {
+      theme: loadedTheme?.terminal,
+      font: loadedTheme?.chrome?.font,
+      fontSize: loadedTheme?.chrome?.fontSize,
+    };
+    const firstTab = await initFirstTab(themeOptions, sessionName, activeProject?.path, agentBinary ?? undefined);
+
+    if (firstTab) {
+      const { terminal, fitAddon } = firstTab;
+      registerTerminal(terminal, fitAddon);
       updateSession({ 'main-tmux-session': sessionName });
-    } catch (err) {
-      console.error('[efxmux] Failed to connect PTY:', err);
-      terminal.writeln('\r\n\x1b[33mWarning: Could not attach to tmux session "' + sessionName + '":\x1b[0m ' + err);
-      terminal.writeln('\r\n\x1b[33mIf tmux is not installed, run: brew install tmux\x1b[0m');
-    }
 
-    // Agent fallback banner (D-13, AGENT-05, per UI-SPEC copywriting)
-    if (activeProject?.agent && activeProject.agent !== 'bash' && !agentBinary) {
-      terminal.writeln('');
-      terminal.writeln('');
-      terminal.writeln('');
-      terminal.writeln('\x1b[33mNo agent binary found.\x1b[0m');
-      terminal.writeln('\x1b[33mInstall claude or opencode to enable AI assistance.\x1b[0m');
-      terminal.writeln('\x1b[33mStarting plain bash session...\x1b[0m');
-      terminal.writeln('');
-      terminal.writeln('');
-    }
+      // Agent fallback banner (D-13, AGENT-05, per UI-SPEC copywriting)
+      if (activeProject?.agent && activeProject.agent !== 'bash' && !agentBinary) {
+        terminal.writeln('');
+        terminal.writeln('');
+        terminal.writeln('');
+        terminal.writeln('\x1b[33mNo agent binary found.\x1b[0m');
+        terminal.writeln('\x1b[33mInstall claude or opencode to enable AI assistance.\x1b[0m');
+        terminal.writeln('\x1b[33mStarting plain bash session...\x1b[0m');
+        terminal.writeln('');
+        terminal.writeln('');
+      }
 
-    attachResizeHandler(container, terminal, fitAddon, sessionName);
-    setTimeout(() => fitAddon.fit(), 100);
+      setTimeout(() => fitAddon.fit(), 100);
+      terminal.focus();
+    }
 
     // Apply right-h-pct after DOM is ready
     if (appState?.layout?.['right-h-pct']) {
@@ -281,8 +256,6 @@ async function bootstrap() {
         }
       }
     }
-
-    terminal.focus();
   });
 }
 
@@ -317,6 +290,7 @@ document.addEventListener('project-pre-switch', (e: Event) => {
 
 // project-changed listener: switch tmux sessions + update file watcher + agent detection
 // 07-06: Servers keep running across project switches; only UI state swaps via cache
+// 08-02: Clear all tabs and create new first tab for new project
 document.addEventListener('project-changed', async (e: Event) => {
   const newProjectName = (e as CustomEvent).detail.name;
   try {
@@ -324,6 +298,13 @@ document.addEventListener('project-changed', async (e: Event) => {
     const project = projectList.find(p => p.name === newProjectName);
     if (project?.path) {
       await invoke('set_project_path', { path: project.path });
+
+      // Clear all main panel tabs and create fresh tab for new project
+      clearAllTabs();
+
+      const newMainSession = projectSessionName(newProjectName);
+      mainPtyKey = newMainSession;
+      mainCurrentSession = newMainSession;
 
       // Detect agent for the new project (AGENT-03, AGENT-04)
       let agentBinary: string | null = null;
@@ -335,13 +316,11 @@ document.addEventListener('project-changed', async (e: Event) => {
         }
       }
 
-      // Switch main terminal to new project's tmux session (silent via Rust)
-      // Agent binary is passed so new sessions launch the agent directly
-      const newMainSession = projectSessionName(newProjectName);
-      if (newMainSession !== mainCurrentSession) {
-        await switchTmuxSession(mainCurrentSession, newMainSession, project.path, agentBinary ?? undefined);
-        mainCurrentSession = newMainSession;
-      }
+      // Create first tab for new project
+      const themeOptions = {
+        theme: undefined, // Will use current theme from getTheme() inside initFirstTab
+      };
+      await initFirstTab(themeOptions, newMainSession, project.path, agentBinary ?? undefined);
 
       // Switch right panel bash terminal (silent via Rust)
       const newRightSession = projectSessionName(newProjectName, 'right');
