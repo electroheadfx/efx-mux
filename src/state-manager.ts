@@ -196,6 +196,9 @@ export async function switchProject(name: string): Promise<void> {
   await invoke('switch_project', { name });
   // Reload state from Rust to pick up the persisted mutation
   currentState = await invoke<AppState>('load_state');
+  // Emit pre-switch event so listeners can save state under the OLD project name
+  // BEFORE activeProjectName changes (fixes per-project server pane isolation)
+  document.dispatchEvent(new CustomEvent('project-pre-switch', { detail: { oldName: activeProjectName.value, newName: name } }));
   activeProjectName.value = name;
   // Backward compat: main.js project-changed listener (will be removed in Plan 05)
   document.dispatchEvent(new CustomEvent('project-changed', { detail: { name } }));

@@ -274,6 +274,14 @@ async function initProjects() {
   }
 }
 
+// Save server pane state BEFORE activeProjectName changes (fixes per-project isolation)
+document.addEventListener('project-pre-switch', (e: Event) => {
+  const { oldName } = (e as CustomEvent).detail;
+  if (oldName) {
+    saveCurrentProjectState(oldName);
+  }
+});
+
 // project-changed listener: switch tmux sessions + update file watcher + agent detection
 // 07-06: Servers keep running across project switches; only UI state swaps via cache
 document.addEventListener('project-changed', async (e: Event) => {
@@ -282,12 +290,6 @@ document.addEventListener('project-changed', async (e: Event) => {
     const projectList = await getProjects();
     const project = projectList.find(p => p.name === newProjectName);
     if (project?.path) {
-      // Save current project's server state before switching (07-06)
-      const oldProject = activeProjectName.value;
-      if (oldProject) {
-        saveCurrentProjectState(oldProject);
-      }
-
       await invoke('set_project_path', { path: project.path });
 
       // Detect agent for the new project (AGENT-03, AGENT-04)
