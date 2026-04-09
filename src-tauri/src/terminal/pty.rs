@@ -5,7 +5,7 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc, Mutex,
 };
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 /// High watermark: pause PTY reads when unacknowledged bytes exceed this threshold.
 const FLOW_HIGH_WATERMARK: u64 = 400_000;
@@ -103,6 +103,11 @@ pub async fn spawn_terminal(
         .output()
         .ok();
 
+    // Set remain-on-exit so we can query exit code after process dies (D-08, UX-03)
+    let _ = std::process::Command::new("tmux")
+        .args(["set-option", "-t", &sanitized, "remain-on-exit", "on"])
+        .output();
+
     // take_writer() is one-shot -- store in Arc<Mutex<>> for reuse (CLAUDE.md gotcha)
     let writer = pair
         .master
@@ -133,6 +138,10 @@ pub async fn spawn_terminal(
 
     let sent = sent_bytes;
     let acked = acked_bytes;
+
+    // Clone app handle and session name for exit detection after read loop (UX-03, D-08)
+    let app_for_exit = app.clone();
+    let session_for_exit = sanitized.clone();
 
     // PTY read loop on dedicated OS thread (NOT tokio::spawn -- Research Pitfall 5)
     std::thread::spawn(move || {
@@ -170,6 +179,54 @@ pub async fn spawn_terminal(
                 Err(_) => break,
             }
         }
+
+        // --- PTY exit detection with real exit code (D-08, UX-03) ---
+        // Brief delay for tmux to register pane death (Pitfall 3)
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
+        // Step 1: Check if tmux session still exists
+        // With remain-on-exit=on, session stays alive after process exits,
+        // allowing us to query the inner process's actual exit code.
+        let session_alive = std::process::Command::new("tmux")
+            .args(["has-session", "-t", &session_for_exit])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+
+        let exit_code = if session_alive {
+            // Step 2: Query the dead pane's exit status via tmux
+            // #{pane_dead_status} returns the exit code of the process that ran in the pane
+            let code = std::process::Command::new("tmux")
+                .args(["display-message", "-t", &session_for_exit, "-p", "#{pane_dead_status}"])
+                .output()
+                .ok()
+                .and_then(|o| {
+                    if o.status.success() {
+                        String::from_utf8(o.stdout).ok()
+                    } else {
+                        None
+                    }
+                })
+                .and_then(|s| s.trim().parse::<i32>().ok())
+                .unwrap_or(0); // If parsing fails, assume normal exit
+
+            // Step 3: Clean up the remain-on-exit session now that we have the exit code
+            let _ = std::process::Command::new("tmux")
+                .args(["kill-session", "-t", &session_for_exit])
+                .output();
+
+            code
+        } else {
+            // Session already gone (race condition or external kill) -- assume normal exit
+            0
+        };
+
+        // Step 4: Emit pty-exited event with real exit code
+        let payload = serde_json::json!({
+            "session": session_for_exit,
+            "code": exit_code
+        });
+        let _ = app_for_exit.emit("pty-exited", payload);
     });
 
     Ok(())
