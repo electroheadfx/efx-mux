@@ -1,6 +1,6 @@
-// server-pane.tsx -- Server pane Preact component with toolbar, log viewer, and 3-state collapse
+// server-pane.tsx -- Server pane Preact component with toolbar, log viewer, and 2-state toggle
 // Phase 7: Collapsible server pane with Start/Stop/Restart/Open controls and ANSI log streaming
-// D-01: 3-state cycle: strip (28px) -> expanded -> collapsed -> strip
+// D-01: 2-state toggle: strip (28px) <-> expanded
 // D-04: HTML toolbar + scrollable log area (not xterm.js)
 // D-14: Crash detection shows "Process exited (code N)"
 // T-07-06: ansiToHtml HTML-escapes before ANSI processing (XSS-safe)
@@ -21,7 +21,7 @@ import { initDragManager } from '../drag-manager';
 // Module-level signals (exported for main.tsx Ctrl+S handler and state restore)
 // ---------------------------------------------------------------------------
 
-export const serverPaneState = signal<'strip' | 'expanded' | 'collapsed'>('strip');
+export const serverPaneState = signal<'strip' | 'expanded'>('strip');
 export const serverStatus = signal<'stopped' | 'running' | 'crashed' | 'unconfigured'>('stopped');
 const detectedUrl = signal<string | null>(null);
 const serverLogs = signal<string[]>([]);
@@ -282,10 +282,7 @@ export function ServerPane() {
   };
 
   const handleToggle = () => {
-    const current = serverPaneState.value;
-    if (current === 'strip') serverPaneState.value = 'expanded';
-    else if (current === 'expanded') serverPaneState.value = 'collapsed';
-    else serverPaneState.value = 'strip';
+    serverPaneState.value = serverPaneState.value === 'strip' ? 'expanded' : 'strip';
     updateLayout({ 'server-pane-state': serverPaneState.value });
     if (serverPaneState.value === 'expanded') {
       requestAnimationFrame(() => initDragManager());
@@ -293,35 +290,31 @@ export function ServerPane() {
   };
 
   // CSS state class
-  const stateClass =
-    paneState === 'strip' ? 'state-strip' :
-    paneState === 'expanded' ? 'state-expanded' :
-    'state-collapsed';
+  const stateClass = paneState === 'expanded' ? 'state-expanded' : 'state-strip';
 
   // Build log HTML
   const logHtml = serverLogs.value.join('');
 
   return (
     <div class={`server-pane ${stateClass}`} aria-label="Server pane">
-      {paneState !== 'collapsed' && (
         <div class="server-pane-toolbar">
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 min-w-0 overflow-hidden">
             <span
-              class="inline-block w-2 h-2 rounded-full"
+              class="inline-block w-2 h-2 rounded-full flex-shrink-0"
               style={{ backgroundColor: dotColor, opacity: dotOpacity }}
               aria-label={`Server status: ${status}`}
             />
-            <span class="text-text-bright text-[11px] tracking-wider uppercase">Server</span>
+            <span class="text-text-bright text-[11px] tracking-wider uppercase flex-shrink-0">Server</span>
             {activeProjectName.value && (
               <span
-                class="text-text text-[11px] opacity-70 normal-case ml-1 flex-shrink-0"
+                class="text-text text-[11px] opacity-70 normal-case ml-1 truncate"
                 title={activeProjectName.value}
               >
                 {activeProjectName.value}
               </span>
             )}
             <button
-              class="server-btn"
+              class="server-btn flex-shrink-0"
               title={paneState === 'expanded' ? 'Collapse server pane' : 'Expand server pane'}
               onClick={handleToggle}
             >{paneState === 'expanded' ? '▾' : '▸'}</button>
@@ -358,7 +351,6 @@ export function ServerPane() {
             >Open</button>
           </div>
         </div>
-      )}
 
       {paneState === 'expanded' && (
         <div class="server-pane-logs" ref={logRef}>

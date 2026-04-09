@@ -121,17 +121,14 @@ async function bootstrap() {
     }
   });
 
-  // Ctrl+S handler for server pane 3-state cycle (D-01)
+  // Ctrl+S handler for server pane 2-state toggle (D-01)
   // Replaces Ctrl+` which is broken on French AZERTY keyboards
   // MUST use capture: true to fire before xterm.js (RESEARCH.md Pitfall 3)
   document.addEventListener('keydown', (e: KeyboardEvent) => {
     if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === 's' || e.key === 'S')) {
       e.preventDefault();
       e.stopPropagation();
-      const current = serverPaneState.value;
-      if (current === 'strip') serverPaneState.value = 'expanded';
-      else if (current === 'expanded') serverPaneState.value = 'collapsed';
-      else serverPaneState.value = 'strip';
+      serverPaneState.value = serverPaneState.value === 'strip' ? 'expanded' : 'strip';
       updateLayout({ 'server-pane-state': serverPaneState.value });
       // Re-init drag manager when expanding so main-h handle gets wired
       if (serverPaneState.value === 'expanded') {
@@ -140,11 +137,13 @@ async function bootstrap() {
     }
   }, { capture: true });
 
-  // Restore server pane state from persisted state
+  // Restore server pane state from persisted state (map legacy 'collapsed' to 'strip')
   if (appState?.layout?.['server-pane-state']) {
     const saved = appState.layout['server-pane-state'] as string;
-    if (['strip', 'expanded', 'collapsed'].includes(saved)) {
-      serverPaneState.value = saved as 'strip' | 'expanded' | 'collapsed';
+    if (saved === 'expanded') {
+      serverPaneState.value = 'expanded';
+    } else {
+      serverPaneState.value = 'strip';
     }
   }
   if (appState?.layout?.['server-pane-height']) {

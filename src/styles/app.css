@@ -145,12 +145,6 @@
   height: var(--server-pane-h, 200px);
 }
 
-.server-pane.state-collapsed {
-  height: 0;
-  overflow: hidden;
-  border-top: none;
-}
-
 .server-pane-toolbar {
   height: 28px;
   display: flex;
