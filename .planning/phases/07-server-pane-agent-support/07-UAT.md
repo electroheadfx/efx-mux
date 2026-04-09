@@ -1,9 +1,9 @@
 ---
 status: diagnosed
 phase: 07-server-pane-agent-support
-source: [07-01-SUMMARY.md, 07-02-SUMMARY.md, 07-03-SUMMARY.md]
-started: 2026-04-09T12:00:00Z
-updated: 2026-04-09T12:12:00Z
+source: [07-01-SUMMARY.md, 07-02-SUMMARY.md, 07-03-SUMMARY.md, 07-04-SUMMARY.md, 07-05-SUMMARY.md]
+started: 2026-04-09T12:30:00Z
+updated: 2026-04-09T12:50:00Z
 ---
 
 ## Current Test
@@ -13,186 +13,138 @@ updated: 2026-04-09T12:12:00Z
 ## Tests
 
 ### 1. Cold Start Smoke Test
-expected: Kill any running Efxmux or dev server. Start the app fresh. The app boots without errors, the main terminal loads, and the server pane area is visible (collapsed by default).
+expected: Kill any running dev server. Start the app fresh (pnpm tauri dev). App boots without errors, main window appears, terminal loads.
 result: pass
 
-### 2. Server Pane Toggle Cycle (Ctrl+S)
-expected: Press Ctrl+S to cycle through states: collapsed (strip only) -> expanded (shows logs/toolbar) -> collapsed again. Each state transition is visually distinct.
+### 2. Ctrl+` Server Pane Toggle
+expected: Press Ctrl+` (or Ctrl+S if remapped) to cycle through states: collapsed (strip) -> expanded (logs/toolbar) -> collapsed. Each transition is visually distinct.
 result: pass
 
 ### 3. Start Server via Toolbar
-expected: With server pane expanded, click the Start button in the toolbar. Server process launches, status indicator updates, and log output begins streaming in the pane.
+expected: With server pane expanded, click Start. Server launches, status indicator turns green, log output streams in real time.
 result: pass
 
-### 4. Live ANSI-Colored Log Output
-expected: While server is running, log output appears in the server pane with ANSI color codes rendered as colored text (not raw escape sequences). New lines append as they arrive.
+### 4. ANSI Color Rendering in Logs
+expected: Server log output with ANSI colors renders as colored text in the pane. No raw escape sequences visible. 256-color and truecolor sequences also render correctly.
 result: issue
-reported: "no colored text - output appears monochrome/plain"
+reported: "I dont see colored text, I doubt ANSI colors renders. Also the logs show but the window do not move to the last log, I need to scroll, I want an auto scroll"
 severity: minor
 
 ### 5. Stop Server via Toolbar
-expected: Click the Stop button. Server process terminates, log shows exit message with exit code, and status indicator updates to stopped.
-result: issue
-reported: "small error: ELIFECYCLE Command failed with exit code 143. not annoying"
-severity: minor
+expected: Click Stop. Server terminates cleanly. No ELIFECYCLE error in logs. Exit code 143/137 treated as clean stop, not crash. Toolbar shows Start re-enabled.
+result: pass
 
 ### 6. Restart Server via Toolbar
-expected: With server running, click Restart. Server stops and restarts. Toolbar buttons update to reflect running state (Stop, Restart, Open only).
+expected: Click Restart. Server stops and restarts. Toolbar stays stable during transition (no flickering, no Start button while running). Logs show new output.
 result: issue
-reported: "restarts but toolbar shows Start button when server is running - should show only Stop, Restart, Open"
+reported: "yes but when I stop it doesn't kill the server; it showed it stopped but its not. PORT 5173 node vite.js still running. its only a restart which bug the stop server"
 severity: major
 
-### 7. Open in Browser Button
-expected: With server running and a URL detected in output, clicking "Open" opens the server URL in the default system browser.
+### 7. Open in Browser
+expected: With server running and URL detected, click Open. Default browser opens the server URL.
 result: pass
 
-### 8. Agent Binary Auto-Detection
-expected: On app launch in a project with a known agent binary, the agent is detected and launched. If no agent found, bash fallback banner is shown.
+### 8. Drag Resize Server Pane
+expected: Drag the horizontal divider between terminal and server pane. Height adjusts smoothly. Height persists across toggle cycles.
 result: pass
 
-### 9. Drag-Resize Server Pane Height
-expected: Drag the horizontal resize handle between main terminal and server pane. Height adjusts smoothly and persists across toggle cycles.
+### 9. Agent Detection on Startup
+expected: On launch in a project with a known agent binary, the agent is detected and launched in the terminal. No agent = bash fallback banner.
 result: pass
 
-### 10. Agent Detection on Project Switch
-expected: Switch to a different project (via project switcher). Agent detection runs for the new project directory and the correct agent binary is used for the new tmux session.
-result: pass
-
-### 11. Server Pane Per-Workspace Isolation
-expected: Each workspace/project has its own independent server pane. Switching workspaces should show/hide the corresponding server pane with its own process and logs.
+### 10. Project Switch Resets Server Pane
+expected: Switch to a different project. Server stops, logs clear, status resets, project name updates in header.
 result: issue
-reported: "server pane doesn't change with workspace project change, each workspace has its own pane server"
+reported: "When I switch on another project, it lost the server logs and button states, so the server looks like closed but its not, so user re click on start and another server open (2 servers are online). Each project should save the logs and buttons state. If I quit the app it should close all servers."
 severity: major
 
-### 12. Clear Server Pane Log
-expected: A way to clear the server pane log output (button or shortcut). After clearing, the pane is empty and new output appends fresh.
-result: issue
-reported: "should be able to clear the pane server log"
-severity: minor
+### 11. Clear Log Button
+expected: Click Clear in the server toolbar. All log output clears. Works in any server state (running, stopped, idle).
+result: pass
 
-### 13. Server Pane Header Shows Project Name
-expected: The server pane header shows "SERVER <Project Name>" instead of just "SERVER", so the user knows which project's server is running.
+### 12. Project Name in Server Pane Header
+expected: Server pane header shows "SERVER projectname" with the current project's natural-case name.
 result: issue
-reported: "server pane header should show SERVER <Project Name> instead of just SERVER"
-severity: minor
+reported: "could enter the full name instead truncated? Should show full project name, not truncated"
+severity: cosmetic
 
-### 14. Server Status Indicator on Tauri Project
-expected: When starting a Tauri project server (pnpm tauri dev), the status indicator shows green (running). When the app quits, status and buttons update correctly to stopped.
-result: issue
-reported: "when I start server on Tauri project: pnpm tauri dev, if I quit the app, the pane server doesn't update well in buttons and status. At first server open it shows red instead of green"
-severity: major
+### 13. Tauri Project Server (pnpm tauri dev)
+expected: Start server with a Tauri project command (pnpm tauri dev). Status shows green while running. Multi-stage startup doesn't trigger false crash. Quitting the spawned app updates buttons/status correctly.
+result: pass
 
 ## Summary
 
-total: 14
-passed: 7
-issues: 7
+total: 13
+passed: 9
+issues: 4
 pending: 0
 skipped: 0
 blocked: 0
 
 ## Gaps
 
-- truth: "Log output renders ANSI color codes as colored text"
+- truth: "Server log output with ANSI colors renders as colored text, with auto-scroll to latest output"
   status: failed
-  reason: "User reported: no colored text - output appears monochrome/plain"
+  reason: "User reported: no colored text visible, logs don't auto-scroll to bottom"
   severity: minor
   test: 4
-  root_cause: "CSS cascade issue - .server-pane-logs sets color: var(--color-text) which overrides inline styles from ansiToHtml() spans"
+  root_cause: "CSS `color: inherit` on .server-pane-logs (app.css:173) overrides inline color styles from ansiToHtml() spans. Auto-scroll useEffect measures scrollHeight before browser paint, so scroll position is stale."
   artifacts:
     - path: "src/styles/app.css"
-      issue: ".server-pane-logs color property overrides inline span colors"
-  missing:
-    - "Allow inline color styles on ansiToHtml spans to take precedence over container color"
-  debug_session: ""
-
-- truth: "Server stop exits cleanly without ELIFECYCLE error"
-  status: failed
-  reason: "User reported: small error: ELIFECYCLE Command failed with exit code 143. not annoying"
-  severity: minor
-  test: 5
-  root_cause: "Expected behavior - SIGTERM (killpg) causes exit code 143 (128+15), pnpm logs ELIFECYCLE for non-zero script exits. Suppressible on frontend."
-  artifacts:
-    - path: "src-tauri/src/server.rs"
-      issue: "killpg sends SIGTERM causing exit 143 - correct behavior"
+      issue: ".server-pane-logs color:inherit overrides inline span colors"
     - path: "src/components/server-pane.tsx"
-      issue: "listenServerStopped treats exit 143 as crash instead of clean stop"
+      issue: "Auto-scroll useEffect needs requestAnimationFrame for correct timing"
   missing:
-    - "Treat exit code 143 (SIGTERM) as clean stop, not crash"
-    - "Optionally filter ELIFECYCLE lines from log output"
+    - "Remove color:inherit from .server-pane-logs"
+    - "Wrap auto-scroll logic in requestAnimationFrame"
   debug_session: ""
 
-- truth: "Toolbar buttons reflect server running state (hide Start, show Stop/Restart/Open)"
+- truth: "Stop server actually kills the server process"
   status: failed
-  reason: "User reported: restarts but toolbar shows Start button when server is running - should show only Stop, Restart, Open"
+  reason: "User reported: stop shows stopped in UI but process still running on port (node vite.js). Only restart works, stop is broken."
   severity: major
   test: 6
-  root_cause: "Race condition: restart sets status to 'running', but old process exit triggers listenServerStopped which flips status to 'crashed' (exit code >= 0 while status === running)"
+  root_cause: "killpg() in server.rs may be called with wrong PID/PGID. Additionally, stopServer() frontend invoke may not properly reach the Rust backend. The process group kill fails silently, leaving vite running."
   artifacts:
-    - path: "src/components/server-pane.tsx"
-      issue: "listenServerStopped callback cannot distinguish old process exit during restart from actual crash"
     - path: "src-tauri/src/server.rs"
-      issue: "restart_server waiter thread emits server-stopped for old process after new process starts"
+      issue: "killpg() call at lines 180/187 may use wrong PID sign or fail silently"
+    - path: "src/server/server-bridge.ts"
+      issue: "stopServer() invoke may not properly trigger backend kill"
   missing:
-    - "Add isRestarting flag or PID tracking to suppress crash detection during restart window"
+    - "Verify killpg() is called with correct PGID"
+    - "Add error logging to stop_server to surface silent failures"
+    - "Ensure process group kill covers all child processes"
   debug_session: ""
 
-- truth: "Each workspace/project has its own independent server pane with separate process and logs"
+- truth: "Project switch kills old server and preserves per-project server state"
   status: failed
-  reason: "User reported: server pane doesn't change with workspace project change, each workspace has its own pane server"
+  reason: "User reported: switching projects loses server logs/button state, server keeps running as zombie. Re-clicking start opens second server. Multiple zombie servers accumulate."
   severity: major
-  test: 11
-  root_cause: "Server state (serverStatus, serverLogs, detectedUrl) stored as global singleton signals in server-pane.tsx. Rust backend uses single ServerProcess(Mutex<Option<Child>>). Project-changed listener stops old server but never resets frontend signals."
+  test: 10
+  root_cause: "Single global ServerProcess state in lib.rs. Project-changed handler calls stopServer() which fails silently (test 6 root cause), then resetServerPane() only resets UI. No per-project server state map. Close handler only kills last stored process."
   artifacts:
-    - path: "src/components/server-pane.tsx"
-      issue: "serverPaneState, serverStatus, serverLogs are module-level singletons shared across all workspaces"
+    - path: "src-tauri/src/lib.rs"
+      issue: "Single global ServerProcess, not per-project HashMap"
     - path: "src/main.tsx"
-      issue: "project-changed listener stops server but doesn't reset server pane signals"
-    - path: "src-tauri/src/server.rs"
-      issue: "Single global ServerProcess state, not per-project"
+      issue: "project-changed listener catches and ignores stopServer errors"
+    - path: "src-tauri/src/lib.rs"
+      issue: "Close handler only kills one process, orphans remain"
   missing:
-    - "Reset serverStatus, serverLogs, detectedUrl in project-changed listener after stopServer()"
-    - "Consider per-workspace server state map for full isolation"
+    - "Replace ServerProcess with HashMap<String, Child> keyed by project"
+    - "Fix stop_server to actually kill (depends on test 6 fix)"
+    - "Close handler must loop and kill all stored processes"
+    - "Per-project log/state preservation on frontend"
   debug_session: ""
 
-- truth: "User can clear the server pane log output"
+- truth: "Server pane header shows full project name"
   status: failed
-  reason: "User reported: should be able to clear the pane server log"
-  severity: minor
+  reason: "User reported: project name is truncated, should show full name"
+  severity: cosmetic
   test: 12
-  root_cause: "No clear button or shortcut exists in the server pane toolbar. Missing feature."
+  root_cause: "Project name span in server-pane.tsx toolbar lacks flex-1 sizing. Parent justify-between compresses the text. No title attribute for hover."
   artifacts:
     - path: "src/components/server-pane.tsx"
-      issue: "No clear log action in toolbar"
+      issue: "Project name span missing flex-1 and truncate classes"
   missing:
-    - "Add Clear button to server pane toolbar that resets serverLogs signal to empty array"
-  debug_session: ""
-
-- truth: "Server pane header displays SERVER <Project Name>"
-  status: failed
-  reason: "User reported: server pane header should show SERVER <Project Name> instead of just SERVER"
-  severity: minor
-  test: 13
-  root_cause: "Header hardcoded as 'SERVER' in server-pane.tsx. Missing feature."
-  artifacts:
-    - path: "src/components/server-pane.tsx"
-      issue: "Header text is hardcoded 'SERVER' without project name"
-  missing:
-    - "Use activeProjectName signal to display 'SERVER <Project Name>' in header"
-  debug_session: ""
-
-- truth: "Server status indicator and buttons update correctly for Tauri projects (pnpm tauri dev)"
-  status: failed
-  reason: "User reported: when starting pnpm tauri dev, status shows red instead of green at first, and buttons/status don't update correctly when app quits"
-  severity: major
-  test: 14
-  root_cause: "waitpid waiter thread fires prematurely for multi-stage commands like pnpm tauri dev. Process group leader can exit before Vite server fully initializes, causing server-stopped event while status is 'running', flipping to 'crashed'. On quit, handleStop sets status to 'stopped' before stopServer() completes, leaving buttons in stale state."
-  artifacts:
-    - path: "src-tauri/src/server.rs"
-      issue: "waitpid fires prematurely for composite commands (pnpm tauri dev spawns child processes in stages)"
-    - path: "src/components/server-pane.tsx"
-      issue: "listenServerStopped flips to 'crashed' on premature waitpid exit; handleStop sets 'stopped' before cleanup completes"
-  missing:
-    - "Make waiter thread more resilient to multi-stage process launches"
-    - "Sync status state machine with actual process lifecycle events"
+    - "Add flex-1 truncate classes and title attribute to project name span"
   debug_session: ""
