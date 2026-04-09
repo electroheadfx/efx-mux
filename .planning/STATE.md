@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 07-08-PLAN.md
+stopped_at: Completed 07-08-PLAN.md and 07-09-PLAN.md
 last_updated: "2026-04-09T15:59:55.960Z"
 last_activity: 2026-04-09
 progress:
@@ -57,6 +57,7 @@ Progress: [████████████████████] 15/15 p
 *Updated after each plan completion*
 | Phase 06.1 P06 | 3min | 2 tasks | 5 files |
 | Phase 07 P08 | 3min | 2 tasks | 4 files |
+| Phase 07 P09 | 96s | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -74,6 +75,7 @@ Recent decisions affecting current work:
 - [Phase 06.1]: Added vite-env.d.ts for CSS import type declarations (missing from Preact migration setup)
 - [Phase 07]: Removed collapsed state from server pane toggle -- 2-state (strip/expanded) is simpler and matches UAT
 - [Phase 07]: Server output uses BufReader::lines() for line-buffered emission -- prevents ANSI sequence splitting
+- [Phase 07]: Intentional redundancy: both CloseRequested and ExitRequested handlers call kill_all_servers
 
 ### Pending Todos
 
@@ -103,5 +105,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-04-09T15:59:55.958Z
-Stopped at: Completed 07-08-PLAN.md
+Stopped at: Completed 07-08-PLAN.md and 07-09-PLAN.md
 Resume file: None

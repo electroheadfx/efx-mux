@@ -172,9 +172,7 @@ Plans:
 - [x] 07-06-PLAN.md -- UAT gap closure: per-project server HashMap, reliable kill, close-all
 - [x] 07-07-PLAN.md -- UAT gap closure: ANSI color visibility, auto-scroll, full project name
 - [x] 07-08-PLAN.md -- UAT gap closure: 2-state toggle, ANSI line buffering, project name truncate
-- [ ] 07-09-PLAN.md -- UAT gap closure: kill servers on Cmd+Q via RunEvent::ExitRequested
-- [ ] 07-08-PLAN.md -- UAT gap closure: 2-state toggle, ANSI line buffering, project name truncate
-- [ ] 07-09-PLAN.md -- UAT gap closure: kill servers on Cmd+Q via RunEvent::ExitRequested
+- [x] 07-09-PLAN.md -- UAT gap closure: kill servers on Cmd+Q via RunEvent::ExitRequested
 
 **UI hint**: yes
 
