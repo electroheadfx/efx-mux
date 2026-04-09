@@ -85,11 +85,6 @@ async function selectCurrent() {
 // ---------------------------------------------------------------------------
 
 function handleGlobalKeydown(e: KeyboardEvent) {
-  if (e.ctrlKey && e.key === 'p') {
-    e.preventDefault();
-    openSearch();
-    return;
-  }
   if (!visible.value) return;
 
   switch (e.key) {

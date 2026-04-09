@@ -138,7 +138,7 @@ async function bootstrap() {
         break;
       case key === 'p' && !e.shiftKey && !e.altKey:
         e.preventDefault(); e.stopPropagation();
-        // fuzzy search is handled by its own module-scope listener
+        document.dispatchEvent(new CustomEvent('open-fuzzy-search'));
         break;
       case (key === '/' && e.shiftKey) || (e.key === '?' && !e.altKey):
         // Ctrl+? = Ctrl+Shift+/ on US layout, also handle e.key === '?' for AZERTY (D-03)
