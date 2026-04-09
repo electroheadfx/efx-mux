@@ -14,6 +14,7 @@ import {
 } from '../server/server-bridge';
 import { ansiToHtml, extractServerUrl } from '../server/ansi-html';
 import { projects, activeProjectName, updateLayout } from '../state-manager';
+import { initDragManager } from '../drag-manager';
 
 // ---------------------------------------------------------------------------
 // Module-level signals (exported for main.tsx Ctrl+` handler and state restore)
@@ -158,6 +159,17 @@ export function ServerPane() {
     if (url) await openInBrowser(url);
   };
 
+  const handleToggle = () => {
+    const current = serverPaneState.value;
+    if (current === 'strip') serverPaneState.value = 'expanded';
+    else if (current === 'expanded') serverPaneState.value = 'collapsed';
+    else serverPaneState.value = 'strip';
+    updateLayout({ 'server-pane-state': serverPaneState.value });
+    if (serverPaneState.value === 'expanded') {
+      requestAnimationFrame(() => initDragManager());
+    }
+  };
+
   // CSS state class
   const stateClass =
     paneState === 'strip' ? 'state-strip' :
@@ -178,6 +190,11 @@ export function ServerPane() {
               aria-label={`Server status: ${status}`}
             />
             <span class="text-text-bright text-[11px] tracking-wider uppercase">Server</span>
+            <button
+              class="server-btn"
+              title={paneState === 'expanded' ? 'Collapse server pane' : 'Expand server pane'}
+              onClick={handleToggle}
+            >{paneState === 'expanded' ? '▾' : '▸'}</button>
           </div>
           <div class="flex gap-1.5 items-center">
             <button

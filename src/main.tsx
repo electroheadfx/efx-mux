@@ -124,7 +124,7 @@ async function bootstrap() {
   // Ctrl+` handler for server pane 3-state cycle (D-01)
   // MUST use capture: true to fire before xterm.js (RESEARCH.md Pitfall 3)
   document.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.ctrlKey && e.key === '`') {
+    if (e.ctrlKey && (e.key === '`' || e.code === 'Backquote')) {
       e.preventDefault();
       e.stopPropagation();
       const current = serverPaneState.value;
