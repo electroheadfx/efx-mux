@@ -99,9 +99,13 @@ pub async fn start_server(
                 };
                 let payload = serde_json::json!({ "project": project_id_clone, "code": exit_code });
                 let _ = app_clone.emit("server-stopped", payload);
-                // Clear stored entry since process is gone
+                // Only remove entry if PID matches — prevents restart from orphaning the new process
                 if let Ok(mut guard) = app_clone.state::<ServerProcesses>().0.lock() {
-                    guard.remove(&project_id_clone);
+                    if let Some(entry) = guard.get(&project_id_clone) {
+                        if entry.pid == pid_for_wait as u32 {
+                            guard.remove(&project_id_clone);
+                        }
+                    }
                 }
             }
         });
@@ -137,8 +141,13 @@ pub async fn start_server(
                 };
                 let payload = serde_json::json!({ "project": project_id_clone, "code": exit_code });
                 let _ = app_clone.emit("server-stopped", payload);
+                // Only remove entry if PID matches — prevents restart from orphaning the new process
                 if let Ok(mut guard) = app_clone.state::<ServerProcesses>().0.lock() {
-                    guard.remove(&project_id_clone);
+                    if let Some(entry) = guard.get(&project_id_clone) {
+                        if entry.pid == pid_for_wait as u32 {
+                            guard.remove(&project_id_clone);
+                        }
+                    }
                 }
             }
         });
@@ -219,35 +228,33 @@ fn stop_server_for_project(app: &AppHandle, project_id: &str) -> Result<(), Stri
 }
 
 /// Kill ALL running server processes across all projects.
-/// Used by close handler to ensure no zombie servers survive app exit.
+/// Used by close handler — must be synchronous since the app exits immediately after.
+/// Sends SIGTERM then SIGKILL to each process group without spawning background threads.
 pub fn kill_all_servers(app: &AppHandle) {
-    // Collect PIDs under lock, then release lock before spawning threads
     let pids: Vec<u32> = {
         let sp = app.state::<ServerProcesses>();
         let Ok(mut guard) = sp.0.lock() else { return };
         guard.drain().map(|(_, entry)| entry.pid).collect()
     };
-    for pid in pids {
+    for &pid in &pids {
         let pid = pid as i32;
         unsafe {
             libc::killpg(pid, libc::SIGTERM);
         }
-        // Spawn reaper thread for each
-        std::thread::spawn(move || {
-            let mut status: libc::c_int = 0;
-            for _ in 0..30 {
-                let result = unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) };
-                if result != 0 {
-                    return;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            }
+    }
+    // Brief pause to let processes handle SIGTERM
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    // SIGKILL anything still alive — synchronous, no background threads
+    for &pid in &pids {
+        let pid = pid as i32;
+        let mut status: libc::c_int = 0;
+        let result = unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) };
+        if result == 0 {
+            // Still alive — force kill
             unsafe {
                 libc::killpg(pid, libc::SIGKILL);
-            }
-            unsafe {
                 libc::waitpid(pid, &mut status, 0);
             }
-        });
+        }
     }
 }

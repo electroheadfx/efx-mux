@@ -145,9 +145,6 @@ export function ServerPane() {
       // 07-04: Filter npm ELIFECYCLE noise after intentional stop
       if (text.includes('ELIFECYCLE') && serverStatus.value !== 'running') return;
 
-      // Always update the cache for the correct project
-      const cached = projectServerCache.get(project);
-
       // D-09: Auto-detect URL from stdout
       const url = extractServerUrl(text);
       const html = ansiToHtml(text);
@@ -161,14 +158,17 @@ export function ServerPane() {
         serverLogs.value = [...serverLogs.value, html].slice(-MAX_LOG_LINES);
       }
 
-      // Update cache regardless of whether this is the active project
-      if (cached) {
-        if (!cached.url && url) {
-          cached.url = url;
-          cached.logs = [...cached.logs, ansiToHtml(`[server] Detected URL: ${url}\n`)];
-        }
-        cached.logs = [...cached.logs, html].slice(-MAX_LOG_LINES);
+      // Always update the cache for the correct project (create entry if missing)
+      let cached = projectServerCache.get(project);
+      if (!cached) {
+        cached = { logs: [], status: 'running', url: null };
+        projectServerCache.set(project, cached);
       }
+      if (!cached.url && url) {
+        cached.url = url;
+        cached.logs = [...cached.logs, ansiToHtml(`[server] Detected URL: ${url}\n`)];
+      }
+      cached.logs = [...cached.logs, html].slice(-MAX_LOG_LINES);
     }).then(fn => { unlisten1 = fn; });
 
     listenServerStopped((project, exitCode) => {
@@ -180,9 +180,13 @@ export function ServerPane() {
         if (project === activeProjectName.value && serverStatus.value === 'running') {
           serverStatus.value = 'stopped';
         }
-        // Update cache
-        const cached = projectServerCache.get(project);
-        if (cached && cached.status === 'running') cached.status = 'stopped';
+        // Update cache (create entry if missing)
+        let cached = projectServerCache.get(project);
+        if (!cached) {
+          cached = { logs: [], status: 'stopped', url: null };
+          projectServerCache.set(project, cached);
+        }
+        if (cached.status === 'running') cached.status = 'stopped';
         return;
       }
 
@@ -198,9 +202,13 @@ export function ServerPane() {
           serverStatus.value = 'crashed';
           serverLogs.value = [...serverLogs.value, crashMsg];
         }
-        // Update cache
-        const cached = projectServerCache.get(project);
-        if (cached && cached.status === 'running') {
+        // Update cache (create entry if missing)
+        let cached = projectServerCache.get(project);
+        if (!cached) {
+          cached = { logs: [], status: 'crashed', url: null };
+          projectServerCache.set(project, cached);
+        }
+        if (cached.status === 'running') {
           cached.status = 'crashed';
           cached.logs = [...cached.logs, crashMsg];
         }
