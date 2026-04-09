@@ -162,17 +162,79 @@ const activeTabId = signal<string>('');
 ```
 [VERIFIED: PtyManager HashMap supports multiple named sessions (pty.rs line 32)]
 
-### Pattern 3: PTY Exit Detection (UX-03)
-**What:** When the PTY read loop hits EOF (reader.read returns 0), emit a Tauri event with the tmux session's exit code. Frontend listens and shows inline overlay.
+### Pattern 3: PTY Exit Detection with Real Exit Codes (UX-03)
+**What:** When the PTY read loop hits EOF (reader.read returns 0), use tmux to detect whether the session truly died and retrieve the inner process's exit code. Emit a Tauri event with the session name and real exit code.
 **When to use:** Every PTY session
+**Approach (from resolved Open Question 2):**
+1. At spawn time, set `remain-on-exit on` for the tmux session so the pane status is preserved after exit.
+2. After PTY EOF, check `tmux has-session -t {name}` -- if session is gone (without remain-on-exit it auto-destroys), it's a detach or cleanup race.
+3. Query `tmux display-message -t {name} -p '#{pane_dead_status}'` to get the actual inner process exit code.
+4. If display-message fails (session already cleaned up), fall back to exit code 0.
 **Example:**
 ```rust
-// Source: server.rs lines 94-103 (waitpid/WIFEXITED pattern)
-// In pty.rs read loop, after Ok(0) => break:
-// After loop ends, check tmux session status or use waitpid
-// Emit event: app.emit("pty-exited", json!({ "session": sanitized, "code": exit_code }))
+// Source: derived from server.rs lines 94-103 (waitpid pattern)
+// In pty.rs, BEFORE the read loop thread spawn, clone app + session:
+let app_for_exit = app.clone();
+let session_for_exit = sanitized.clone();
+
+// At spawn time (after tmux new-session), set remain-on-exit:
+let _ = std::process::Command::new("tmux")
+    .args(["set-option", "-t", &sanitized, "remain-on-exit", "on"])
+    .output();
+
+std::thread::spawn(move || {
+    // ... existing read loop ...
+    // After Ok(0) => break:
+    
+    // Brief delay for tmux to register pane death
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    
+    // Step 1: Check if tmux session still exists
+    let session_alive = std::process::Command::new("tmux")
+        .args(["has-session", "-t", &session_for_exit])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    
+    if session_alive {
+        // Session still alive -- query the actual exit code from the dead pane
+        let exit_code = std::process::Command::new("tmux")
+            .args(["display-message", "-t", &session_for_exit, "-p", "#{pane_dead_status}"])
+            .output()
+            .ok()
+            .and_then(|o| {
+                if o.status.success() {
+                    String::from_utf8(o.stdout).ok()
+                } else {
+                    None
+                }
+            })
+            .and_then(|s| s.trim().parse::<i32>().ok())
+            .unwrap_or(0);
+        
+        // Clean up the remain-on-exit session
+        let _ = std::process::Command::new("tmux")
+            .args(["kill-session", "-t", &session_for_exit])
+            .output();
+        
+        let payload = serde_json::json!({
+            "session": session_for_exit,
+            "code": exit_code
+        });
+        let _ = app_for_exit.emit("pty-exited", payload);
+    }
+    // If session is not alive at all (race condition), emit with code 0
+    // This handles the case where tmux cleaned up before we could query
+    else {
+        let payload = serde_json::json!({
+            "session": session_for_exit,
+            "code": 0
+        });
+        let _ = app_for_exit.emit("pty-exited", payload);
+    }
+});
 ```
-[VERIFIED: server.rs uses waitpid + WIFEXITED for exit code detection]
+[VERIFIED: server.rs uses app.emit() for server-stopped events]
 
 ### Pattern 4: Inline Overlay (UX-03, D-09)
 **What:** Crash/exit banner overlays the terminal area with a semi-transparent backdrop. Terminal content stays visible behind it (dimmed).
@@ -221,7 +283,7 @@ const WIZARD_STEPS = ['Welcome', 'Project', 'Agent', 'Theme', 'Server'];
 |---------|-------------|-------------|-----|
 | Key conflict resolution | Custom event priority system | capture:true + attachCustomKeyEventHandler | Both layers already exist in codebase; proven pattern |
 | Multi-session PTY | New PTY management abstraction | Existing PtyManager HashMap | Already handles named sessions, just add more |
-| Exit code detection | Custom process monitoring | waitpid/WIFEXITED (from server.rs) | OS-level, reliable, already proven in this codebase |
+| Exit code detection | Custom process monitoring | tmux remain-on-exit + display-message #{pane_dead_status} | tmux tracks inner process exit code natively |
 | Modal/overlay UI | Custom dialog system | Preact signal-driven visibility (from fuzzy-search.tsx) | Established pattern, consistent with existing UI |
 | Tab component | Custom tab implementation | Existing TabBar component | Already reusable, signal-based |
 
@@ -232,7 +294,7 @@ const WIZARD_STEPS = ['Welcome', 'Project', 'Agent', 'Theme', 'Server'];
 ### Pitfall 1: Ctrl+Tab Browser Default
 **What goes wrong:** Ctrl+Tab is the default browser shortcut for tab switching. In Tauri's WKWebView, it may be consumed before reaching JavaScript.
 **Why it happens:** WKWebView can intercept certain key combinations before the DOM keydown event fires.
-**How to avoid:** Test early. If WKWebView consumes Ctrl+Tab, the capture-phase handler will never fire. Fallback: use Ctrl+Shift+Tab / Ctrl+PageDown/PageUp which WKWebView does not intercept.
+**How to avoid:** Test early. If WKWebView consumes Ctrl+Tab, the capture-phase handler will never fire. Fallback: use Ctrl+PageDown/PageUp which WKWebView does not intercept. (See resolved Open Question 1.)
 **Warning signs:** Ctrl+Tab handler never fires in the capture listener.
 [ASSUMED -- WKWebView key interception behavior may vary by macOS version]
 
@@ -246,7 +308,7 @@ const WIZARD_STEPS = ['Welcome', 'Project', 'Agent', 'Theme', 'Server'];
 ### Pitfall 3: PTY EOF vs tmux Session Alive
 **What goes wrong:** The PTY read loop hits EOF when the PTY master closes, but the tmux session may still be running (since tmux detaches the process). The "crash" overlay shows when the user just detached.
 **Why it happens:** portable-pty EOF means the PTY file descriptor closed, not necessarily that the underlying process crashed.
-**How to avoid:** After PTY EOF, check tmux session status via `tmux has-session -t {name}`. If the session still exists, it's a detach (reconnect). If it doesn't exist, the process exited (show overlay with exit code).
+**How to avoid:** After PTY EOF, check tmux session status via `tmux has-session -t {name}`. With `remain-on-exit on`, the session stays alive after process exit, allowing exit code query via `tmux display-message -t {name} -p '#{pane_dead_status}'`. Then kill the session after reading the code.
 **Warning signs:** Crash overlay appears when the user didn't expect it.
 [VERIFIED: pty.rs read loop breaks on Ok(0) EOF]
 
@@ -321,7 +383,13 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
       e.preventDefault(); e.stopPropagation();
       openFuzzySearch();
       break;
-    case key === '/' && e.shiftKey: // Ctrl+? on US keyboard = Ctrl+Shift+/
+    case (key === '/' && e.shiftKey) || (key === '?' && !e.altKey):
+      // Ctrl+? = Ctrl+Shift+/ on US keyboard = Ctrl+? for AZERTY (D-03)
+      e.preventDefault(); e.stopPropagation();
+      toggleCheatsheet();
+      break;
+    case key === '/' && !e.shiftKey && !e.altKey:
+      // Ctrl+/ as AZERTY fallback for cheatsheet
       e.preventDefault(); e.stopPropagation();
       toggleCheatsheet();
       break;
@@ -337,31 +405,51 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
 ### PTY Exit Event Emission (Rust)
 ```rust
 // Source: derived from server.rs lines 94-103 (waitpid pattern)
-// Add to pty.rs read loop, after the loop breaks on EOF
-
-// After loop exits:
-let app_for_exit = app.clone(); // clone app handle before thread spawn
+// In pty.rs, BEFORE the read loop thread spawn:
+let app_for_exit = app.clone();
 let session_for_exit = sanitized.clone();
+
+// After tmux new-session, set remain-on-exit so we can query exit code:
+let _ = std::process::Command::new("tmux")
+    .args(["set-option", "-t", &sanitized, "remain-on-exit", "on"])
+    .output();
 
 std::thread::spawn(move || {
     // ... existing read loop ...
     // After Ok(0) => break:
     
-    // Check if tmux session still exists
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    
+    // Check if tmux session still exists (remain-on-exit keeps it alive)
     let session_alive = std::process::Command::new("tmux")
         .args(["has-session", "-t", &session_for_exit])
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
     
-    if !session_alive {
-        // Session truly ended -- emit exit event
-        let payload = serde_json::json!({
-            "session": session_for_exit,
-            "code": 0  // Could enhance with exit code detection
-        });
-        let _ = app_for_exit.emit("pty-exited", payload);
-    }
+    let exit_code = if session_alive {
+        // Query the dead pane's exit status
+        let code = std::process::Command::new("tmux")
+            .args(["display-message", "-t", &session_for_exit, "-p", "#{pane_dead_status}"])
+            .output()
+            .ok()
+            .and_then(|o| if o.status.success() { String::from_utf8(o.stdout).ok() } else { None })
+            .and_then(|s| s.trim().parse::<i32>().ok())
+            .unwrap_or(0);
+        // Clean up the remain-on-exit session
+        let _ = std::process::Command::new("tmux")
+            .args(["kill-session", "-t", &session_for_exit])
+            .output();
+        code
+    } else {
+        0 // Session already gone (race condition) -- assume normal exit
+    };
+    
+    let payload = serde_json::json!({
+        "session": session_for_exit,
+        "code": exit_code
+    });
+    let _ = app_for_exit.emit("pty-exited", payload);
 });
 ```
 [VERIFIED: server.rs uses app.emit() for server-stopped events]
@@ -416,22 +504,28 @@ terminal.attachCustomKeyEventHandler((ev: KeyboardEvent): boolean => {
 | A2 | Ctrl+W may trigger window close in WKWebView | Pitfall 4 | Need to verify preventDefault works in Tauri |
 | A3 | Ctrl+? maps to Ctrl+Shift+/ on keyboard | Code Examples | On French AZERTY, ? is Shift+, -- need to verify e.key === '?' works cross-layout |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Ctrl+Tab WKWebView interception**
+1. **Ctrl+Tab WKWebView interception** (RESOLVED)
    - What we know: Standard browsers consume Ctrl+Tab. Tauri WKWebView may or may not.
    - What's unclear: Whether capture-phase preventDefault can override WKWebView's built-in handling.
-   - Recommendation: Test in first task. If blocked, use Ctrl+PageDown/PageUp as fallback.
+   - **Decision:** Implement Ctrl+Tab as the primary binding. Plan 01 Task 1 must test it early during development. If WKWebView intercepts it (the capture handler never fires), add Ctrl+PageDown / Ctrl+PageUp as the fallback pair in the same handler. The xterm.js blocker must also block PageDown/PageUp if the fallback is activated. The UI-SPEC cheatsheet entry should show whichever binding actually works (determined at dev time, not runtime).
 
-2. **PTY exit code from tmux**
+2. **PTY exit code from tmux** (RESOLVED)
    - What we know: The PTY read loop EOFs when the master PTY closes. server.rs uses waitpid for exit codes.
-   - What's unclear: portable-pty's child process is tmux (not the actual shell). The exit code from waitpid will be tmux's exit code, which may or may not reflect the inner shell's exit code.
-   - Recommendation: Use `tmux has-session` to detect session death. For exit code, check `tmux display-message -t {session} -p "#{pane_dead_status}"` or accept that exit code is best-effort.
+   - What's unclear: portable-pty's child process is tmux (not the actual shell). waitpid on the tmux client gives tmux's exit code, not the inner shell's.
+   - **Decision:** Use a two-step approach after PTY EOF:
+     1. At spawn time, set `remain-on-exit on` for the tmux session: `tmux set-option -t {session} remain-on-exit on`. This keeps the pane alive after the inner process exits, preserving its exit status.
+     2. After PTY EOF + 300ms delay, check `tmux has-session -t {session}` (will be true because remain-on-exit keeps session alive).
+     3. Query `tmux display-message -t {session} -p '#{pane_dead_status}'` to get the actual inner process exit code as an integer string.
+     4. Kill the session after reading: `tmux kill-session -t {session}`.
+     5. If display-message fails (session already cleaned up by external force), fall back to exit code 0.
+   - This gives real exit codes for D-08 (code 0 = normal, non-zero = crash).
 
-3. **French AZERTY keyboard: Ctrl+?**
+3. **French AZERTY keyboard: Ctrl+?** (RESOLVED)
    - What we know: User has French Mac keyboard (CLAUDE memory). ? is accessed differently on AZERTY.
    - What's unclear: What `e.key` value Ctrl+? produces on AZERTY.
-   - Recommendation: Also bind Ctrl+/ (without shift) as alternative. Test with French keyboard layout.
+   - **Decision:** Bind both `Ctrl+Shift+/` (US layout) and `Ctrl+/` (without shift, as AZERTY fallback). The handler checks `(key === '/' && e.shiftKey) || (key === '?' && !e.altKey) || (key === '/' && !e.shiftKey && !e.altKey)`. This covers US, AZERTY, and other layouts where `/` and `?` may differ.
 
 ## Validation Architecture
 
@@ -499,7 +593,7 @@ None -- this phase is UI/UX focused with manual verification. No automated test 
 - Pitfalls: MEDIUM - WKWebView key interception needs runtime testing
 - Keyboard system: HIGH - capture:true pattern proven in main.tsx
 - Tab management: HIGH - PtyManager + TabBar already exist
-- PTY crash: HIGH - server.rs exit pattern directly transferable
+- PTY crash: HIGH - tmux remain-on-exit + display-message approach is well-documented
 - Wizard: HIGH - project-modal.tsx provides all needed fields
 
 **Research date:** 2026-04-09
