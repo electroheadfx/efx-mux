@@ -57,7 +57,7 @@ async function handleSubmit() {
     const entry: ProjectEntry = {
       path: directory.value.trim(),
       name: name.value.trim(),
-      agent: agent.value,
+      agent: agent.value.trim() || 'bash',
       gsd_file: gsdFile.value.trim() || undefined,
       server_cmd: serverCmd.value.trim() || undefined,
     };
@@ -192,15 +192,19 @@ export function ProjectModal() {
           {/* Agent */}
           <div class="mb-4">
             <label class="block text-[11px] uppercase tracking-widest text-text mb-1">Agent</label>
-            <select
-              class="w-full h-8 px-2 text-sm bg-bg border border-border rounded-sm text-text-bright outline-none box-border transition-colors"
+            <input
+              type="text"
+              list="agent-suggestions"
+              placeholder="claude"
+              class="w-full h-8 px-2 text-sm bg-bg border border-border rounded-sm text-text-bright outline-none focus:border-accent box-border transition-colors"
               value={agent.value}
-              onChange={(e) => { agent.value = (e.target as HTMLSelectElement).value; }}
-            >
-              <option value="claude">claude</option>
-              <option value="opencode">opencode</option>
-              <option value="bash">bash</option>
-            </select>
+              onInput={(e) => { agent.value = (e.target as HTMLInputElement).value; }}
+            />
+            <datalist id="agent-suggestions">
+              <option value="claude" />
+              <option value="opencode" />
+              <option value="bash" />
+            </datalist>
           </div>
 
           {/* GSD File */}
