@@ -305,7 +305,10 @@ export function ServerPane() {
             />
             <span class="text-text-bright text-[11px] tracking-wider uppercase">Server</span>
             {activeProjectName.value && (
-              <span class="text-text text-[11px] opacity-70 normal-case ml-1">
+              <span
+                class="text-text text-[11px] opacity-70 normal-case ml-1 flex-shrink-0"
+                title={activeProjectName.value}
+              >
                 {activeProjectName.value}
               </span>
             )}
