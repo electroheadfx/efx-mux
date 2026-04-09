@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Project System + Sidebar** - Project registration, sidebar with git badge, project switching, Ctrl+P switcher
 - [x] **Phase 6: Right Panel Views** - Tab bar, GSD Markdown viewer with checkbox write-back, git diff viewer, file tree, bash terminal
 - [x] **Phase 6.1: Migrate Arrow.js to Preact + Vite + TS + Tailwind 4** (INSERTED) - Replace Arrow.js with Preact + Vite + TypeScript + Tailwind 4
-- [ ] **Phase 7: Server Pane + Agent Support** - Server pane with controls, Claude Code / OpenCode launchers, auto-detect fallback
+- [x] **Phase 7: Server Pane + Agent Support** - Server pane with controls, Claude Code / OpenCode launchers, auto-detect fallback
 - [ ] **Phase 8: Keyboard + Polish** - App-level shortcut system with terminal pass-through, tab management, crash recovery, first-run wizard
 
 ## Phase Details
@@ -186,10 +186,11 @@ Plans:
   3. When a PTY process crashes, user sees a banner with a "Restart Session" option (no blank panel)
   4. First-run wizard prompts user to add their first project and choose a default agent
 
-**Plans**: 2 plans
+**Plans**: 3 plans
 Plans:
-- [x] 06-01-PLAN.md -- Wave 1: PtyManager HashMap refactor, new Rust commands, .md file watcher
-- [x] 06-02-PLAN.md -- Wave 2: Tab bars, GSD Viewer, Diff Viewer, File Tree, Bash Terminal wiring
+- [ ] 08-01-PLAN.md -- Consolidated keyboard shortcut system + cheatsheet overlay
+- [ ] 08-02-PLAN.md -- Terminal tab management + PTY crash recovery
+- [ ] 08-03-PLAN.md -- First-run wizard + UAT checkpoint
 
 **UI hint**: yes
 
@@ -207,8 +208,8 @@ Phases execute in numeric order. Note: Phases 3 and 6 are parallelizable after P
 | 5. Project System + Sidebar | 2/2 | Complete | 2026-04-07 |
 | 6. Right Panel Views | 7/7 | Complete | 2026-04-08 |
 | 6.1 Migrate Arrow.js -> Preact | 6/6 | Complete | 2026-04-08 |
-| 7. Server Pane + Agent Support | 7/9 | In Progress | - |
-| 8. Keyboard + Polish | 0/TBD | Not started | - |
+| 7. Server Pane + Agent Support | 9/9 | Complete | 2026-04-09 |
+| 8. Keyboard + Polish | 0/3 | Not started | - |
 
 ### Phase 9: Rich Dashboard Views — Parse STATE.md and ROADMAP.md as structured data, render as designed Preact dashboard with progress bars, phase cards, status badges, decision logs
 
