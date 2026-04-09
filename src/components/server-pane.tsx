@@ -31,6 +31,9 @@ const serverLogs = signal<string[]>([]);
 
 const MAX_LOG_LINES = 5000;
 
+// 07-04: Guard flag for restart race condition (not a signal -- no re-render needed)
+let isRestarting = false;
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -90,6 +93,9 @@ export function ServerPane() {
     let unlisten2: (() => void) | null = null;
 
     listenServerOutput((text) => {
+      // 07-04: Filter npm ELIFECYCLE noise after intentional stop
+      if (text.includes('ELIFECYCLE') && serverStatus.value !== 'running') return;
+
       // D-09: Auto-detect URL from stdout
       if (!detectedUrl.value) {
         const url = extractServerUrl(text);
@@ -103,6 +109,17 @@ export function ServerPane() {
     }).then(fn => { unlisten1 = fn; });
 
     listenServerStopped((exitCode: number) => {
+      // 07-04: Skip stale stopped events during restart
+      if (isRestarting) return;
+
+      // 07-04: Exit 143 (SIGTERM) and 137 (SIGKILL) are clean stops, not crashes
+      if (exitCode === 143 || exitCode === 137) {
+        if (serverStatus.value === 'running') {
+          serverStatus.value = 'stopped';
+        }
+        return;
+      }
+
       // D-14: exitCode >= 0 = natural exit/crash. -1 = intentional stop (ignore).
       if (exitCode >= 0 && serverStatus.value === 'running') {
         serverStatus.value = 'crashed';
