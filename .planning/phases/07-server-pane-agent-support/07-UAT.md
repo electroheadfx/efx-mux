@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 07-server-pane-agent-support
 source: [07-01-SUMMARY.md, 07-02-SUMMARY.md, 07-03-SUMMARY.md, 07-04-SUMMARY.md, 07-05-SUMMARY.md, 07-06-SUMMARY.md, 07-07-SUMMARY.md]
 started: 2026-04-09T14:00:00Z
@@ -104,29 +104,55 @@ blocked: 0
   reason: "User reported: hide state was previously removed but has regressed — cycle should be 2-state (strip/expanded), not 3-state"
   severity: major
   test: 2
-  artifacts: []
-  missing: []
-
-- truth: "Server pane header shows full project name with hover tooltip"
-  status: failed
-  reason: "User reported: name is truncated, no hover tooltip"
-  severity: cosmetic
-  test: 14
-  artifacts: []
-  missing: []
-
-- truth: "App close kills all running server processes across all projects"
-  status: failed
-  reason: "User reported: all server processes remain running after app close, not killed. Logs of each project are also cleared (not persistent)."
-  severity: blocker
-  test: 16
-  artifacts: []
-  missing: []
+  root_cause: "3-state cycle in two places: server-pane.tsx handleToggle (lines 284-288) and main.tsx Ctrl+S handler (lines 132-134) both cycle strip->expanded->collapsed->strip"
+  artifacts:
+    - path: "src/components/server-pane.tsx"
+      issue: "handleToggle has 3-state cycle including 'collapsed' state"
+    - path: "src/main.tsx"
+      issue: "Ctrl+S handler has same 3-state cycle"
+  missing:
+    - "Replace 3-way branch with 2-state toggle: strip <-> expanded in both locations"
+    - "Remove 'collapsed' from signal type and clean up CSS/rendering references"
 
 - truth: "ANSI colored text renders visibly in server log output"
   status: failed
   reason: "User reported: third pass at fixing and never actually fixed. ANSI colors still not rendering."
   severity: major
   test: 4
-  artifacts: []
-  missing: []
+  root_cause: "ansiToHtml regex expects raw \\x1b bytes but ANSI escape chars are likely stripped or mangled during Rust->JSON->JS serialization via Tauri event system. The converter produces zero colored spans because the regex never matches."
+  artifacts:
+    - path: "src/server/ansi-html.ts"
+      issue: "Regex assumes raw \\x1b bytes arrive intact from Rust"
+    - path: "src-tauri/src/server.rs"
+      issue: "emit() may strip/mangle \\x1b during JSON serialization"
+  missing:
+    - "Verify what Rust actually sends (console.log JSON.stringify in listener)"
+    - "Either preserve \\x1b through serialization or do ANSI-to-HTML conversion on Rust side before emitting"
+
+- truth: "Server pane header shows full project name with hover tooltip"
+  status: failed
+  reason: "User reported: name is truncated, no hover tooltip"
+  severity: cosmetic
+  test: 14
+  root_cause: "flex-shrink-0 on project name span prevents shrinking but parent has no overflow-hidden/min-w-0, so text clips. title attribute is present in source but element is not visible due to layout."
+  artifacts:
+    - path: "src/components/server-pane.tsx"
+      issue: "Project name span has flex-shrink-0 (wrong), parent div lacks min-w-0/overflow-hidden"
+  missing:
+    - "Remove flex-shrink-0, add truncate class to project name span"
+    - "Add min-w-0 and overflow-hidden to parent left-side div"
+
+- truth: "App close kills all running server processes across all projects"
+  status: failed
+  reason: "User reported: all server processes remain running after app close, not killed. Logs of each project are also cleared (not persistent)."
+  severity: blocker
+  test: 16
+  root_cause: "on_window_event CloseRequested only fires on window close button click, NOT on Cmd+Q. Cmd+Q triggers RunEvent::ExitRequested on the App, not a window event. kill_all_servers never executes on quit. Logs are in-memory only (Preact signals), not persisted to disk."
+  artifacts:
+    - path: "src-tauri/src/lib.rs"
+      issue: "Close handler uses on_window_event(CloseRequested) which misses Cmd+Q"
+    - path: "src/components/server-pane.tsx"
+      issue: "Logs in memory only, not persisted to disk"
+  missing:
+    - "Move kill_all_servers to RunEvent::ExitRequested handler via .build() + .run() pattern"
+    - "Persist server logs to disk (state.json or separate log files) and reload on startup"
