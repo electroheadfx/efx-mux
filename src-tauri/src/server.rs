@@ -1,7 +1,8 @@
 use std::io::Read;
 use std::os::unix::process::CommandExt;
 use std::process::{Command, Stdio};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
 
 /// Tauri-managed wrapper for the server child process.
@@ -46,9 +47,25 @@ pub async fn start_server(
         *guard = Some(child);
     }
 
+    // 07-05: EOF-based process exit detection instead of premature waitpid.
+    // Stdout/stderr pipes stay open as long as ANY process in the group holds them.
+    // When ALL processes exit, pipes close and readers get EOF.
+    // The last reader to finish emits server-stopped with the exit code.
+    let reader_count = Arc::new(AtomicU8::new(
+        (stdout.is_some() as u8) + (stderr.is_some() as u8),
+    ));
+
+    // Guard: if no readers at all, emit stopped immediately
+    if reader_count.load(Ordering::SeqCst) == 0 {
+        let _ = app.emit("server-stopped", 0i32);
+        return Ok(());
+    }
+
     // Spawn stdout reader thread
     if let Some(mut stdout) = stdout {
         let app_clone = app.clone();
+        let count = reader_count.clone();
+        let pid_for_wait = pid;
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
             loop {
@@ -61,12 +78,30 @@ pub async fn start_server(
                     Err(_) => break,
                 }
             }
+            // Last reader to finish emits server-stopped
+            if count.fetch_sub(1, Ordering::SeqCst) == 1 {
+                let mut status: libc::c_int = 0;
+                let result =
+                    unsafe { libc::waitpid(pid_for_wait as i32, &mut status, libc::WNOHANG) };
+                let exit_code = if result > 0 && libc::WIFEXITED(status) {
+                    libc::WEXITSTATUS(status)
+                } else {
+                    0 // Pipes closed, process exited normally
+                };
+                let _ = app_clone.emit("server-stopped", exit_code);
+                // Clear stored child since process is gone
+                if let Ok(mut guard) = app_clone.state::<ServerProcess>().0.lock() {
+                    *guard = None;
+                }
+            }
         });
     }
 
-    // Spawn stderr reader thread
+    // Spawn stderr reader thread (same EOF pattern)
     if let Some(mut stderr) = stderr {
         let app_clone = app.clone();
+        let count = reader_count.clone();
+        let pid_for_wait = pid;
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
             loop {
@@ -79,27 +114,22 @@ pub async fn start_server(
                     Err(_) => break,
                 }
             }
+            if count.fetch_sub(1, Ordering::SeqCst) == 1 {
+                let mut status: libc::c_int = 0;
+                let result =
+                    unsafe { libc::waitpid(pid_for_wait as i32, &mut status, libc::WNOHANG) };
+                let exit_code = if result > 0 && libc::WIFEXITED(status) {
+                    libc::WEXITSTATUS(status)
+                } else {
+                    0
+                };
+                let _ = app_clone.emit("server-stopped", exit_code);
+                if let Ok(mut guard) = app_clone.state::<ServerProcess>().0.lock() {
+                    *guard = None;
+                }
+            }
         });
     }
-
-    // Spawn waiter thread for crash detection (D-14)
-    // Uses libc::waitpid to detect natural process exit and emit exit code
-    let app_clone = app.clone();
-    std::thread::spawn(move || {
-        let mut status: libc::c_int = 0;
-        let result = unsafe { libc::waitpid(pid as i32, &mut status, 0) };
-        let exit_code = if result > 0 && libc::WIFEXITED(status) {
-            libc::WEXITSTATUS(status)
-        } else {
-            -1
-        };
-        let _ = app_clone.emit("server-stopped", exit_code);
-
-        // Clear the stored child since process is gone
-        if let Ok(mut guard) = app_clone.state::<ServerProcess>().0.lock() {
-            *guard = None;
-        }
-    });
 
     Ok(())
 }

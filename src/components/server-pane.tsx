@@ -134,6 +134,12 @@ export function ServerPane() {
         return;
       }
 
+      // 07-05: Grace period -- ignore exit code 0 within 3s of start
+      // (shell wrapper exiting before real server for multi-stage commands like pnpm tauri dev)
+      if (exitCode === 0 && Date.now() - serverStartedAt < 3000) {
+        return;
+      }
+
       // D-14: exitCode >= 0 = natural exit/crash. -1 = intentional stop (ignore).
       if (exitCode >= 0 && serverStatus.value === 'running') {
         serverStatus.value = 'crashed';
@@ -153,6 +159,7 @@ export function ServerPane() {
     if (!proj?.server_cmd) return;
     serverLogs.value = [...serverLogs.value, ansiToHtml('[server] Starting: ' + proj.server_cmd + '\n')];
     serverStatus.value = 'running';
+    serverStartedAt = Date.now(); // 07-05: record for grace period
     detectedUrl.value = proj.server_url ?? null;
     try {
       await startServer(proj.server_cmd, proj.path);
