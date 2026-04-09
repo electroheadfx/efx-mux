@@ -162,11 +162,12 @@ Plans:
   4. App detects and launches `claude` or `opencode` binary directly in a tmux PTY (verified: no wrapping or protocol modification)
   5. If neither agent binary is found, app falls back to a plain bash session with a banner explaining the situation
 
-**Plans**: 3 plans
+**Plans**: 4 plans
 Plans:
 - [x] 07-01-PLAN.md -- Rust server process manager + frontend bridge modules
 - [x] 07-02-PLAN.md -- Server pane UI component + agent detection + Ctrl+` handler
 - [x] 07-03-PLAN.md -- Gap closure: install plugin-opener + agent detection on project switch
+- [ ] 07-04-PLAN.md -- UAT gap closure: ANSI colors, clean SIGTERM stop, restart toolbar race
 
 **UI hint**: yes
 
