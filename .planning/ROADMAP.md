@@ -81,7 +81,7 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. User closes the app; split ratios, active tabs, session IDs, and active project are saved to `~/.config/gsd-mux/state.json`
   2. User reopens the app; layout is restored exactly and all tmux sessions are reattached with their running processes
-  3. If a saved tmux session no longer exists (daemon died), user sees a warning and a fresh session is created automatically
+  3. If a saved tmux session no longer exists (daemon died), user is warned and a fresh session is created automatically
   4. If state.json is missing or corrupted, app starts with default layout and logs a warning (no crash)
 **Plans**: 4 plans
 Plans:
@@ -186,11 +186,12 @@ Plans:
   3. When a PTY process crashes, user sees a banner with a "Restart Session" option (no blank panel)
   4. First-run wizard prompts user to add their first project and choose a default agent
 
-**Plans**: 3 plans
+**Plans**: 4 plans
 Plans:
-- [ ] 08-01-PLAN.md -- Consolidated keyboard shortcut system + cheatsheet overlay
-- [ ] 08-02-PLAN.md -- Terminal tab management + PTY crash recovery
-- [ ] 08-03-PLAN.md -- First-run wizard + UAT checkpoint
+- [x] 08-01-PLAN.md -- Consolidated keyboard shortcut system + cheatsheet overlay
+- [x] 08-02-PLAN.md -- Terminal tab management + PTY crash recovery
+- [x] 08-03-PLAN.md -- First-run wizard + UAT checkpoint
+- [ ] 08-04-PLAN.md -- Gap closure: fix Ctrl+P fuzzy search dispatch
 
 **UI hint**: yes
 
@@ -209,7 +210,7 @@ Phases execute in numeric order. Note: Phases 3 and 6 are parallelizable after P
 | 6. Right Panel Views | 7/7 | Complete | 2026-04-08 |
 | 6.1 Migrate Arrow.js -> Preact | 6/6 | Complete | 2026-04-08 |
 | 7. Server Pane + Agent Support | 9/9 | Complete | 2026-04-09 |
-| 8. Keyboard + Polish | 0/3 | Not started | - |
+| 8. Keyboard + Polish | 3/4 | In Progress | - |
 
 ### Phase 9: Rich Dashboard Views — Parse STATE.md and ROADMAP.md as structured data, render as designed Preact dashboard with progress bars, phase cards, status badges, decision logs
 
