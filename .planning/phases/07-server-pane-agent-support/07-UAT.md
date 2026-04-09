@@ -1,9 +1,9 @@
 ---
-status: complete
+status: diagnosed
 phase: 07-server-pane-agent-support
 source: [07-01-SUMMARY.md, 07-02-SUMMARY.md, 07-03-SUMMARY.md]
 started: 2026-04-09T12:00:00Z
-updated: 2026-04-09T12:10:00Z
+updated: 2026-04-09T12:12:00Z
 ---
 
 ## Current Test
@@ -74,9 +74,12 @@ blocked: 0
   reason: "User reported: no colored text - output appears monochrome/plain"
   severity: minor
   test: 4
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "CSS cascade issue - .server-pane-logs sets color: var(--color-text) which overrides inline styles from ansiToHtml() spans"
+  artifacts:
+    - path: "src/styles/app.css"
+      issue: ".server-pane-logs color property overrides inline span colors"
+  missing:
+    - "Allow inline color styles on ansiToHtml spans to take precedence over container color"
   debug_session: ""
 
 - truth: "Server stop exits cleanly without ELIFECYCLE error"
@@ -84,9 +87,15 @@ blocked: 0
   reason: "User reported: small error: ELIFECYCLE Command failed with exit code 143. not annoying"
   severity: minor
   test: 5
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "Expected behavior - SIGTERM (killpg) causes exit code 143 (128+15), pnpm logs ELIFECYCLE for non-zero script exits. Suppressible on frontend."
+  artifacts:
+    - path: "src-tauri/src/server.rs"
+      issue: "killpg sends SIGTERM causing exit 143 - correct behavior"
+    - path: "src/components/server-pane.tsx"
+      issue: "listenServerStopped treats exit 143 as crash instead of clean stop"
+  missing:
+    - "Treat exit code 143 (SIGTERM) as clean stop, not crash"
+    - "Optionally filter ELIFECYCLE lines from log output"
   debug_session: ""
 
 - truth: "Toolbar buttons reflect server running state (hide Start, show Stop/Restart/Open)"
@@ -94,7 +103,12 @@ blocked: 0
   reason: "User reported: restarts but toolbar shows Start button when server is running - should show only Stop, Restart, Open"
   severity: major
   test: 6
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "Race condition: restart sets status to 'running', but old process exit triggers listenServerStopped which flips status to 'crashed' (exit code >= 0 while status === running)"
+  artifacts:
+    - path: "src/components/server-pane.tsx"
+      issue: "listenServerStopped callback cannot distinguish old process exit during restart from actual crash"
+    - path: "src-tauri/src/server.rs"
+      issue: "restart_server waiter thread emits server-stopped for old process after new process starts"
+  missing:
+    - "Add isRestarting flag or PID tracking to suppress crash detection during restart window"
   debug_session: ""
