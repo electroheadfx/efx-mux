@@ -26,7 +26,7 @@ import {
   getProjects, getActiveProject, projects, activeProjectName
 } from './state-manager';
 import { openProjectModal } from './components/project-modal';
-import { serverPaneState, resetServerPane } from './components/server-pane';
+import { serverPaneState, resetServerPane, saveCurrentProjectState, restoreProjectState } from './components/server-pane';
 import { detectAgent } from './server/server-bridge';
 
 /**
@@ -275,12 +275,19 @@ async function initProjects() {
 }
 
 // project-changed listener: switch tmux sessions + update file watcher + agent detection
+// 07-06: Servers keep running across project switches; only UI state swaps via cache
 document.addEventListener('project-changed', async (e: Event) => {
   const newProjectName = (e as CustomEvent).detail.name;
   try {
     const projectList = await getProjects();
     const project = projectList.find(p => p.name === newProjectName);
     if (project?.path) {
+      // Save current project's server state before switching (07-06)
+      const oldProject = activeProjectName.value;
+      if (oldProject) {
+        saveCurrentProjectState(oldProject);
+      }
+
       await invoke('set_project_path', { path: project.path });
 
       // Detect agent for the new project (AGENT-03, AGENT-04)
@@ -308,13 +315,9 @@ document.addEventListener('project-changed', async (e: Event) => {
       }));
       rightCurrentSession = newRightSession;
 
-      // Stop any running server on project switch, then reset pane state (07-05, gap 11)
-      try {
-        const { stopServer } = await import('./server/server-bridge');
-        await stopServer();
-      } catch { /* no server running, ignore */ }
-      // Reset frontend server pane signals for clean workspace isolation
-      resetServerPane();
+      // 07-06: Restore new project's server state (or defaults if never started)
+      // Servers keep running in background -- only UI state switches
+      restoreProjectState(newProjectName);
     }
   } catch (err) {
     console.warn('[efxmux] Failed to switch project:', err);

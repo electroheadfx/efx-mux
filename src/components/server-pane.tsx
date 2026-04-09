@@ -5,6 +5,7 @@
 // D-14: Crash detection shows "Process exited (code N)"
 // T-07-06: ansiToHtml HTML-escapes before ANSI processing (XSS-safe)
 // T-07-07: MAX_LOG_LINES = 5000 prevents unbounded memory growth
+// 07-06: Per-project server state cache -- servers keep running across project switches
 
 import { signal } from '@preact/signals';
 import { useEffect, useRef } from 'preact/hooks';
@@ -24,6 +25,41 @@ export const serverPaneState = signal<'strip' | 'expanded' | 'collapsed'>('strip
 export const serverStatus = signal<'stopped' | 'running' | 'crashed' | 'unconfigured'>('stopped');
 const detectedUrl = signal<string | null>(null);
 const serverLogs = signal<string[]>([]);
+
+// ---------------------------------------------------------------------------
+// Per-project server state cache (07-06)
+// ---------------------------------------------------------------------------
+
+interface ProjectServerState {
+  logs: string[];
+  status: 'stopped' | 'running' | 'crashed' | 'unconfigured';
+  url: string | null;
+}
+
+const projectServerCache = new Map<string, ProjectServerState>();
+
+/** Save current project's server state to the cache before switching. */
+export function saveCurrentProjectState(projectName: string) {
+  projectServerCache.set(projectName, {
+    logs: serverLogs.value,
+    status: serverStatus.value,
+    url: detectedUrl.value,
+  });
+}
+
+/** Restore a project's cached server state (or reset to defaults if no cache). */
+export function restoreProjectState(projectName: string) {
+  const cached = projectServerCache.get(projectName);
+  if (cached) {
+    serverLogs.value = cached.logs;
+    serverStatus.value = cached.status;
+    detectedUrl.value = cached.url;
+  } else {
+    serverLogs.value = [];
+    serverStatus.value = 'stopped';
+    detectedUrl.value = null;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -101,49 +137,74 @@ export function ServerPane() {
     }
   }, [serverLogs.value]);
 
-  // Server output + stopped listeners
+  // Server output + stopped listeners (07-06: filter by active project)
   useEffect(() => {
     let unlisten1: (() => void) | null = null;
     let unlisten2: (() => void) | null = null;
 
-    listenServerOutput((text) => {
+    listenServerOutput((project, text) => {
       // 07-04: Filter npm ELIFECYCLE noise after intentional stop
       if (text.includes('ELIFECYCLE') && serverStatus.value !== 'running') return;
 
+      // Always update the cache for the correct project
+      const cached = projectServerCache.get(project);
+
       // D-09: Auto-detect URL from stdout
-      if (!detectedUrl.value) {
-        const url = extractServerUrl(text);
-        if (url) {
+      const url = extractServerUrl(text);
+      const html = ansiToHtml(text);
+
+      if (project === activeProjectName.value) {
+        // Active project -- update signals directly
+        if (!detectedUrl.value && url) {
           detectedUrl.value = url;
           serverLogs.value = [...serverLogs.value, ansiToHtml(`[server] Detected URL: ${url}\n`)];
         }
+        serverLogs.value = [...serverLogs.value, html].slice(-MAX_LOG_LINES);
       }
-      const html = ansiToHtml(text);
-      serverLogs.value = [...serverLogs.value, html].slice(-MAX_LOG_LINES);
+
+      // Update cache regardless of whether this is the active project
+      if (cached) {
+        if (!cached.url && url) {
+          cached.url = url;
+          cached.logs = [...cached.logs, ansiToHtml(`[server] Detected URL: ${url}\n`)];
+        }
+        cached.logs = [...cached.logs, html].slice(-MAX_LOG_LINES);
+      }
     }).then(fn => { unlisten1 = fn; });
 
-    listenServerStopped((exitCode: number) => {
+    listenServerStopped((project, exitCode) => {
       // 07-04: Skip stale stopped events during restart
-      if (isRestarting) return;
+      if (isRestarting && project === activeProjectName.value) return;
 
       // 07-04: Exit 143 (SIGTERM) and 137 (SIGKILL) are clean stops, not crashes
       if (exitCode === 143 || exitCode === 137) {
-        if (serverStatus.value === 'running') {
+        if (project === activeProjectName.value && serverStatus.value === 'running') {
           serverStatus.value = 'stopped';
         }
+        // Update cache
+        const cached = projectServerCache.get(project);
+        if (cached && cached.status === 'running') cached.status = 'stopped';
         return;
       }
 
       // 07-05: Grace period -- ignore exit code 0 within 3s of start
-      // (shell wrapper exiting before real server for multi-stage commands like pnpm tauri dev)
       if (exitCode === 0 && Date.now() - serverStartedAt < 3000) {
         return;
       }
 
-      // D-14: exitCode >= 0 = natural exit/crash. -1 = intentional stop (ignore).
-      if (exitCode >= 0 && serverStatus.value === 'running') {
-        serverStatus.value = 'crashed';
-        serverLogs.value = [...serverLogs.value, ansiToHtml(`[server] Process exited (code ${exitCode})\n`)];
+      // D-14: exitCode >= 0 = natural exit/crash
+      if (exitCode >= 0) {
+        const crashMsg = ansiToHtml(`[server] Process exited (code ${exitCode})\n`);
+        if (project === activeProjectName.value && serverStatus.value === 'running') {
+          serverStatus.value = 'crashed';
+          serverLogs.value = [...serverLogs.value, crashMsg];
+        }
+        // Update cache
+        const cached = projectServerCache.get(project);
+        if (cached && cached.status === 'running') {
+          cached.status = 'crashed';
+          cached.logs = [...cached.logs, crashMsg];
+        }
       }
     }).then(fn => { unlisten2 = fn; });
 
@@ -153,16 +214,24 @@ export function ServerPane() {
     };
   }, []);
 
-  // Button handlers
+  // Button handlers (07-06: pass activeProjectName.value as projectId)
   const handleStart = async () => {
     const proj = getActiveProjectEntry();
     if (!proj?.server_cmd) return;
+    const projectId = activeProjectName.value;
+    if (!projectId) return;
     serverLogs.value = [...serverLogs.value, ansiToHtml('[server] Starting: ' + proj.server_cmd + '\n')];
     serverStatus.value = 'running';
     serverStartedAt = Date.now(); // 07-05: record for grace period
     detectedUrl.value = proj.server_url ?? null;
+    // Initialize cache entry for this project
+    projectServerCache.set(projectId, {
+      logs: serverLogs.value,
+      status: 'running',
+      url: detectedUrl.value,
+    });
     try {
-      await startServer(proj.server_cmd, proj.path);
+      await startServer(proj.server_cmd, proj.path, projectId);
     } catch (err) {
       serverLogs.value = [...serverLogs.value, ansiToHtml(`[server] Failed to start: ${err}\n`)];
       serverStatus.value = 'crashed';
@@ -170,11 +239,13 @@ export function ServerPane() {
   };
 
   const handleStop = async () => {
+    const projectId = activeProjectName.value;
+    if (!projectId) return;
     isRestarting = false; // 07-04: Cancel any active restart guard
     serverLogs.value = [...serverLogs.value, ansiToHtml('[server] Stopped\n')];
     serverStatus.value = 'stopped';
     try {
-      await stopServer();
+      await stopServer(projectId);
     } catch (err) {
       console.warn('[efxmux] Stop failed:', err);
     }
@@ -183,11 +254,13 @@ export function ServerPane() {
   const handleRestart = async () => {
     const proj = getActiveProjectEntry();
     if (!proj?.server_cmd) return;
+    const projectId = activeProjectName.value;
+    if (!projectId) return;
     isRestarting = true; // 07-04: Suppress stale server-stopped events during restart
     serverLogs.value = [...serverLogs.value, ansiToHtml('[server] --- Restarting ---\n')];
     serverStatus.value = 'running';
     try {
-      await restartServer(proj.server_cmd, proj.path);
+      await restartServer(proj.server_cmd, proj.path, projectId);
     } catch (err) {
       serverLogs.value = [...serverLogs.value, ansiToHtml(`[server] Restart failed: ${err}\n`)];
       serverStatus.value = 'crashed';
