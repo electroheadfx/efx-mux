@@ -1,12 +1,15 @@
 // project-modal.tsx -- Add Project modal with form, directory browser, validation
 // Migrated from Arrow.js to Preact TSX (Phase 6.1)
+// Restyled to navy-blue palette with reference AddProjectModal pattern (Phase 10)
 
 import { useEffect, useRef } from 'preact/hooks';
+import type { ComponentChildren } from 'preact';
 import { signal, computed } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { addProject, updateProject, switchProject } from '../state-manager';
 import type { ProjectEntry } from '../state-manager';
+import { colors, fonts, fontSizes } from '../tokens';
 
 // ---------------------------------------------------------------------------
 // Module-level signals for modal state
@@ -122,6 +125,44 @@ async function handleBrowse() {
 }
 
 // ---------------------------------------------------------------------------
+// Visual primitives (matching reference AddProjectModal)
+// ---------------------------------------------------------------------------
+
+function FieldLabel({ label }: { label: string }) {
+  return (
+    <span
+      style={{
+        fontFamily: fonts.mono,
+        fontSize: fontSizes.sm,
+        color: colors.textDim,
+        letterSpacing: '1.2px',
+        display: 'block',
+        marginBottom: 6,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function InputShell({ children }: { children: ComponentChildren }) {
+  return (
+    <div
+      style={{
+        backgroundColor: colors.bgBase,
+        border: `1px solid ${colors.bgSurface}`,
+        borderRadius: 8,
+        padding: '10px 12px',
+        display: 'flex',
+        alignItems: 'center',
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -146,129 +187,313 @@ export function ProjectModal() {
 
   return (
     <div
-      class="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center animate-[fadeIn_150ms_ease-out]"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        zIndex: 100,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
       onClick={() => {
         if (!isFirstRun.value) closeProjectModal();
       }}
     >
       <div
-        class="w-[480px] bg-bg-raised border border-border-interactive rounded-xl shadow-2xl z-[101] animate-[fadeIn_150ms_ease-out]"
+        style={{
+          width: 520,
+          backgroundColor: colors.bgElevated,
+          border: `1px solid ${colors.bgSurface}`,
+          borderRadius: 12,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+          zIndex: 101,
+        }}
         onClick={(e) => { e.stopPropagation(); }}
       >
         {/* Header */}
-        <div class="flex items-center px-6 pt-5 pb-4 justify-between">
-          <div class="text-base font-semibold text-text-bright font-sans">{editingName.value ? 'Edit Project' : 'Add Project'}</div>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '20px 24px 16px 24px',
+          }}
+        >
+          <span
+            style={{
+              fontFamily: fonts.sans,
+              fontSize: 16,
+              fontWeight: 600,
+              color: colors.textPrimary,
+            }}
+          >
+            {editingName.value ? 'Edit Project' : 'Add Project'}
+          </span>
           <button
             onClick={() => { visible.value = false; }}
-            class="w-7 h-7 rounded-md border border-border-interactive flex items-center justify-center hover:bg-bg"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              border: `1px solid ${colors.bgSurface}`,
+              backgroundColor: 'transparent',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+            }}
             title="Close"
-          ><span class="text-sm text-text">{'\u2715'}</span></button>
+          >
+            <span
+              style={{
+                fontFamily: fonts.sans,
+                color: colors.textMuted,
+                fontSize: 14,
+                lineHeight: 1,
+              }}
+            >
+              {'\u2715'}
+            </span>
+          </button>
         </div>
 
         {/* Divider */}
-        <div class="h-px bg-border w-full"></div>
+        <div
+          style={{
+            height: 1,
+            backgroundColor: colors.bgBorder,
+            width: '100%',
+          }}
+        />
 
         {/* Form */}
         <form
           ref={formRef}
-          class="p-6 gap-4 flex flex-col"
+          style={{
+            padding: '20px 24px',
+            gap: 16,
+            display: 'flex',
+            flexDirection: 'column',
+          }}
           onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}
         >
           {/* Directory */}
-          <div class="mb-4">
-            <label class="section-label block mb-1.5">Directory</label>
-            <div class="flex">
-              <input
-                type="text"
-                placeholder="/path/to/project"
-                class="flex-1 h-9 px-3 text-[13px] bg-bg border border-border-interactive rounded-lg text-text-bright outline-none focus:border-accent transition-colors font-sans placeholder:text-text-muted"
-                value={directory.value}
-                onInput={(e) => { directory.value = (e.target as HTMLInputElement).value; }}
-              />
+          <div>
+            <FieldLabel label="DIRECTORY" />
+            <div style={{ display: 'flex' }}>
+              <InputShell>
+                <input
+                  type="text"
+                  placeholder="/path/to/project"
+                  style={{
+                    flex: 1,
+                    fontFamily: fonts.sans,
+                    fontSize: 13,
+                    color: directory.value ? colors.textPrimary : colors.textDim,
+                    background: 'transparent',
+                    border: 'none',
+                    outline: 'none',
+                  }}
+                  value={directory.value}
+                  onInput={(e) => { directory.value = (e.target as HTMLInputElement).value; }}
+                />
+              </InputShell>
               <button
                 type="button"
-                class="w-9 h-9 bg-bg border border-border-interactive border-l-0 rounded-r-lg text-text cursor-pointer text-[11px] font-mono text-accent hover:underline shrink-0 transition-colors"
+                style={{
+                  backgroundColor: colors.accentMuted,
+                  border: `1px solid ${colors.bgSurface}`,
+                  borderRadius: 4,
+                  padding: '2px 8px',
+                  fontFamily: fonts.mono,
+                  fontSize: 10,
+                  color: colors.accent,
+                  marginLeft: 8,
+                  cursor: 'pointer',
+                }}
                 title="Browse"
                 onClick={handleBrowse}
-              >[...]</button>
+              >
+                Browse
+              </button>
             </div>
           </div>
 
           {/* Name */}
-          <div class="mb-4">
-            <label class="section-label block mb-1.5">Name</label>
-            <input
-              type="text"
-              placeholder="project-name"
-              class="w-full h-9 px-3 text-[13px] bg-bg border border-border-interactive rounded-lg text-text-bright outline-none focus:border-accent transition-colors font-sans placeholder:text-text-muted"
-              value={name.value}
-              onInput={(e) => { name.value = (e.target as HTMLInputElement).value; }}
-            />
+          <div>
+            <FieldLabel label="NAME" />
+            <InputShell>
+              <input
+                type="text"
+                placeholder="project-name"
+                style={{
+                  width: '100%',
+                  fontFamily: fonts.sans,
+                  fontSize: 13,
+                  color: name.value ? colors.textPrimary : colors.textDim,
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                }}
+                value={name.value}
+                onInput={(e) => { name.value = (e.target as HTMLInputElement).value; }}
+              />
+            </InputShell>
           </div>
 
           {/* Agent */}
-          <div class="mb-4">
-            <label class="section-label block mb-1.5">Agent</label>
-            <input
-              type="text"
-              list="agent-suggestions"
-              placeholder="claude"
-              class="w-full h-9 px-3 text-[13px] bg-bg border border-border-interactive rounded-lg text-text-bright outline-none focus:border-accent transition-colors font-sans placeholder:text-text-muted"
-              value={agent.value}
-              onInput={(e) => { agent.value = (e.target as HTMLInputElement).value; }}
-            />
-            <datalist id="agent-suggestions">
-              <option value="claude" />
-              <option value="opencode" />
-              <option value="bash" />
-            </datalist>
+          <div>
+            <FieldLabel label="AGENT" />
+            <InputShell>
+              <div
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 4,
+                  background: 'linear-gradient(180deg, #A855F7 0%, #6366F1 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginRight: 8,
+                  flexShrink: 0,
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: fonts.sans,
+                    color: 'white',
+                    fontSize: 8,
+                  }}
+                >
+                  {'\u25C6'}
+                </span>
+              </div>
+              <input
+                type="text"
+                list="agent-suggestions"
+                placeholder="claude"
+                style={{
+                  flex: 1,
+                  fontFamily: fonts.sans,
+                  fontSize: 13,
+                  color: agent.value ? colors.textPrimary : colors.textDim,
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                }}
+                value={agent.value}
+                onInput={(e) => { agent.value = (e.target as HTMLInputElement).value; }}
+              />
+              <datalist id="agent-suggestions">
+                <option value="claude" />
+                <option value="opencode" />
+                <option value="bash" />
+              </datalist>
+            </InputShell>
           </div>
 
           {/* GSD File */}
-          <div class="mb-4">
-            <label class="section-label block mb-1.5">GSD File</label>
-            <input
-              type="text"
-              placeholder="Optional .md path"
-              class="w-full h-9 px-3 text-[13px] bg-bg border border-border-interactive rounded-lg text-text-bright outline-none focus:border-accent transition-colors font-sans placeholder:text-text-muted"
-              value={gsdFile.value}
-              onInput={(e) => { gsdFile.value = (e.target as HTMLInputElement).value; }}
-            />
+          <div>
+            <FieldLabel label="GSD FILE" />
+            <InputShell>
+              <input
+                type="text"
+                placeholder="Optional .md path"
+                style={{
+                  width: '100%',
+                  fontFamily: fonts.sans,
+                  fontSize: 13,
+                  color: gsdFile.value ? colors.textPrimary : colors.textDim,
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                }}
+                value={gsdFile.value}
+                onInput={(e) => { gsdFile.value = (e.target as HTMLInputElement).value; }}
+              />
+            </InputShell>
           </div>
 
           {/* Server Command */}
-          <div class="mb-2">
-            <label class="section-label block mb-1.5">Server Command</label>
-            <input
-              type="text"
-              placeholder="Optional, e.g. npm run dev"
-              class="w-full h-9 px-3 text-[13px] bg-bg border border-border-interactive rounded-lg text-text-bright outline-none focus:border-accent transition-colors font-sans placeholder:text-text-muted"
-              value={serverCmd.value}
-              onInput={(e) => { serverCmd.value = (e.target as HTMLInputElement).value; }}
-            />
+          <div>
+            <FieldLabel label="SERVER COMMAND" />
+            <InputShell>
+              <input
+                type="text"
+                placeholder="Optional, e.g. pnpm dev"
+                style={{
+                  width: '100%',
+                  fontFamily: fonts.sans,
+                  fontSize: 13,
+                  color: serverCmd.value ? colors.textPrimary : colors.textDim,
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                }}
+                value={serverCmd.value}
+                onInput={(e) => { serverCmd.value = (e.target as HTMLInputElement).value; }}
+              />
+            </InputShell>
           </div>
 
           {/* Error */}
           {error.value && (
-            <div class="text-xs text-danger mb-2">
+            <div
+              style={{
+                color: colors.diffRed,
+                fontSize: 12,
+                fontFamily: fonts.sans,
+              }}
+            >
               {error.value}
             </div>
           )}
 
           {/* Buttons */}
-          <div class="px-6 py-4 flex justify-end gap-3 mt-2">
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: 12,
+              padding: '16px 24px 0 0',
+            }}
+          >
             {!isFirstRun.value && (
               <button
                 type="button"
-                class="rounded-lg border border-border-interactive px-4 py-2 text-[13px] font-medium text-text font-sans hover:bg-bg cursor-pointer transition-colors"
+                style={{
+                  borderRadius: 8,
+                  border: `1px solid ${colors.bgSurface}`,
+                  padding: '8px 16px',
+                  fontSize: 13,
+                  fontFamily: fonts.sans,
+                  color: colors.textMuted,
+                  backgroundColor: 'transparent',
+                  cursor: 'pointer',
+                }}
                 onClick={() => { closeProjectModal(); }}
-              >Cancel</button>
+              >
+                Cancel
+              </button>
             )}
             <button
               type="submit"
               disabled={!isValid.value}
-              class="rounded-lg bg-accent px-5 py-2 text-[13px] font-semibold text-white font-sans hover:bg-accent/90 cursor-pointer transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-            >{editingName.value ? 'Save Changes' : 'Add Project'}</button>
+              style={{
+                borderRadius: 8,
+                backgroundColor: isValid.value ? colors.accent : `${colors.accent}40`,
+                border: 'none',
+                padding: '8px 20px',
+                fontSize: 13,
+                fontWeight: 600,
+                fontFamily: fonts.sans,
+                color: 'white',
+                cursor: isValid.value ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {editingName.value ? 'Save Changes' : 'Add Project'}
+            </button>
           </div>
         </form>
       </div>
