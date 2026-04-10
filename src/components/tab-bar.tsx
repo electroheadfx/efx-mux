@@ -23,9 +23,9 @@ export function TabBar({ tabs, activeTab, onSwitch }: TabBarProps) {
               backgroundColor: active ? colors.bgElevated : 'transparent',
               border: active ? `1px solid ${colors.bgSurface}` : '1px solid transparent',
               borderRadius: 6,
-              padding: '6px 12px',
+              padding: '7px 14px',
               fontFamily: fonts.sans,
-              fontSize: 11,
+              fontSize: 13,
               fontWeight: active ? 500 : 400,
               color: active ? colors.textPrimary : colors.textDim,
             }}

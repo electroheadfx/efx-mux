@@ -42,7 +42,7 @@ export interface AppState {
 export const projects = signal<ProjectEntry[]>([]);
 export const activeProjectName = signal<string | null>(null);
 export const sidebarCollapsed = signal(false);
-export const rightTopTab = signal('GSD');
+export const rightTopTab = signal('File Tree');
 export const rightBottomTab = signal('Bash');
 
 // ---------------------------------------------------------------------------

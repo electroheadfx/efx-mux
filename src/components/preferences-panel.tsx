@@ -7,6 +7,7 @@ import { signal } from '@preact/signals';
 import { activeProjectName, projects } from '../state-manager';
 import { toggleThemeMode } from '../theme/theme-manager';
 import { openProjectModal } from './project-modal';
+import { fileTreeFontSize, fileTreeLineHeight } from './file-tree';
 import { colors, fonts } from '../tokens';
 
 // ---------------------------------------------------------------------------
@@ -318,6 +319,33 @@ export function PreferencesPanel() {
           <SectionLabel label="APPEARANCE" />
           <SettingRow label="Theme">
             <ThemeToggle value={isDark} />
+          </SettingRow>
+
+          {/* File Tree Controls */}
+          <SectionLabel label="FILE TREE" />
+          <SettingRow label="Font size">
+            <input
+              type="range"
+              min="10"
+              max="20"
+              value={fileTreeFontSize.value}
+              onInput={(e) => {
+                fileTreeFontSize.value = parseInt((e.target as HTMLInputElement).value);
+              }}
+              style={{ width: 80, accentColor: colors.accent }}
+            />
+          </SettingRow>
+          <SettingRow label="Line height">
+            <input
+              type="range"
+              min="2"
+              max="12"
+              value={fileTreeLineHeight.value}
+              onInput={(e) => {
+                fileTreeLineHeight.value = parseInt((e.target as HTMLInputElement).value);
+              }}
+              style={{ width: 80, accentColor: colors.accent }}
+            />
           </SettingRow>
 
           {/* Shortcuts */}

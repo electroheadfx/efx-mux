@@ -14,7 +14,7 @@ import { GSDViewer } from './gsd-viewer';
 import { DiffViewer } from './diff-viewer';
 import { FileTree } from './file-tree';
 
-const RIGHT_TOP_TABS = ['GSD', 'Diff', 'File Tree'];
+const RIGHT_TOP_TABS = ['File Tree', 'GSD', 'Diff'];
 const RIGHT_BOTTOM_TABS = ['Bash'];
 
 /**

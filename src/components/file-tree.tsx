@@ -11,6 +11,11 @@ import { colors, fonts } from '../tokens';
 import { activeProjectName, projects } from '../state-manager';
 import type { ProjectEntry } from '../state-manager';
 
+// File Tree appearance settings (shared with preferences panel)
+export const fileTreeFontSize = signal(13);
+export const fileTreeLineHeight = signal(5);
+export const fileTreeBgColor = signal('');
+
 // Local signals for component state
 interface FileEntry {
   name: string;
@@ -170,10 +175,12 @@ export function FileTree() {
     }
   }
 
+  const bgColor = fileTreeBgColor.value || colors.bgDeep;
+
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: colors.bgDeep, overflow: 'hidden' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: bgColor, overflow: 'hidden' }}>
       {/* Header bar */}
-      <div style={{ gap: 8, padding: '10px 16px', backgroundColor: colors.bgBase, borderBottom: `1px solid ${colors.bgBorder}`, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+      <div style={{ gap: 8, padding: '6px 12px', backgroundColor: colors.bgBase, borderBottom: `1px solid ${colors.bgBorder}`, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
         <span style={{ fontFamily: fonts.sans, fontSize: 13, fontWeight: 500, color: colors.textPrimary }}>File Tree</span>
         <span style={{ flex: 1 }} />
         <span style={{ fontFamily: fonts.mono, fontSize: 11, color: colors.textDim }}>{currentPath.value || '~/Dev/efx-mux'}</span>
@@ -185,16 +192,16 @@ export function FileTree() {
         onKeyDown={handleKeydown}
       >
         {!loaded.value ? (
-          <div style={{ padding: 16, color: colors.textMuted, fontSize: 13 }}>Loading...</div>
+          <div style={{ padding: 16, color: colors.textMuted, fontSize: fileTreeFontSize.value }}>Loading...</div>
         ) : entries.value.length === 0 ? (
-          <div style={{ padding: 16, color: colors.textMuted, fontSize: 13 }}>Empty directory</div>
+          <div style={{ padding: 16, color: colors.textMuted, fontSize: fileTreeFontSize.value }}>Empty directory</div>
         ) : (
           entries.value.map((entry, i) => {
             const isSelected = selectedIndex.value === i;
             return (
               <div
                 key={entry.path}
-                style={{ padding: '7px 16px', gap: 8, display: 'flex', alignItems: 'center', cursor: 'pointer', backgroundColor: isSelected ? colors.bgElevated : 'transparent' }}
+                style={{ padding: `${fileTreeLineHeight.value}px 12px`, gap: 8, display: 'flex', alignItems: 'center', cursor: 'pointer', backgroundColor: isSelected ? colors.bgElevated : 'transparent' }}
                 onClick={() => { selectedIndex.value = i; openEntry(entry); }}
                 onMouseEnter={() => { selectedIndex.value = i; }}
               >
@@ -205,7 +212,7 @@ export function FileTree() {
                       : <FileTextIcon />
                     )
                 }
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: fonts.sans, fontSize: 13, color: isSelected ? colors.textPrimary : colors.textMuted }}>
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: fonts.sans, fontSize: fileTreeFontSize.value, color: isSelected ? colors.textPrimary : colors.textMuted }}>
                   {entry.name}
                 </span>
                 {!entry.is_dir && entry.size != null && (
