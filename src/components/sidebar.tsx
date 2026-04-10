@@ -1,6 +1,7 @@
 // sidebar.tsx -- Project sidebar with projects, git status, git files, collapsed mode
 // Migrated from Arrow.js to Preact TSX (Phase 6.1)
 // Restyled with Lucide icons, status dots, git badges (Phase 9)
+// Visual rewrite to reference Sidebar pattern (Phase 10)
 
 import { useEffect } from 'preact/hooks';
 import { signal, computed } from '@preact/signals';
@@ -18,6 +19,7 @@ import {
 } from '../state-manager';
 import type { ProjectEntry, GitData } from '../state-manager';
 import { openProjectModal } from './project-modal';
+import { colors, fonts, fontSizes, spacing, radii } from '../tokens';
 
 // ---------------------------------------------------------------------------
 // Local signals for sidebar-only state
@@ -80,11 +82,19 @@ function ProjectRow({ project, index }: { project: ProjectEntry; index: number }
 
   return (
     <div
-      class={`group flex items-center gap-2.5 px-3 py-2 rounded-md cursor-pointer ${
-        isActive
-          ? 'bg-bg-raised'
-          : 'hover:bg-bg-raised/50'
-      }`}
+      class="group"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: spacing['2xl'],
+        padding: '10px 16px',
+        marginLeft: spacing['4xl'],
+        marginRight: spacing['4xl'],
+        borderRadius: radii.lg,
+        backgroundColor: isActive ? colors.bgElevated : 'transparent',
+        borderLeft: isActive ? `3px solid ${colors.accent}` : '3px solid transparent',
+        cursor: 'pointer',
+      }}
       title={project.path}
       data-index={index}
       onClick={async () => {
@@ -101,21 +111,61 @@ function ProjectRow({ project, index }: { project: ProjectEntry; index: number }
       }}
     >
       {/* Status dot */}
-      {isActive ? (
-        <Circle size={8} fill="currentColor" class="text-success shrink-0" />
-      ) : (
-        <Circle size={8} class="text-text-muted shrink-0" />
-      )}
+      <div
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          backgroundColor: isActive ? colors.statusGreen : colors.textDim,
+          flexShrink: 0,
+        }}
+      />
 
       {/* Project info */}
       <div class="flex-1 min-w-0">
-        <div class="text-sm font-medium text-text-bright truncate">{project.name}</div>
-        <div class="text-[11px] text-text truncate">{project.path}</div>
+        <div
+          style={{
+            fontFamily: fonts.sans,
+            fontSize: fontSizes.lg,
+            fontWeight: isActive ? 500 : 400,
+            color: isActive ? colors.textPrimary : colors.textMuted,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {project.name}
+        </div>
+        <div
+          style={{
+            fontFamily: fonts.mono,
+            fontSize: fontSizes.sm,
+            color: colors.textDim,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {project.path}
+        </div>
       </div>
 
       {/* Git branch badge */}
       {git.branch && (
-        <span class="flex items-center gap-1 text-[11px] text-accent px-1.5 py-0.5 bg-accent/10 rounded shrink-0">
+        <span
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: spacing.sm,
+            fontFamily: fonts.mono,
+            fontSize: fontSizes.sm,
+            color: isActive ? colors.accent : colors.textDim,
+            padding: `${spacing.sm}px ${spacing.md}px`,
+            backgroundColor: isActive ? colors.accentMuted : 'transparent',
+            borderRadius: radii.sm,
+            flexShrink: 0,
+          }}
+        >
           <GitBranch size={10} />
           {git.branch}
         </span>
@@ -123,7 +173,14 @@ function ProjectRow({ project, index }: { project: ProjectEntry; index: number }
 
       {/* Remove button */}
       <span
-        class="opacity-0 group-hover:opacity-100 cursor-pointer shrink-0 text-text hover:text-danger transition-opacity"
+        style={{
+          opacity: 0,
+          cursor: 'pointer',
+          flexShrink: 0,
+          color: colors.textMuted,
+          transition: 'opacity 0.15s',
+        }}
+        class="group-hover:opacity-100 hover:text-danger"
         title="Remove project"
         onClick={(e) => {
           e.stopPropagation();
@@ -142,11 +199,20 @@ function CollapsedIcon({ project, index }: { project: ProjectEntry; index: numbe
 
   return (
     <div
-      class={`relative w-6 h-6 flex items-center justify-center text-xs cursor-pointer ${
-        isActive ? 'text-accent' : 'text-text'
-      }`}
+      style={{
+        width: 24,
+        height: 24,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: fontSizes.base,
+        cursor: 'pointer',
+        color: isActive ? colors.accent : colors.textMuted,
+        position: 'relative',
+      }}
       title={project.name}
       data-index={index}
+      aria-label={`${project.name} project`}
       onClick={async () => {
         sidebarCollapsed.value = false;
         try {
@@ -158,31 +224,76 @@ function CollapsedIcon({ project, index }: { project: ProjectEntry; index: numbe
     >
       {initial}
       {isActive && (
-        <Circle size={6} fill="currentColor" class="text-success absolute -bottom-0.5 left-1/2 -translate-x-1/2" />
+        <div
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: '50%',
+            backgroundColor: colors.statusGreen,
+            position: 'absolute',
+            bottom: -2,
+            left: '50%',
+            transform: 'translateX(-50%)',
+          }}
+        />
       )}
     </div>
   );
 }
 
 function GitFileRow({ file }: { file: { name: string; path: string; status: string } }) {
-  const badgeClass: Record<string, string> = {
-    'M': 'bg-warning/20 text-warning',
-    'S': 'bg-success/20 text-success',
-    'U': 'bg-accent/20 text-accent',
-  };
-  const cls = badgeClass[file.status] || 'bg-bg-raised text-text';
+  const badgeBg = file.status === 'M' ? colors.statusYellowBg :
+    file.status === 'S' ? colors.statusGreenBg :
+    colors.statusMutedBg;
+  const badgeColor = file.status === 'M' ? colors.statusYellow :
+    file.status === 'S' ? colors.statusGreen :
+    colors.textMuted;
 
   return (
     <div
-      class="flex items-center px-2 py-1 text-xs text-text cursor-pointer hover:bg-bg-raised"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        padding: `${spacing.sm}px ${spacing.md}px`,
+        fontSize: fontSizes.sm,
+        color: colors.textMuted,
+        cursor: 'pointer',
+      }}
+      class="hover:bg-bg-raised"
       onClick={() => {
         document.dispatchEvent(new CustomEvent('open-diff', { detail: { path: file.path } }));
       }}
     >
-      <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+      <span
+        style={{
+          flex: 1,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          fontFamily: fonts.mono,
+          fontSize: fontSizes.base,
+          color: colors.textMuted,
+        }}
+      >
         {file.name}
       </span>
-      <span class={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded ml-2 shrink-0 ${cls}`}>
+      <span
+        style={{
+          width: 18,
+          height: 18,
+          borderRadius: radii.sm,
+          backgroundColor: badgeBg,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontFamily: fonts.mono,
+          fontSize: fontSizes.sm,
+          color: badgeColor,
+          fontWeight: 600,
+          marginLeft: spacing['2xl'],
+          flexShrink: 0,
+        }}
+      >
         {file.status}
       </span>
     </div>
@@ -195,27 +306,82 @@ function RemoveDialog() {
 
   return (
     <div
-      class="fixed inset-0 bg-black/50 z-[101] flex items-center justify-center"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        zIndex: 101,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
       onClick={() => { removeTarget.value = null; }}
     >
       <div
-        class="w-[360px] bg-bg-raised border border-border rounded pb-6"
+        style={{
+          width: 360,
+          backgroundColor: colors.bgElevated,
+          border: `1px solid ${colors.bgBorder}`,
+          borderRadius: radii.xl,
+          paddingBottom: spacing['5xl'],
+        }}
         onClick={(e) => { e.stopPropagation(); }}
       >
-        <div class="px-6 pt-4 text-sm text-text-bright">
+        <div
+          style={{
+            padding: `${spacing.lg}px ${spacing['4xl']}px`,
+            fontSize: fontSizes.lg,
+            fontFamily: fonts.sans,
+            color: colors.textPrimary,
+          }}
+        >
           Remove {name}
         </div>
-        <div class="px-6 mt-3 text-sm text-text leading-relaxed">
+        <div
+          style={{
+            padding: `0 ${spacing['4xl']}px ${spacing.lg}px`,
+            marginTop: spacing.sm,
+            fontSize: fontSizes.base,
+            fontFamily: fonts.sans,
+            color: colors.textMuted,
+            lineHeight: 1.6,
+          }}
+        >
           Remove this project from the sidebar?<br />
           The project files will not be deleted.
         </div>
-        <div class="px-6 pt-4 flex justify-end gap-2">
+        <div
+          style={{
+            padding: `${spacing.lg}px ${spacing['4xl']}px 0`,
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: spacing['2xl'],
+          }}
+        >
           <button
-            class="bg-transparent border border-border text-text px-4 py-2 rounded-sm cursor-pointer text-sm"
+            style={{
+              backgroundColor: 'transparent',
+              border: `1px solid ${colors.bgBorder}`,
+              color: colors.textMuted,
+              padding: `${spacing.sm}px ${spacing['4xl']}px`,
+              borderRadius: radii.sm,
+              cursor: 'pointer',
+              fontSize: fontSizes.base,
+              fontFamily: fonts.sans,
+            }}
             onClick={() => { removeTarget.value = null; }}
           >Cancel</button>
           <button
-            class="bg-danger border-none text-white px-4 py-2 rounded-sm cursor-pointer text-sm"
+            style={{
+              backgroundColor: colors.diffRed,
+              border: 'none',
+              color: 'white',
+              padding: `${spacing.sm}px ${spacing['4xl']}px`,
+              borderRadius: radii.sm,
+              cursor: 'pointer',
+              fontSize: fontSizes.base,
+              fontFamily: fonts.sans,
+            }}
             onClick={async () => {
               await removeProject(name);
               removeTarget.value = null;
@@ -300,18 +466,39 @@ export function Sidebar() {
     <aside
       class={`sidebar${sidebarCollapsed.value ? ' collapsed' : ''}`}
       aria-label="Sidebar"
+      style={{
+        backgroundColor: colors.bgBase,
+      }}
     >
       <RemoveDialog />
 
       <div class="sidebar-content">
         {sidebarCollapsed.value ? (
-          <div class="sidebar-icons flex flex-col gap-2 items-center pt-2">
+          <div
+            class="sidebar-icons"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: spacing['2xl'],
+              paddingTop: spacing.sm,
+            }}
+          >
             {projects.value.map((p, i) => (
               <CollapsedIcon project={p} index={i} />
             ))}
-            <div class="h-2" />
+            <div style={{ height: spacing.sm }} />
             <div
-              class="w-6 h-6 flex items-center justify-center text-text cursor-pointer hover:text-accent"
+              style={{
+                width: 24,
+                height: 24,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: colors.textMuted,
+                cursor: 'pointer',
+              }}
+              class="hover:text-accent"
               title="Add project"
               aria-label="Add project"
               onClick={() => { openProjectModal(); }}
@@ -320,13 +507,47 @@ export function Sidebar() {
             </div>
           </div>
         ) : (
-          <div class="sidebar-content-full flex flex-col h-full">
-            <div class="flex items-center py-1 pb-2 border-b border-border mb-2">
-              <div class="flex-1 section-label">
-                Efxmux
+          <div
+            class="sidebar-content-full"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              height: '100%',
+            }}
+          >
+            {/* Header */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: `${spacing['4xl']}px ${spacing['4xl']}px ${spacing['2xl']}px`,
+                borderBottom: `1px solid ${colors.bgBorder}`,
+                marginBottom: spacing.sm,
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: fonts.sans,
+                  fontSize: fontSizes.lg,
+                  fontWeight: 600,
+                  color: colors.textPrimary,
+                  letterSpacing: '3px',
+                }}
+              >
+                EFXMUX
               </div>
               <div
-                class="text-text cursor-pointer w-6 h-6 flex items-center justify-center hover:text-accent"
+                style={{
+                  color: colors.textMuted,
+                  cursor: 'pointer',
+                  width: 24,
+                  height: 24,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                class="hover:text-accent"
                 title="Add project"
                 aria-label="Add project"
                 onClick={() => { openProjectModal(); }}
@@ -335,11 +556,31 @@ export function Sidebar() {
               </div>
             </div>
 
-            <div class="section-label pb-1">Projects</div>
+            {/* Projects section label */}
+            <div
+              style={{
+                fontFamily: fonts.mono,
+                fontSize: fontSizes.sm,
+                textTransform: 'uppercase',
+                letterSpacing: '1.5px',
+                color: colors.textDim,
+                padding: `0 ${spacing['4xl']}px ${spacing.xs}px`,
+              }}
+            >
+              Projects
+            </div>
 
+            {/* Project list */}
             <div class="flex-1 overflow-y-auto">
               {projects.value.length === 0 ? (
-                <div class="py-4 px-2 text-sm text-text text-center">
+                <div
+                  style={{
+                    padding: `${spacing['4xl']}px ${spacing.md}px`,
+                    fontSize: fontSizes.base,
+                    color: colors.textMuted,
+                    textAlign: 'center',
+                  }}
+                >
                   No projects yet
                 </div>
               ) : (
@@ -349,11 +590,48 @@ export function Sidebar() {
               )}
             </div>
 
-            <div class="border-t border-border mt-2 pt-2 flex-1 min-h-0 flex flex-col">
-              <div class="flex items-center pb-1">
-                <span class="section-label flex-1">Git Changes</span>
+            {/* Git section */}
+            <div
+              style={{
+                borderTop: `1px solid ${colors.bgBorder}`,
+                marginTop: spacing.sm,
+                paddingTop: spacing.sm,
+                flex: 1,
+                minHeight: 0,
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  paddingBottom: spacing.sm,
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: fonts.mono,
+                    fontSize: fontSizes.sm,
+                    textTransform: 'uppercase',
+                    letterSpacing: '1.5px',
+                    color: colors.textDim,
+                    flex: 1,
+                  }}
+                >
+                  Git Changes
+                </span>
                 <div
-                  class="w-5 h-5 flex items-center justify-center text-text cursor-pointer hover:text-accent"
+                  style={{
+                    width: 20,
+                    height: 20,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: colors.textMuted,
+                    cursor: 'pointer',
+                  }}
+                  class="hover:text-accent"
                   title="Refresh git status"
                   aria-label="Refresh git status"
                   onClick={async () => { await refreshAllGitStatus(); }}
@@ -363,29 +641,91 @@ export function Sidebar() {
               </div>
 
               {git.value.branch && (
-                <div class="flex items-center gap-1 px-2 py-0.5 text-[11px] text-accent">
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: spacing.sm,
+                    padding: `${spacing.xs}px ${spacing.md}px`,
+                    fontFamily: fonts.mono,
+                    fontSize: fontSizes.sm,
+                    color: colors.textMuted,
+                  }}
+                >
                   <GitBranch size={10} />
                   {git.value.branch}
                 </div>
               )}
 
-              <div class="flex gap-2 px-2 py-1 flex-wrap">
+              {/* Git change badges */}
+              <div
+                style={{
+                  display: 'flex',
+                  gap: spacing['2xl'],
+                  padding: `${spacing.sm}px ${spacing.md}px`,
+                  flexWrap: 'wrap',
+                }}
+              >
                 {git.value.modified > 0 && (
-                  <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-accent/15 text-accent">M {git.value.modified}</span>
+                  <span
+                    style={{
+                      fontFamily: fonts.mono,
+                      fontSize: fontSizes.sm,
+                      padding: `${spacing.sm}px ${spacing.md}px`,
+                      borderRadius: radii.sm,
+                      backgroundColor: colors.statusYellowBg,
+                      color: colors.statusYellow,
+                    }}
+                  >
+                    M {git.value.modified}
+                  </span>
                 )}
                 {git.value.staged > 0 && (
-                  <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-success/15 text-success">S {git.value.staged}</span>
+                  <span
+                    style={{
+                      fontFamily: fonts.mono,
+                      fontSize: fontSizes.sm,
+                      padding: `${spacing.sm}px ${spacing.md}px`,
+                      borderRadius: radii.sm,
+                      backgroundColor: colors.statusGreenBg,
+                      color: colors.statusGreen,
+                    }}
+                  >
+                    S {git.value.staged}
+                  </span>
                 )}
                 {git.value.untracked > 0 && (
-                  <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-warning/15 text-warning">U {git.value.untracked}</span>
+                  <span
+                    style={{
+                      fontFamily: fonts.mono,
+                      fontSize: fontSizes.sm,
+                      padding: `${spacing.sm}px ${spacing.md}px`,
+                      borderRadius: radii.sm,
+                      backgroundColor: colors.statusMutedBg,
+                      color: colors.textMuted,
+                    }}
+                  >
+                    U {git.value.untracked}
+                  </span>
                 )}
                 {totalChanges.value === 0 && (
-                  <span class="text-xs text-text">No changes</span>
+                  <span
+                    style={{
+                      fontSize: fontSizes.sm,
+                      color: colors.textMuted,
+                    }}
+                  >
+                    No changes
+                  </span>
                 )}
               </div>
 
+              {/* Git file list */}
               {gitFiles.value.length > 0 && (
-                <div class="flex-1 overflow-y-auto min-h-0">
+                <div
+                  class="flex-1 overflow-y-auto"
+                  style={{ minHeight: 0 }}
+                >
                   {gitFiles.value.map(f => (
                     <GitFileRow file={f} />
                   ))}
