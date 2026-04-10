@@ -5,6 +5,7 @@ import { useEffect, useRef } from 'preact/hooks';
 import { signal } from '@preact/signals';
 import { getProjects, switchProject, getGitStatus } from '../state-manager';
 import type { ProjectEntry } from '../state-manager';
+import { colors, fonts } from '../tokens';
 
 // ---------------------------------------------------------------------------
 // Module-level signals
@@ -125,9 +126,11 @@ function SearchResult({ project, index }: { project: ProjectEntry; index: number
 
   return (
     <div
-      class={`flex items-center px-4 py-2 text-sm text-text-bright cursor-pointer min-h-[36px] ${
-        isSelected ? 'bg-accent/12' : 'bg-transparent'
-      }`}
+      class="flex items-center px-4 py-2 text-sm cursor-pointer min-h-[36px]"
+      style={{
+        color: colors.textPrimary,
+        backgroundColor: isSelected ? colors.accentMuted : 'transparent',
+      }}
       data-index={index}
       onClick={() => {
         selectedIndex.value = index;
@@ -139,7 +142,7 @@ function SearchResult({ project, index }: { project: ProjectEntry; index: number
         {project.name}
       </span>
       {branch && (
-        <span class="text-[11px] text-accent ml-4 shrink-0">
+        <span class="text-[11px] ml-4 shrink-0" style={{ color: colors.accent }}>
           {branch}
         </span>
       )}
@@ -167,21 +170,24 @@ export function FuzzySearch() {
 
   return (
     <div
-      class="fixed inset-0 bg-black/30 z-[100] flex flex-col items-center pt-[20vh] animate-[fadeInSearch_100ms_ease-out]"
+      class="fixed inset-0 z-[100] flex flex-col items-center pt-[20vh] animate-[fadeInSearch_100ms_ease-out]"
+      style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}
       onClick={closeSearch}
     >
       <div
-        class="w-[480px] max-h-[60vh] bg-bg-raised border border-border rounded shadow-[0_8px_32px_rgba(0,0,0,0.4)] z-[101] overflow-hidden flex flex-col animate-[fadeInSearch_100ms_ease-out]"
+        class="w-[480px] max-h-[60vh] rounded shadow-[0_8px_32px_rgba(0,0,0,0.4)] z-[101] overflow-hidden flex flex-col animate-[fadeInSearch_100ms_ease-out]"
+        style={{ backgroundColor: colors.bgElevated, border: `1px solid ${colors.bgBorder}` }}
         onClick={(e) => { e.stopPropagation(); }}
       >
         {/* Search input */}
-        <div class="flex items-center px-4 py-3 border-b border-border">
-          <span class="text-accent mr-2 text-base">{'>'}</span>
+        <div class="flex items-center px-4 py-3" style={{ borderBottom: `1px solid ${colors.bgBorder}` }}>
+          <span class="mr-2 text-base" style={{ color: colors.accent }}>{'>'}</span>
           <input
             ref={inputRef}
             type="text"
             placeholder="Switch to project..."
-            class="flex-1 bg-transparent border-none outline-none text-base text-text-bright caret-accent"
+            class="flex-1 border-none outline-none text-base"
+            style={{ backgroundColor: 'transparent', color: colors.textPrimary, caretColor: colors.accent }}
             value={query.value}
             onInput={(e) => {
               query.value = (e.target as HTMLInputElement).value;
@@ -193,7 +199,7 @@ export function FuzzySearch() {
         {/* Results */}
         <div class="overflow-y-auto max-h-[360px]">
           {results.length === 0 ? (
-            <div class="p-4 text-sm text-text text-center">
+            <div class="p-4 text-sm text-center" style={{ color: colors.textMuted }}>
               No matching projects
             </div>
           ) : (
