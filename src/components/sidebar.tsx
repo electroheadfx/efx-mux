@@ -6,7 +6,7 @@
 import { useEffect } from 'preact/hooks';
 import { signal, computed } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
-import { Circle, GitBranch, Plus, RotateCw, X } from 'lucide-preact';
+import { GitBranch, Plus, RotateCw, X } from 'lucide-preact';
 import {
   projects,
   activeProjectName,
@@ -121,12 +121,12 @@ function ProjectRow({ project, index }: { project: ProjectEntry; index: number }
         }}
       />
 
-      {/* Project info */}
-      <div class="flex-1 min-w-0">
-        <div
+      {/* Project info — matches reference ProjectItem */}
+      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, gap: 2 }}>
+        <span
           style={{
             fontFamily: fonts.sans,
-            fontSize: fontSizes.lg,
+            fontSize: 13,
             fontWeight: isActive ? 500 : 400,
             color: isActive ? colors.textPrimary : colors.textMuted,
             overflow: 'hidden',
@@ -135,41 +135,28 @@ function ProjectRow({ project, index }: { project: ProjectEntry; index: number }
           }}
         >
           {project.name}
-        </div>
-        <div
-          style={{
-            fontFamily: fonts.mono,
-            fontSize: fontSizes.sm,
-            color: colors.textDim,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {project.path}
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span
+            style={{
+              fontFamily: fonts.mono,
+              fontSize: 10,
+              color: isActive ? colors.accent : colors.textDim,
+            }}
+          >
+            ⎇
+          </span>
+          <span
+            style={{
+              fontFamily: fonts.mono,
+              fontSize: 10,
+              color: colors.textDim,
+            }}
+          >
+            {git.branch || 'main'}
+          </span>
         </div>
       </div>
-
-      {/* Git branch badge */}
-      {git.branch && (
-        <span
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: spacing.sm,
-            fontFamily: fonts.mono,
-            fontSize: fontSizes.sm,
-            color: isActive ? colors.accent : colors.textDim,
-            padding: `${spacing.sm}px ${spacing.md}px`,
-            backgroundColor: isActive ? colors.accentMuted : 'transparent',
-            borderRadius: radii.sm,
-            flexShrink: 0,
-          }}
-        >
-          <GitBranch size={10} />
-          {git.branch}
-        </span>
-      )}
 
       {/* Remove button */}
       <span
@@ -254,9 +241,8 @@ function GitFileRow({ file }: { file: { name: string; path: string; status: stri
       style={{
         display: 'flex',
         alignItems: 'center',
-        padding: `${spacing.sm}px ${spacing.md}px`,
-        fontSize: fontSizes.sm,
-        color: colors.textMuted,
+        gap: 8,
+        padding: '5px 16px 5px 32px',
         cursor: 'pointer',
       }}
       class="hover:bg-bg-raised"
@@ -264,37 +250,40 @@ function GitFileRow({ file }: { file: { name: string; path: string; status: stri
         document.dispatchEvent(new CustomEvent('open-diff', { detail: { path: file.path } }));
       }}
     >
-      <span
-        style={{
-          flex: 1,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          fontFamily: fonts.mono,
-          fontSize: fontSizes.base,
-          color: colors.textMuted,
-        }}
-      >
-        {file.name}
-      </span>
-      <span
+      <div
         style={{
           width: 18,
           height: 18,
-          borderRadius: radii.sm,
+          borderRadius: 3,
           backgroundColor: badgeBg,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontFamily: fonts.mono,
-          fontSize: fontSizes.sm,
-          color: badgeColor,
-          fontWeight: 600,
-          marginLeft: spacing['2xl'],
           flexShrink: 0,
         }}
       >
-        {file.status}
+        <span
+          style={{
+            fontFamily: fonts.mono,
+            fontSize: 10,
+            fontWeight: 600,
+            color: badgeColor,
+          }}
+        >
+          {file.status}
+        </span>
+      </div>
+      <span
+        style={{
+          fontFamily: fonts.mono,
+          fontSize: 12,
+          color: colors.textMuted,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {file.name}
       </span>
     </div>
   );
@@ -515,59 +504,70 @@ export function Sidebar() {
               height: '100%',
             }}
           >
-            {/* Header */}
+            {/* Header — matches reference Sidebar.tsx SidebarHeader */}
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                padding: `${spacing['4xl']}px ${spacing['4xl']}px ${spacing['2xl']}px`,
-                borderBottom: `1px solid ${colors.bgBorder}`,
-                marginBottom: spacing.sm,
+                padding: '16px 16px 12px',
               }}
             >
-              <div
+              <span
                 style={{
                   fontFamily: fonts.sans,
-                  fontSize: fontSizes.lg,
+                  fontSize: 13,
                   fontWeight: 600,
                   color: colors.textPrimary,
                   letterSpacing: '3px',
                 }}
               >
                 EFXMUX
-              </div>
-              <div
+              </span>
+              <button
                 style={{
-                  color: colors.textMuted,
-                  cursor: 'pointer',
-                  width: 24,
-                  height: 24,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  width: 24,
+                  height: 24,
+                  borderRadius: 6,
+                  backgroundColor: colors.accent,
+                  color: 'white',
+                  fontFamily: fonts.sans,
+                  fontSize: 14,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  border: 'none',
                 }}
-                class="hover:text-accent"
-                title="Add project"
+                title="Add Project"
                 aria-label="Add project"
                 onClick={() => { openProjectModal(); }}
               >
-                <Plus size={14} />
-              </div>
+                +
+              </button>
             </div>
 
-            {/* Projects section label */}
+            {/* Projects section label — matches reference SectionLabel */}
             <div
               style={{
-                fontFamily: fonts.mono,
-                fontSize: fontSizes.sm,
-                textTransform: 'uppercase',
-                letterSpacing: '1.5px',
-                color: colors.textDim,
-                padding: `0 ${spacing['4xl']}px ${spacing.xs}px`,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px 16px 6px 16px',
               }}
             >
-              Projects
+              <span
+                style={{
+                  fontFamily: fonts.mono,
+                  fontSize: 10,
+                  fontWeight: 500,
+                  letterSpacing: '1.5px',
+                  color: colors.textDim,
+                }}
+              >
+                PROJECTS
+              </span>
             </div>
 
             {/* Project list */}
@@ -590,37 +590,56 @@ export function Sidebar() {
               )}
             </div>
 
-            {/* Git section */}
+            {/* Divider — matches reference */}
+            <div style={{ padding: '10px 16px' }}>
+              <div style={{ height: 1, width: '100%', backgroundColor: colors.bgBorder }} />
+            </div>
+
+            {/* Git section — matches reference SectionLabel + GitBranch + GitFile */}
             <div
               style={{
-                borderTop: `1px solid ${colors.bgBorder}`,
-                marginTop: spacing.sm,
-                paddingTop: spacing.sm,
                 flex: 1,
                 minHeight: 0,
                 display: 'flex',
                 flexDirection: 'column',
               }}
             >
+              {/* Section label with badge */}
               <div
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  paddingBottom: spacing.sm,
+                  gap: 8,
+                  padding: '10px 16px 6px 16px',
                 }}
               >
                 <span
                   style={{
                     fontFamily: fonts.mono,
-                    fontSize: fontSizes.sm,
-                    textTransform: 'uppercase',
+                    fontSize: 10,
+                    fontWeight: 500,
                     letterSpacing: '1.5px',
                     color: colors.textDim,
-                    flex: 1,
                   }}
                 >
-                  Git Changes
+                  GIT CHANGES
                 </span>
+                {totalChanges.value > 0 && (
+                  <span
+                    style={{
+                      fontFamily: fonts.mono,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      color: colors.accent,
+                      backgroundColor: colors.accentMuted,
+                      borderRadius: 8,
+                      padding: '1px 6px',
+                    }}
+                  >
+                    {totalChanges.value}
+                  </span>
+                )}
+                <div style={{ flex: 1 }} />
                 <div
                   style={{
                     width: 20,
@@ -640,87 +659,25 @@ export function Sidebar() {
                 </div>
               </div>
 
+              {/* Branch name — matches reference GitBranch */}
               {git.value.branch && (
                 <div
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: spacing.sm,
-                    padding: `${spacing.xs}px ${spacing.md}px`,
-                    fontFamily: fonts.mono,
-                    fontSize: fontSizes.sm,
-                    color: colors.textMuted,
+                    gap: 6,
+                    padding: '6px 16px',
                   }}
                 >
-                  <GitBranch size={10} />
-                  {git.value.branch}
+                  <span
+                    style={{ fontFamily: fonts.mono, fontSize: 12, color: colors.textMuted }}
+                  >
+                    {git.value.branch}
+                  </span>
                 </div>
               )}
 
-              {/* Git change badges */}
-              <div
-                style={{
-                  display: 'flex',
-                  gap: spacing['2xl'],
-                  padding: `${spacing.sm}px ${spacing.md}px`,
-                  flexWrap: 'wrap',
-                }}
-              >
-                {git.value.modified > 0 && (
-                  <span
-                    style={{
-                      fontFamily: fonts.mono,
-                      fontSize: fontSizes.sm,
-                      padding: `${spacing.sm}px ${spacing.md}px`,
-                      borderRadius: radii.sm,
-                      backgroundColor: colors.statusYellowBg,
-                      color: colors.statusYellow,
-                    }}
-                  >
-                    M {git.value.modified}
-                  </span>
-                )}
-                {git.value.staged > 0 && (
-                  <span
-                    style={{
-                      fontFamily: fonts.mono,
-                      fontSize: fontSizes.sm,
-                      padding: `${spacing.sm}px ${spacing.md}px`,
-                      borderRadius: radii.sm,
-                      backgroundColor: colors.statusGreenBg,
-                      color: colors.statusGreen,
-                    }}
-                  >
-                    S {git.value.staged}
-                  </span>
-                )}
-                {git.value.untracked > 0 && (
-                  <span
-                    style={{
-                      fontFamily: fonts.mono,
-                      fontSize: fontSizes.sm,
-                      padding: `${spacing.sm}px ${spacing.md}px`,
-                      borderRadius: radii.sm,
-                      backgroundColor: colors.statusMutedBg,
-                      color: colors.textMuted,
-                    }}
-                  >
-                    U {git.value.untracked}
-                  </span>
-                )}
-                {totalChanges.value === 0 && (
-                  <span
-                    style={{
-                      fontSize: fontSizes.sm,
-                      color: colors.textMuted,
-                    }}
-                  >
-                    No changes
-                  </span>
-                )}
-              </div>
-
-              {/* Git file list */}
+              {/* Git file list — matches reference GitFile */}
               {gitFiles.value.length > 0 && (
                 <div
                   class="flex-1 overflow-y-auto"
@@ -729,6 +686,18 @@ export function Sidebar() {
                   {gitFiles.value.map(f => (
                     <GitFileRow file={f} />
                   ))}
+                </div>
+              )}
+              {gitFiles.value.length === 0 && totalChanges.value === 0 && (
+                <div
+                  style={{
+                    padding: '6px 16px',
+                    fontFamily: fonts.mono,
+                    fontSize: 12,
+                    color: colors.textMuted,
+                  }}
+                >
+                  No changes
                 </div>
               )}
             </div>
