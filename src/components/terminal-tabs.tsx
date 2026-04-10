@@ -125,8 +125,8 @@ export async function createNewTab(): Promise<TerminalTab | null> {
   const { terminal, fitAddon } = createTerminal(container, themeOpts);
   registerTerminal(terminal, fitAddon);
 
-  // Connect PTY
-  const agentBinary = await resolveAgentBinary(projectInfo?.agent);
+  // Connect PTY -- Ctrl+T tabs are always plain shell (UAT gap 1)
+  const agentBinary = undefined;
   let disconnectPty: (() => void) | undefined;
   let ptyConnected = false;
 
@@ -322,13 +322,18 @@ function switchToTab(tabId: string): void {
   for (const tab of tabs) {
     if (tab.id === tabId) {
       tab.container.style.display = 'block';
-      // Pitfall 2: must focus + fit after switch
-      tab.terminal.focus();
-      tab.fitAddon.fit();
     } else {
       tab.container.style.display = 'none';
     }
   }
+  // Defer focus+fit until after browser reflow (UAT gap 3)
+  requestAnimationFrame(() => {
+    const active = tabs.find(t => t.id === tabId);
+    if (active) {
+      active.fitAddon.fit();
+      active.terminal.focus();
+    }
+  });
 }
 
 function disposeTab(tab: TerminalTab): void {
