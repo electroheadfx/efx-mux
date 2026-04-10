@@ -168,5 +168,7 @@ export function PreferencesPanel() {
             </div>
           </div>
         </div>
+      </div>
+    </div>
   );
 }
