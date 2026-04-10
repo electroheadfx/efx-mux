@@ -54,12 +54,12 @@ export function PreferencesPanel() {
       onClick={closePreferences}
     >
       <div
-        class="w-[500px] max-h-[70vh] bg-bg-raised border border-border rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-y-auto"
+        class="w-[500px] max-h-[70vh] bg-bg-raised border border-border-interactive rounded-xl shadow-2xl overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div class="px-6 py-4 border-b border-border flex items-center justify-between">
-          <span class="text-text-bright text-base">Preferences</span>
+          <span class="text-text-bright text-base font-semibold font-sans">Preferences</span>
           <button
             onClick={closePreferences}
             class="w-7 h-7 flex items-center justify-center text-base text-text cursor-pointer rounded hover:bg-bg hover:text-text-bright transition-colors"
@@ -69,35 +69,35 @@ export function PreferencesPanel() {
 
         {/* Current Project */}
         <div>
-          <div class="px-6 py-2 text-[11px] uppercase tracking-widest text-text">
+          <div class="px-6 py-3 section-label">
             Current Project
           </div>
-          <div class="flex items-center justify-between px-6 py-2 border-b border-border/50">
-            <span class="text-sm text-text-bright">Name</span>
+          <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/30">
+            <span class="text-sm text-text-bright font-sans">Name</span>
             <span class="text-sm text-text font-mono">{name ?? 'None'}</span>
           </div>
-          <div class="flex items-center justify-between px-6 py-2 border-b border-border/50">
-            <span class="text-sm text-text-bright">Path</span>
+          <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/30">
+            <span class="text-sm text-text-bright font-sans">Path</span>
             <span class="text-sm text-text font-mono truncate max-w-[280px]" title={activeProject?.path ?? ''}>
               {activeProject?.path ?? 'N/A'}
             </span>
           </div>
-          <div class="flex items-center justify-between px-6 py-2 border-b border-border/50">
-            <span class="text-sm text-text-bright">Agent</span>
+          <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/30">
+            <span class="text-sm text-text-bright font-sans">Agent</span>
             <span class="text-sm text-text font-mono">{activeProject?.agent ?? 'N/A'}</span>
           </div>
         </div>
 
         {/* Appearance */}
         <div>
-          <div class="px-6 py-2 text-[11px] uppercase tracking-widest text-text">
+          <div class="px-6 py-3 section-label">
             Appearance
           </div>
-          <div class="flex items-center justify-between px-6 py-2 border-b border-border/50">
-            <span class="text-sm text-text-bright">Theme</span>
+          <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/30">
+            <span class="text-sm text-text-bright font-sans">Theme</span>
             <button
               onClick={() => toggleThemeMode()}
-              class="inline-flex items-center px-3 py-1 bg-accent/15 text-accent text-xs font-mono rounded cursor-pointer hover:bg-accent/25 transition-colors"
+              class="inline-flex items-center gap-2 px-3 py-1.5 bg-bg border border-border-interactive text-text-bright text-xs font-mono rounded-lg cursor-pointer hover:border-accent transition-colors"
             >
               {isDark ? 'Dark' : 'Light'} -- click to toggle
             </button>
@@ -106,25 +106,40 @@ export function PreferencesPanel() {
 
         {/* Shortcuts */}
         <div>
-          <div class="px-6 py-2 text-[11px] uppercase tracking-widest text-text">
+          <div class="px-6 py-3 section-label">
             Shortcuts
           </div>
-          <div class="flex items-center justify-between px-6 py-2 border-b border-border/50">
-            <span class="text-sm text-text">
-              Press <span class="inline-flex items-center px-2 py-0.5 bg-accent/15 text-accent text-xs font-mono rounded">Ctrl+?</span> to view all keyboard shortcuts
-            </span>
+          <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/30">
+            <span class="text-sm text-text font-sans">Toggle sidebar</span>
+            <kbd class="inline-flex items-center gap-1 px-2 py-0.5 bg-bg border border-border-interactive text-text-bright text-xs font-mono rounded">Ctrl+B</kbd>
+          </div>
+          <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/30">
+            <span class="text-sm text-text font-sans">Quick switch</span>
+            <kbd class="inline-flex items-center gap-1 px-2 py-0.5 bg-bg border border-border-interactive text-text-bright text-xs font-mono rounded">Ctrl+P</kbd>
+          </div>
+          <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/30">
+            <span class="text-sm text-text font-sans">New tab</span>
+            <kbd class="inline-flex items-center gap-1 px-2 py-0.5 bg-bg border border-border-interactive text-text-bright text-xs font-mono rounded">Ctrl+T</kbd>
+          </div>
+          <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/30">
+            <span class="text-sm text-text font-sans">Close tab</span>
+            <kbd class="inline-flex items-center gap-1 px-2 py-0.5 bg-bg border border-border-interactive text-text-bright text-xs font-mono rounded">{'\u2318'}+W</kbd>
+          </div>
+          <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/30">
+            <span class="text-sm text-text font-sans">All shortcuts</span>
+            <kbd class="inline-flex items-center gap-1 px-2 py-0.5 bg-bg border border-border-interactive text-text-bright text-xs font-mono rounded">Ctrl+?</kbd>
           </div>
         </div>
 
         {/* Actions */}
         <div>
-          <div class="px-6 py-2 text-[11px] uppercase tracking-widest text-text">
+          <div class="px-6 py-3 section-label">
             Actions
           </div>
           <div class="px-6 py-3">
             <button
               onClick={() => { closePreferences(); openProjectModal({ project: activeProject ?? undefined }); }}
-              class="bg-accent text-white px-4 py-2 rounded-sm text-sm cursor-pointer hover:opacity-90 transition-opacity"
+              class="bg-accent text-white px-4 py-2 rounded-lg text-sm font-sans cursor-pointer hover:opacity-90 transition-opacity"
             >
               Edit Project
             </button>

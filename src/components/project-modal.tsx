@@ -152,12 +152,12 @@ export function ProjectModal() {
       }}
     >
       <div
-        class="w-[480px] bg-bg-raised border border-border rounded-lg shadow-2xl z-[101] animate-[fadeIn_150ms_ease-out]"
+        class="w-[480px] bg-bg-raised border border-border-interactive rounded-xl shadow-2xl z-[101] animate-[fadeIn_150ms_ease-out]"
         onClick={(e) => { e.stopPropagation(); }}
       >
         {/* Header */}
         <div class="flex items-center px-6 py-4 border-b border-border">
-          <div class="flex-1 text-base text-text-bright">{editingName.value ? 'Edit Project' : 'Add Project'}</div>
+          <div class="flex-1 text-base font-semibold text-text-bright font-sans">{editingName.value ? 'Edit Project' : 'Add Project'}</div>
           <div
             class="w-7 h-7 flex items-center justify-center text-base text-text cursor-pointer rounded hover:bg-bg hover:text-text-bright transition-colors"
             title="Close"
@@ -175,18 +175,18 @@ export function ProjectModal() {
         >
           {/* Directory */}
           <div class="mb-4">
-            <label class="block text-[11px] uppercase tracking-widest text-text mb-1">Directory</label>
+            <label class="section-label block mb-1.5">Directory</label>
             <div class="flex">
               <input
                 type="text"
                 placeholder="/path/to/project"
-                class="flex-1 h-8 px-2 text-sm bg-bg border border-border rounded-l-sm text-text-bright outline-none focus:border-accent transition-colors"
+                class="flex-1 h-9 px-3 text-sm bg-bg border border-border-interactive rounded-l-lg text-text-bright outline-none focus:border-accent transition-colors font-sans"
                 value={directory.value}
                 onInput={(e) => { directory.value = (e.target as HTMLInputElement).value; }}
               />
               <button
                 type="button"
-                class="w-8 h-8 bg-bg border border-border border-l-0 rounded-r-sm text-text cursor-pointer text-sm shrink-0"
+                class="w-9 h-9 bg-bg border border-border-interactive border-l-0 rounded-r-lg text-text cursor-pointer text-sm shrink-0 hover:text-text-bright hover:bg-bg-raised transition-colors"
                 title="Browse"
                 onClick={handleBrowse}
               >[...]</button>
@@ -195,11 +195,11 @@ export function ProjectModal() {
 
           {/* Name */}
           <div class="mb-4">
-            <label class="block text-[11px] uppercase tracking-widest text-text mb-1">Name</label>
+            <label class="section-label block mb-1.5">Name</label>
             <input
               type="text"
               placeholder="project-name"
-              class="w-full h-8 px-2 text-sm bg-bg border border-border rounded-sm text-text-bright outline-none focus:border-accent box-border transition-colors"
+              class="w-full h-9 px-3 text-sm bg-bg border border-border-interactive rounded-lg text-text-bright outline-none focus:border-accent transition-colors font-sans"
               value={name.value}
               onInput={(e) => { name.value = (e.target as HTMLInputElement).value; }}
             />
@@ -207,12 +207,12 @@ export function ProjectModal() {
 
           {/* Agent */}
           <div class="mb-4">
-            <label class="block text-[11px] uppercase tracking-widest text-text mb-1">Agent</label>
+            <label class="section-label block mb-1.5">Agent</label>
             <input
               type="text"
               list="agent-suggestions"
               placeholder="claude"
-              class="w-full h-8 px-2 text-sm bg-bg border border-border rounded-sm text-text-bright outline-none focus:border-accent box-border transition-colors"
+              class="w-full h-9 px-3 text-sm bg-bg border border-border-interactive rounded-lg text-text-bright outline-none focus:border-accent transition-colors font-sans"
               value={agent.value}
               onInput={(e) => { agent.value = (e.target as HTMLInputElement).value; }}
             />
@@ -225,11 +225,11 @@ export function ProjectModal() {
 
           {/* GSD File */}
           <div class="mb-4">
-            <label class="block text-[11px] uppercase tracking-widest text-text mb-1">GSD File</label>
+            <label class="section-label block mb-1.5">GSD File</label>
             <input
               type="text"
               placeholder="Optional .md path"
-              class="w-full h-8 px-2 text-sm bg-bg border border-border rounded-sm text-text-bright outline-none focus:border-accent box-border transition-colors"
+              class="w-full h-9 px-3 text-sm bg-bg border border-border-interactive rounded-lg text-text-bright outline-none focus:border-accent transition-colors font-sans"
               value={gsdFile.value}
               onInput={(e) => { gsdFile.value = (e.target as HTMLInputElement).value; }}
             />
@@ -237,11 +237,11 @@ export function ProjectModal() {
 
           {/* Server Command */}
           <div class="mb-2">
-            <label class="block text-[11px] uppercase tracking-widest text-text mb-1">Server Command</label>
+            <label class="section-label block mb-1.5">Server Command</label>
             <input
               type="text"
               placeholder="Optional, e.g. npm run dev"
-              class="w-full h-8 px-2 text-sm bg-bg border border-border rounded-sm text-text-bright outline-none focus:border-accent box-border transition-colors"
+              class="w-full h-9 px-3 text-sm bg-bg border border-border-interactive rounded-lg text-text-bright outline-none focus:border-accent transition-colors font-sans"
               value={serverCmd.value}
               onInput={(e) => { serverCmd.value = (e.target as HTMLInputElement).value; }}
             />
@@ -249,28 +249,24 @@ export function ProjectModal() {
 
           {/* Error */}
           {error.value && (
-            <div class="text-xs text-[#dc322f] mb-2">
+            <div class="text-xs text-danger mb-2">
               {error.value}
             </div>
           )}
 
           {/* Buttons */}
-          <div class="pt-4 pb-2 flex justify-end gap-3 border-t border-border mt-2">
+          <div class="px-0 py-4 border-t border-border flex justify-end gap-3 mt-2">
             {!isFirstRun.value && (
               <button
                 type="button"
-                class="bg-transparent border border-border text-text px-4 py-2 rounded-sm cursor-pointer text-sm hover:bg-bg-raised hover:text-text-bright transition-colors"
+                class="bg-transparent border border-border-interactive text-text px-4 py-2 rounded-lg cursor-pointer text-sm font-sans hover:text-text-bright hover:border-accent transition-colors"
                 onClick={() => { closeProjectModal(); }}
-              >Cancel Add</button>
+              >Cancel</button>
             )}
             <button
               type="submit"
               disabled={!isValid.value}
-              class={`border-none text-white px-4 py-2 rounded-sm text-sm transition-opacity ${
-                isValid.value
-                  ? 'bg-accent cursor-pointer opacity-100'
-                  : 'bg-accent cursor-not-allowed opacity-40'
-              }`}
+              class="bg-accent text-white px-4 py-2 rounded-lg text-sm font-sans cursor-pointer hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
             >{editingName.value ? 'Save Changes' : 'Add Project'}</button>
           </div>
         </form>
