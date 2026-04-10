@@ -1,11 +1,13 @@
-// file-tree.tsx -- Keyboard-navigable file tree (D-07, D-08, PANEL-05, PANEL-06)
+// file-tree.tsx -- Keyboard-navigable file tree with Lucide icons (D-07, D-08, D-12, D-13, PANEL-05, PANEL-06)
 // Loads directory contents via list_directory Rust command.
 // Dispatches file-opened CustomEvent for main.js to handle.
 // Migrated from Arrow.js to Preact TSX (Phase 6.1)
+// Upgraded with Lucide icons and file size metadata (Phase 9)
 
 import { useEffect } from 'preact/hooks';
 import { signal } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
+import { Folder, File } from 'lucide-preact';
 import { activeProjectName, projects } from '../state-manager';
 import type { ProjectEntry } from '../state-manager';
 
@@ -14,12 +16,22 @@ interface FileEntry {
   name: string;
   path: string;
   is_dir: boolean;
+  size?: number;
 }
 
 const entries = signal<FileEntry[]>([]);
 const selectedIndex = signal(0);
 const currentPath = signal('');
 const loaded = signal(false);
+
+/**
+ * Format file size into a human-readable string.
+ */
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}K`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
+}
 
 /**
  * Get the active project from signals.
@@ -135,18 +147,26 @@ export function FileTree() {
       ) : (
         entries.value.map((entry, i) => (
           <div
-            class={selectedIndex.value === i
-              ? 'flex items-center px-3 py-1 cursor-pointer text-[13px] text-text-bright bg-bg-raised gap-1.5'
-              : 'flex items-center px-3 py-1 cursor-pointer text-[13px] text-text bg-transparent gap-1.5'}
+            class={`flex items-center gap-2 px-3 py-1.5 cursor-pointer text-[13px] ${
+              selectedIndex.value === i
+                ? 'text-text-bright bg-bg-raised'
+                : 'text-text hover:bg-bg-raised/50'
+            }`}
             onClick={() => { selectedIndex.value = i; openEntry(entry); }}
             onMouseEnter={() => { selectedIndex.value = i; }}
           >
-            <span class="text-accent text-[11px] w-3.5 shrink-0 font-mono">
-              {entry.is_dir ? '/' : '\u00A0'}
-            </span>
-            <span class="overflow-hidden text-ellipsis whitespace-nowrap">
+            {entry.is_dir
+              ? <Folder size={14} class="text-accent shrink-0" />
+              : <File size={14} class="text-text/60 shrink-0" />
+            }
+            <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
               {entry.name}
             </span>
+            {!entry.is_dir && entry.size != null && (
+              <span class="text-[11px] text-text/50 font-mono shrink-0 ml-auto">
+                {formatSize(entry.size)}
+              </span>
+            )}
           </div>
         ))
       )}
