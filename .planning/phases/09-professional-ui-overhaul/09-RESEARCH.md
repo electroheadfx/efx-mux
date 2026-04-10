@@ -377,17 +377,17 @@ function AgentHeader({ agentType, version, isRunning }: Props) {
 | A5 | Vite serves files from src/fonts/ at /fonts/ URL path | Pitfalls | Low -- existing FiraCode at src/fonts/ works with url('/fonts/...') |
 | A6 | `claude --version` outputs a parseable version string | Architecture Patterns | Medium -- if format differs, parsing needs adjustment |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **GeistMono-Variable.woff2 exact GitHub path**
    - What we know: Geist-Variable.woff2 confirmed at `packages/next/dist/fonts/geist-sans/`
    - What's unclear: Exact filename for Geist Mono variable font (GeistMono-Variable.woff2 vs Geist-Mono-Variable.woff2)
-   - Recommendation: Check GitHub repo during execution; fallback is to download from geist npm package or Vercel font page
+   - RESOLVED: Executor will check the GitHub repo at build time. Fallback: download from the `geist` npm package (`node_modules/geist/dist/fonts/geist-mono/`). Plan 01 Task 2 already includes this fallback path. Either filename works — the @font-face declaration adapts.
 
 2. **`claude --version` output format**
    - What we know: D-18 says "run as one-shot command at startup"
    - What's unclear: Exact output format (e.g., "Claude Code v1.2.3" or "1.2.3" or multi-line)
-   - Recommendation: Run the command manually to check, parse first line, extract version-like string
+   - RESOLVED: Plan 05 Task 1 parses the first line of stdout and extracts any version-like pattern (semver regex). If parsing fails, displays "Claude Code" as a generic label with no version. Graceful degradation — no crash path.
 
 ## Validation Architecture
 
