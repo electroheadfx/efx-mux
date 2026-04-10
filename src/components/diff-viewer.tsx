@@ -2,9 +2,11 @@
 // Listens for open-diff CustomEvent from sidebar and renders per-file diffs.
 // Migrated from Arrow.js to Preact TSX (Phase 6.1)
 // Restyled to GitHub-style with file headers, line numbers, colored accents (Phase 9)
+// Rewritten with tokens.ts colors (Phase 10)
 
 import { useRef, useEffect } from 'preact/hooks';
 import { invoke } from '@tauri-apps/api/core';
+import { colors, fonts } from '../tokens';
 
 /**
  * Escape HTML special characters to prevent XSS in diff output.
@@ -31,7 +33,7 @@ function basename(filePath: string): string {
  */
 function renderDiffHtml(diff: string, filePath?: string): string {
   if (!diff || !diff.trim()) {
-    return '<div class="text-text p-4">No changes detected</div>';
+    return `<div style="color: ${colors.textMuted}; padding: 16px;">No changes detected</div>`;
   }
 
   const lines = diff.split('\n');
@@ -54,14 +56,19 @@ function renderDiffHtml(diff: string, filePath?: string): string {
       }
       const escaped = escapeHtml(line);
       bodyLines.push(
-        `<div class="bg-accent/[0.03] px-4 py-2 text-xs font-mono text-accent">${escaped}</div>`
+        `<div style="background-color: ${colors.diffHunkBg}; padding: 8px 16px;">
+          <span style="font-family: ${fonts.mono}; font-size: 12px; color: ${colors.accent};">${escaped}</span>
+        </div>`
       );
     } else if (line.startsWith('+')) {
       addCount++;
       const content = line.substring(1);
       const escaped = escapeHtml(content);
       bodyLines.push(
-        `<div class="bg-[#3FB95015] border-l-[3px] border-l-success px-4 py-[2px] gap-3 flex"><span class="text-xs font-mono text-success/50 w-8 text-right shrink-0 leading-6">${newLineNo}</span><span class="text-xs font-mono text-success leading-6">${escaped || '&nbsp;'}</span></div>`
+        `<div style="background-color: ${colors.diffGreenBg}; border-left: 3px solid ${colors.statusGreen}; padding: 2px 16px; display: flex; gap: 12px;">
+          <span style="font-family: ${fonts.mono}; font-size: 12px; color: ${colors.diffGreenLineno}; width: 32px; text-align: right; shrink: 0; line-height: 24px;">${newLineNo}</span>
+          <span style="font-family: ${fonts.mono}; font-size: 12px; color: ${colors.statusGreen}; line-height: 24px;">${escaped || '&nbsp;'}</span>
+        </div>`
       );
       newLineNo++;
     } else if (line.startsWith('-')) {
@@ -69,14 +76,20 @@ function renderDiffHtml(diff: string, filePath?: string): string {
       const content = line.substring(1);
       const escaped = escapeHtml(content);
       bodyLines.push(
-        `<div class="bg-[#F8514915] border-l-[3px] border-l-danger px-4 py-[2px] gap-3 flex"><span class="text-xs font-mono text-danger/50 w-8 text-right shrink-0 leading-6">${oldLineNo}</span><span class="text-xs font-mono text-danger leading-6">${escaped || '&nbsp;'}</span></div>`
+        `<div style="background-color: ${colors.diffRedBg}; border-left: 3px solid ${colors.diffRed}; padding: 2px 16px; display: flex; gap: 12px;">
+          <span style="font-family: ${fonts.mono}; font-size: 12px; color: ${colors.diffRedLineno}; width: 32px; text-align: right; shrink: 0; line-height: 24px;">${oldLineNo}</span>
+          <span style="font-family: ${fonts.mono}; font-size: 12px; color: ${colors.diffRed}; line-height: 24px;">${escaped || '&nbsp;'}</span>
+        </div>`
       );
       oldLineNo++;
     } else if (line.startsWith(' ')) {
       const content = line.substring(1);
       const escaped = escapeHtml(content);
       bodyLines.push(
-        `<div class="px-4 py-[2px] gap-3 flex"><span class="text-xs font-mono text-text-muted w-8 text-right shrink-0 leading-6">${newLineNo}</span><span class="text-xs font-mono text-text leading-6">${escaped || '&nbsp;'}</span></div>`
+        `<div style="padding: 2px 16px; display: flex; gap: 12px;">
+          <span style="font-family: ${fonts.mono}; font-size: 12px; color: ${colors.textDim}; width: 32px; text-align: right; shrink: 0; line-height: 24px;">${newLineNo}</span>
+          <span style="font-family: ${fonts.mono}; font-size: 12px; color: ${colors.textMuted}; line-height: 24px;">${escaped || '&nbsp;'}</span>
+        </div>`
       );
       oldLineNo++;
       newLineNo++;
@@ -84,20 +97,20 @@ function renderDiffHtml(diff: string, filePath?: string): string {
     // Skip any other lines (diff --git, index, ---, +++ headers are not sent by backend)
   }
 
-  // File header bar (per D-06: no rounded corners, bg-bg, M badge warning color)
+  // File header bar
   const fileName = filePath ? basename(filePath) : 'unknown';
-  const header = `<div class="bg-bg px-4 py-2.5 gap-2 border-b border-border flex items-center">
-    <span class="w-4 h-4 rounded-[3px] bg-warning/[0.125] flex items-center justify-center">
-      <span class="text-[9px] font-mono font-semibold text-warning">M</span>
+  const header = `<div style="background-color: ${colors.bgBase}; padding: 10px 16px; gap: 8px; border-bottom: 1px solid ${colors.bgBorder}; display: flex; align-items: center;">
+    <span style="width: 16px; height: 16px; border-radius: 3px; background-color: ${colors.statusYellowBg}; display: flex; align-items: center; justify-content: center;">
+      <span style="font-family: ${fonts.mono}; font-size: 9px; font-weight: 600; color: ${colors.statusYellow};">M</span>
     </span>
-    <span class="text-xs font-mono font-medium text-text-bright flex-1">${escapeHtml(fileName)}</span>
-    <span class="text-[11px] font-mono font-semibold text-success">+${addCount}</span>
-    <span class="gap-2"></span>
-    <span class="text-[11px] font-mono font-semibold text-danger">-${delCount}</span>
+    <span style="font-family: ${fonts.mono}; font-size: 12px; font-weight: 500; color: ${colors.textPrimary}; flex: 1;">${escapeHtml(fileName)}</span>
+    <span style="font-family: ${fonts.mono}; font-size: 11px; font-weight: 600; color: ${colors.statusGreen};">+${addCount}</span>
+    <span style="gap: 8px;"></span>
+    <span style="font-family: ${fonts.mono}; font-size: 11px; font-weight: 600; color: ${colors.diffRed};">-${delCount}</span>
   </div>`;
 
-  // Diff body container (per D-06: bg-bg-terminal, no border, no rounded corners)
-  const body = `<div class="bg-bg-terminal py-2 font-mono text-[13px]">${bodyLines.join('')}</div>`;
+  // Diff body container
+  const body = `<div style="padding: 8px 0; font-family: ${fonts.mono}; font-size: 13px;">${bodyLines.join('')}</div>`;
 
   return header + body;
 }
@@ -114,13 +127,13 @@ export function DiffViewer() {
     async function loadDiff(filePath: string) {
       const el = contentRef.current;
       if (!el) return;
-      el.innerHTML = '<div class="text-text p-4">Loading diff...</div>';
+      el.innerHTML = `<div style="color: ${colors.textMuted}; padding: 16px;">Loading diff...</div>`;
 
       try {
         const diff = await invoke<string>('get_file_diff', { path: filePath });
         el.innerHTML = renderDiffHtml(diff, filePath);
       } catch (err) {
-        el.innerHTML = `<div class="text-danger p-4">Error loading diff: ${escapeHtml(String(err))}</div>`;
+        el.innerHTML = `<div style="color: ${colors.diffRed}; padding: 16px;">Error loading diff: ${escapeHtml(String(err))}</div>`;
       }
     }
 
@@ -138,9 +151,9 @@ export function DiffViewer() {
   }, []);
 
   return (
-    <div class="h-full overflow-y-auto px-4 py-2 font-mono text-[13px] leading-relaxed">
+    <div style="height: 100%; overflow-y: auto; padding: 8px 16px; font-family: ${fonts.mono}; font-size: 13px; line-height: 1.5;">
       <div ref={contentRef}>
-        <div class="text-text">Click a file in the sidebar to view its diff</div>
+        <div style="color: ${colors.textMuted};">Click a file in the sidebar to view its diff</div>
       </div>
     </div>
   );
