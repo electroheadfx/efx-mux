@@ -82,7 +82,7 @@ export function AgentHeader() {
         <span class="text-xs font-medium text-text-bright font-sans leading-tight">
           {displayName.value} {agentVersion.value}
         </span>
-        <span class="text-[10px] text-[#484F58] font-mono leading-tight truncate">
+        <span class="text-[10px] text-text-muted font-mono leading-tight truncate">
           {agentName.value === 'claude' ? 'Opus 4' : agentName.value === 'opencode' ? 'OpenCode' : 'Bash'} · {activeProjectName.value || 'No project'}
         </span>
       </div>

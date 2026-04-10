@@ -104,11 +104,11 @@ export function PreferencesPanel() {
               <div class="rounded-md border border-border-interactive flex">
                 <button
                   onClick={() => toggleThemeMode()}
-                  class={`rounded-md px-3 py-[5px] text-[11px] font-medium font-sans ${isDark ? 'bg-accent text-white' : 'text-[#484F58]'}`}
+                  class={`rounded-md px-3 py-[5px] text-[11px] font-medium font-sans ${isDark ? 'bg-accent text-white' : 'text-text-muted'}`}
                 >Dark</button>
                 <button
                   onClick={() => toggleThemeMode()}
-                  class={`rounded-md px-3 py-[5px] text-[11px] font-medium font-sans ${!isDark ? 'bg-accent text-white' : 'text-[#484F58]'}`}
+                  class={`rounded-md px-3 py-[5px] text-[11px] font-medium font-sans ${!isDark ? 'bg-accent text-white' : 'text-text-muted'}`}
                 >Light</button>
               </div>
             </div>
@@ -123,7 +123,7 @@ export function PreferencesPanel() {
               <span class="text-[13px] text-text font-sans">Toggle sidebar</span>
               <div class="flex items-center gap-1">
                 <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">Ctrl</span>
-                <span class="text-[10px] font-mono text-[#484F58]">+</span>
+                <span class="text-[10px] font-mono text-text-muted">+</span>
                 <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">B</span>
               </div>
             </div>
@@ -131,7 +131,7 @@ export function PreferencesPanel() {
               <span class="text-[13px] text-text font-sans">Quick switch</span>
               <div class="flex items-center gap-1">
                 <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">Ctrl</span>
-                <span class="text-[10px] font-mono text-[#484F58]">+</span>
+                <span class="text-[10px] font-mono text-text-muted">+</span>
                 <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">P</span>
               </div>
             </div>
@@ -139,7 +139,7 @@ export function PreferencesPanel() {
               <span class="text-[13px] text-text font-sans">New tab</span>
               <div class="flex items-center gap-1">
                 <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">Ctrl</span>
-                <span class="text-[10px] font-mono text-[#484F58]">+</span>
+                <span class="text-[10px] font-mono text-text-muted">+</span>
                 <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">T</span>
               </div>
             </div>
@@ -147,7 +147,7 @@ export function PreferencesPanel() {
               <span class="text-[13px] text-text font-sans">Close tab</span>
               <div class="flex items-center gap-1">
                 <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">&#x2318;</span>
-                <span class="text-[10px] font-mono text-[#484F58]">+</span>
+                <span class="text-[10px] font-mono text-text-muted">+</span>
                 <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">W</span>
               </div>
             </div>

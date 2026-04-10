@@ -140,7 +140,7 @@ export function FileTree() {
       <div class="bg-bg px-4 py-2.5 gap-2 border-b border-border flex items-center shrink-0">
         <span class="text-xs font-medium text-text-bright font-sans">File Tree</span>
         <span class="flex-1"></span>
-        <span class="text-[10px] font-mono text-[#484F58]">~/Dev/efx-mux</span>
+        <span class="text-[10px] font-mono text-text-muted">~/Dev/efx-mux</span>
       </div>
       {/* File list */}
       <div
@@ -166,15 +166,15 @@ export function FileTree() {
               {entry.is_dir
                 ? <Folder size={14} class="text-accent shrink-0" />
                 : (entry.name.match(/\.(ts|tsx|js|jsx|rs|css)$/)
-                    ? <FileCode size={14} class="text-[#484F58] shrink-0" />
-                    : <FileText size={14} class="text-[#484F58] shrink-0" />
+                    ? <FileCode size={14} class="text-text-muted shrink-0" />
+                    : <FileText size={14} class="text-text-muted shrink-0" />
                   )
               }
               <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-xs font-sans">
                 {entry.name}
               </span>
               {!entry.is_dir && entry.size != null && (
-                <span class="text-[10px] font-mono text-[#484F58] ml-auto shrink-0">
+                <span class="text-[10px] font-mono text-text-muted ml-auto shrink-0">
                   {formatSize(entry.size)}
                 </span>
               )}

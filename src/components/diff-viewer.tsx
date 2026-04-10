@@ -76,7 +76,7 @@ function renderDiffHtml(diff: string, filePath?: string): string {
       const content = line.substring(1);
       const escaped = escapeHtml(content);
       bodyLines.push(
-        `<div class="px-4 py-[2px] gap-3 flex"><span class="text-xs font-mono text-[#484F58] w-8 text-right shrink-0 leading-6">${newLineNo}</span><span class="text-xs font-mono text-text leading-6">${escaped || '&nbsp;'}</span></div>`
+        `<div class="px-4 py-[2px] gap-3 flex"><span class="text-xs font-mono text-text-muted w-8 text-right shrink-0 leading-6">${newLineNo}</span><span class="text-xs font-mono text-text leading-6">${escaped || '&nbsp;'}</span></div>`
       );
       oldLineNo++;
       newLineNo++;

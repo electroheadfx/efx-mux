@@ -540,7 +540,7 @@ export function TerminalTabBar() {
             aria-selected={isActive}
             class={isActive
               ? 'flex items-center gap-1.5 px-3 py-2 border-b-2 border-accent text-xs font-medium text-text-bright font-sans cursor-pointer bg-transparent transition-all duration-150'
-              : 'flex items-center gap-1 px-3 py-2 text-xs text-[#484F58] font-sans cursor-pointer bg-transparent transition-all duration-150 hover:text-text-bright'}
+              : 'flex items-center gap-1 px-3 py-2 text-xs text-text-muted font-sans cursor-pointer bg-transparent transition-all duration-150 hover:text-text-bright'}
             onClick={() => {
               activeTabId.value = tab.id;
               switchToTab(tab.id);
@@ -550,7 +550,7 @@ export function TerminalTabBar() {
             {isActive && <span class="w-1.5 h-1.5 rounded-full bg-success shrink-0" />}
             <span>{tab.label}</span>
             <span
-              class="ml-1 text-[#484F58] text-[10px] hover:text-text-bright"
+              class="ml-1 text-text-muted text-[10px] hover:text-text-bright"
               onClick={(e) => {
                 e.stopPropagation();
                 closeTab(tab.id);
@@ -562,7 +562,7 @@ export function TerminalTabBar() {
       })}
       {/* New tab button */}
       <button
-        class="w-6 h-6 rounded flex items-center justify-center text-[#484F58] text-sm hover:text-text-bright hover:bg-bg-raised cursor-pointer"
+        class="w-6 h-6 rounded flex items-center justify-center text-text-muted text-sm hover:text-text-bright hover:bg-bg-raised cursor-pointer"
         onClick={() => createNewTab()}
         title="New terminal tab (Ctrl+T)"
       >+</button>

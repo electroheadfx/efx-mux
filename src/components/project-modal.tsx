@@ -181,7 +181,7 @@ export function ProjectModal() {
               <input
                 type="text"
                 placeholder="/path/to/project"
-                class="flex-1 h-9 px-3 text-[13px] bg-bg border border-border-interactive rounded-lg text-text-bright outline-none focus:border-accent transition-colors font-sans placeholder:text-[#484F58]"
+                class="flex-1 h-9 px-3 text-[13px] bg-bg border border-border-interactive rounded-lg text-text-bright outline-none focus:border-accent transition-colors font-sans placeholder:text-text-muted"
                 value={directory.value}
                 onInput={(e) => { directory.value = (e.target as HTMLInputElement).value; }}
               />
@@ -200,7 +200,7 @@ export function ProjectModal() {
             <input
               type="text"
               placeholder="project-name"
-              class="w-full h-9 px-3 text-[13px] bg-bg border border-border-interactive rounded-lg text-text-bright outline-none focus:border-accent transition-colors font-sans placeholder:text-[#484F58]"
+              class="w-full h-9 px-3 text-[13px] bg-bg border border-border-interactive rounded-lg text-text-bright outline-none focus:border-accent transition-colors font-sans placeholder:text-text-muted"
               value={name.value}
               onInput={(e) => { name.value = (e.target as HTMLInputElement).value; }}
             />
@@ -213,7 +213,7 @@ export function ProjectModal() {
               type="text"
               list="agent-suggestions"
               placeholder="claude"
-              class="w-full h-9 px-3 text-[13px] bg-bg border border-border-interactive rounded-lg text-text-bright outline-none focus:border-accent transition-colors font-sans placeholder:text-[#484F58]"
+              class="w-full h-9 px-3 text-[13px] bg-bg border border-border-interactive rounded-lg text-text-bright outline-none focus:border-accent transition-colors font-sans placeholder:text-text-muted"
               value={agent.value}
               onInput={(e) => { agent.value = (e.target as HTMLInputElement).value; }}
             />
@@ -230,7 +230,7 @@ export function ProjectModal() {
             <input
               type="text"
               placeholder="Optional .md path"
-              class="w-full h-9 px-3 text-[13px] bg-bg border border-border-interactive rounded-lg text-text-bright outline-none focus:border-accent transition-colors font-sans placeholder:text-[#484F58]"
+              class="w-full h-9 px-3 text-[13px] bg-bg border border-border-interactive rounded-lg text-text-bright outline-none focus:border-accent transition-colors font-sans placeholder:text-text-muted"
               value={gsdFile.value}
               onInput={(e) => { gsdFile.value = (e.target as HTMLInputElement).value; }}
             />
@@ -242,7 +242,7 @@ export function ProjectModal() {
             <input
               type="text"
               placeholder="Optional, e.g. npm run dev"
-              class="w-full h-9 px-3 text-[13px] bg-bg border border-border-interactive rounded-lg text-text-bright outline-none focus:border-accent transition-colors font-sans placeholder:text-[#484F58]"
+              class="w-full h-9 px-3 text-[13px] bg-bg border border-border-interactive rounded-lg text-text-bright outline-none focus:border-accent transition-colors font-sans placeholder:text-text-muted"
               value={serverCmd.value}
               onInput={(e) => { serverCmd.value = (e.target as HTMLInputElement).value; }}
             />
