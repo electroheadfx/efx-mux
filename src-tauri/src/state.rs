@@ -187,7 +187,7 @@ fn default_right_session() -> String {
     "efx-mux-right".into()
 }
 fn default_right_top_tab() -> String {
-    "GSD".into()
+    "File Tree".into()
 }
 fn default_right_bottom_tab() -> String {
     "git".into()
