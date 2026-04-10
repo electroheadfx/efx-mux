@@ -27,6 +27,16 @@ created: 2026-04-10
 
 ---
 
+## Visual Focal Point
+
+The primary visual anchor is the **terminal area** in the main panel -- the largest surface area in the layout, rendered in bgDeep (#0B1120). All surrounding chrome (sidebar, tab bars, right panel) is subordinate and uses lighter bgBase (#111927) or bgElevated (#19243A) to draw the eye inward toward the terminal content where the user spends most of their time.
+
+### Collapsed Sidebar Accessibility
+
+When the sidebar is collapsed to the 40px icon strip, each icon button MUST include an `aria-label` attribute describing its action (e.g., `aria-label="Expand sidebar"`, `aria-label="Add project"`, `aria-label="Open preferences"`). This ensures screen reader users can navigate the collapsed state.
+
+---
+
 ## Spacing Scale
 
 Declared values from reference `tokens.ts`. This design uses a **non-standard fine-grained scale** optimized for dense developer tool UI, not the typical 8-point grid.
@@ -46,6 +56,21 @@ Declared values from reference `tokens.ts`. This design uses a **non-standard fi
 | 6xl | 28px | Page-level spacing (sidebar header height) |
 
 Exceptions: Touch targets are not enforced at 44px -- this is a desktop-only macOS app with pointer input. Minimum interactive target size is 24px (tab buttons, sidebar project items).
+
+### Scale Override Justification
+
+This spacing scale contains values that are not multiples of 4 (1px, 2px, 6px, 10px). These are the **verbatim reference values** from the existing design system (`RESEARCH/theme/tokens.ts`) and are locked by user decision D-11 (pixel-perfect design fidelity). Modifying them would violate the phase's core requirement.
+
+Justification for each non-conforming value:
+
+| Value | Use Case | Why Not a Multiple of 4 |
+|-------|----------|------------------------|
+| 1px | Hairline borders, divider lines, label-to-dot gaps | Sub-pixel precision required for border/separator rendering; 4px would be visually heavy |
+| 2px | Active tab bottom indicator, tight icon-to-text gaps in badges | Minimum visible accent indicator; 4px would dominate small badge elements |
+| 6px | Project list item vertical gaps, file tree row spacing | Dense list spacing where 4px is too tight and 8px wastes vertical space in a data-heavy sidebar |
+| 10px | Input field horizontal padding, card internal margins | Balanced internal padding for form controls; 8px feels cramped, 12px wastes horizontal space |
+
+Note: 12px (4x3) and 28px (4x7) ARE multiples of 4 and conform to the grid.
 
 ---
 
@@ -67,6 +92,21 @@ Only 2 weights used per font family:
 - **Geist:** 400 (body) + 500-600 (headings/labels)
 - **GeistMono:** 500 (all monospace UI elements)
 
+### Scale Override Justification
+
+This typography scale declares 7 font sizes (9, 10, 11, 12, 13, 15, 20px) rather than the typical maximum of 4. These are the **verbatim reference values** from the existing design system (`RESEARCH/theme/tokens.ts` fontSizes map: xs:9, sm:10, md:11, base:12, lg:13, xl:15, 2xl:20) and are locked by user decisions D-11 (pixel-perfect design fidelity) and D-13 (reference font size map).
+
+The 7 sizes map to **4 semantic tiers**, with sub-sizes within tiers for fine-grained density control in a developer tool UI:
+
+| Tier | Sizes | Semantic Role |
+|------|-------|---------------|
+| **Tier 1 -- Display** | 20px | Headings, titles (used sparingly, one per view) |
+| **Tier 2 -- Content** | 15px, 13px | Subheadings (15px) and primary labels like project names (13px) |
+| **Tier 3 -- Body** | 12px, 11px | Default body text (12px) and tab/strip labels in monospace (11px) |
+| **Tier 4 -- Caption** | 10px, 9px | Status badges and section labels (10px) and prompt mode badges (9px) |
+
+Each tier serves a distinct reading distance and information hierarchy level. The sub-sizes within tiers exist because dense developer tooling requires finer typographic discrimination than consumer UI -- a sidebar project name (13px) must be visually distinct from body file tree text (12px) at a glance.
+
 ---
 
 ## Color
@@ -75,9 +115,9 @@ Only 2 weights used per font family:
 
 | Role | Token | Value | Usage |
 |------|-------|-------|-------|
-| Dominant (60%) — bgBase | `--color-bg` | #111927 | Sidebar, main panels, tab bars, page background |
+| Dominant (60%) -- bgBase | `--color-bg` | #111927 | Sidebar, main panels, tab bars, page background |
 | Deep (terminal) | `--color-bg-terminal` | #0B1120 | Terminal area, right panel content areas |
-| Secondary (30%) — bgElevated | `--color-bg-raised` | #19243A | Cards, agent header, prompt bar, active tabs, modal fills |
+| Secondary (30%) -- bgElevated | `--color-bg-raised` | #19243A | Cards, agent header, prompt bar, active tabs, modal fills |
 | Border (subtle) | `--color-border` | #243352 | Dividers, split handles, input borders |
 | Border (interactive) | `--color-border-interactive` | #324568 | Hovered inputs, interactive borders, git branch badges |
 | Accent (10%) | `--color-accent` | #258AD1 | Active tab indicators, logo highlight, links, primary buttons |
@@ -129,7 +169,7 @@ Modal outer radius: 12px (Tailwind `rounded-xl`).
 
 ### Sidebar
 - Width: CSS variable `--sidebar-w` (drag-resizable, default 280px, min ~180px)
-- Collapsed: 40px icon strip
+- Collapsed: 40px icon strip; each icon button includes `aria-label` for accessibility
 - Background: bgBase (#111927)
 - Header: Efxmux logo with accent diamond, 28px height area
 - Project items: 6px vertical gap, active item has green dot + accent left border (2px)
@@ -195,6 +235,7 @@ Modal outer radius: 12px (Tailwind `rounded-xl`).
 | Element | Copy |
 |---------|------|
 | Primary CTA (modal) | "Add Project" |
+| Cancel action (modal) | "Cancel" |
 | Empty state heading (no projects) | "Welcome to Efxmux" |
 | Empty state body (no projects) | "Add your first project to get started." |
 | Empty state (no GSD file) | "No GSD file configured for this project." |
