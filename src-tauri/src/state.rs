@@ -96,6 +96,11 @@ pub struct SessionState {
 
     #[serde(default = "default_right_session", rename = "right-tmux-session")]
     pub right_tmux_session: String,
+
+    /// Extra session fields from JS (e.g. terminal-tabs). Preserves round-trip
+    /// so the frontend can store arbitrary session data without Rust schema changes.
+    #[serde(flatten)]
+    pub extra: std::collections::HashMap<String, serde_json::Value>,
 }
 
 impl Default for SessionState {
@@ -103,6 +108,7 @@ impl Default for SessionState {
         Self {
             main_tmux_session: default_main_session(),
             right_tmux_session: default_right_session(),
+            extra: std::collections::HashMap::new(),
         }
     }
 }

@@ -257,13 +257,8 @@ async function bootstrap() {
         // Agent fallback banner (D-13, AGENT-05, per UI-SPEC copywriting)
         if (activeProject?.agent && activeProject.agent !== 'bash' && !agentBinary) {
           terminal.writeln('');
-          terminal.writeln('');
-          terminal.writeln('');
-          terminal.writeln('\x1b[33mNo agent binary found.\x1b[0m');
-          terminal.writeln('\x1b[33mInstall claude or opencode to enable AI assistance.\x1b[0m');
+          terminal.writeln('\x1b[33mNo agent binary found. Install claude or opencode to enable AI assistance.\x1b[0m');
           terminal.writeln('\x1b[33mStarting plain bash session...\x1b[0m');
-          terminal.writeln('');
-          terminal.writeln('');
         }
 
         setTimeout(() => fitAddon.fit(), 100);

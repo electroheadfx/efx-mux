@@ -54,6 +54,7 @@ pub async fn get_file_diff(path: String) -> Result<String, String> {
 
         let mut opts = DiffOptions::new();
         opts.pathspec(rel_path.to_string_lossy().as_ref());
+        opts.include_untracked(true);
 
         // Diff between index (HEAD) and workdir
         let diff = repo
@@ -73,6 +74,18 @@ pub async fn get_file_diff(path: String) -> Result<String, String> {
             true
         })
         .map_err(|e| e.to_string())?;
+
+        // If diff is empty, file might be untracked — show full content as new file
+        if output.trim().is_empty() {
+            let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+            let mut new_file_output = String::from("@@ New file @@\n");
+            for line in content.lines() {
+                new_file_output.push('+');
+                new_file_output.push_str(line);
+                new_file_output.push('\n');
+            }
+            return Ok(new_file_output);
+        }
 
         Ok(output)
     })

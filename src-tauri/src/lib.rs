@@ -104,6 +104,7 @@ pub fn run() {
 
             // Projects
             project::add_project,
+            project::update_project,
             project::remove_project,
             project::switch_project,
             project::get_projects,

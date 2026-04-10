@@ -62,6 +62,37 @@ pub async fn switch_project(
 }
 
 #[tauri::command]
+pub async fn update_project(
+    state: State<'_, ManagedAppState>,
+    name: String,
+    entry: ProjectEntry,
+) -> Result<(), String> {
+    let updated = {
+        let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+        let new_name = entry.name.clone();
+        if let Some(existing) = guard.project.projects.iter_mut().find(|p| p.name == name) {
+            existing.path = entry.path;
+            existing.name = entry.name;
+            existing.agent = entry.agent;
+            existing.gsd_file = entry.gsd_file;
+            existing.server_cmd = entry.server_cmd;
+            existing.server_url = entry.server_url;
+        } else {
+            return Err(format!("Project '{}' not found", name));
+        }
+        // Update active name if it was renamed
+        if guard.project.active.as_ref() == Some(&name) && name != new_name {
+            guard.project.active = Some(new_name);
+        }
+        guard.clone()
+    };
+    tauri::async_runtime::spawn_blocking(move || save_state_sync(&updated))
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn get_projects(
     state: State<'_, ManagedAppState>,
 ) -> Result<Vec<ProjectEntry>, String> {

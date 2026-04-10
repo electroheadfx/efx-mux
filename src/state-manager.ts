@@ -83,9 +83,12 @@ export async function loadAppState(): Promise<AppState> {
   if (currentState?.panels?.['right-top-tab']) rightTopTab.value = currentState.panels['right-top-tab'];
   if (currentState?.panels?.['right-bottom-tab']) rightBottomTab.value = currentState.panels['right-bottom-tab'];
 
-  // Restore projects from persisted state (T-08-07-02)
+  // Restore projects and active project from persisted state (T-08-07-02)
   if (currentState?.project?.projects?.length) {
     projects.value = currentState.project.projects;
+  }
+  if (currentState?.project?.active) {
+    activeProjectName.value = currentState.project.active;
   }
 
   return currentState!;
@@ -190,6 +193,15 @@ export async function getActiveProject(): Promise<string | null> {
 export async function addProject(entry: ProjectEntry): Promise<void> {
   await invoke('add_project', { entry });
   // Reload state from Rust to pick up the persisted mutation
+  currentState = await invoke<AppState>('load_state');
+  projects.value = await invoke<ProjectEntry[]>('get_projects');
+}
+
+/**
+ * Update an existing project in the registry.
+ */
+export async function updateProject(name: string, entry: ProjectEntry): Promise<void> {
+  await invoke('update_project', { name, entry });
   currentState = await invoke<AppState>('load_state');
   projects.value = await invoke<ProjectEntry[]>('get_projects');
 }

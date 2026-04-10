@@ -123,7 +123,7 @@ export function PreferencesPanel() {
           </div>
           <div class="px-6 py-3">
             <button
-              onClick={() => { closePreferences(); openProjectModal(); }}
+              onClick={() => { closePreferences(); openProjectModal({ project: activeProject ?? undefined }); }}
               class="bg-accent text-white px-4 py-2 rounded-sm text-sm cursor-pointer hover:opacity-90 transition-opacity"
             >
               Edit Project

@@ -5,7 +5,7 @@ import { useEffect, useRef } from 'preact/hooks';
 import { signal, computed } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
-import { addProject, switchProject } from '../state-manager';
+import { addProject, updateProject, switchProject } from '../state-manager';
 import type { ProjectEntry } from '../state-manager';
 
 // ---------------------------------------------------------------------------
@@ -20,6 +20,7 @@ const gsdFile = signal('');
 const serverCmd = signal('');
 const error = signal<string | null>(null);
 const isFirstRun = signal(false);
+const editingName = signal<string | null>(null); // non-null = edit mode
 
 const isValid = computed(() => directory.value.trim().length > 0 && name.value.trim().length > 0);
 
@@ -28,16 +29,26 @@ const isValid = computed(() => directory.value.trim().length > 0 && name.value.t
 // ---------------------------------------------------------------------------
 
 /**
- * Open the modal.
+ * Open the modal. Pass `project` to enter edit mode with pre-filled fields.
  */
-export function openProjectModal(opts: { firstRun?: boolean } = {}) {
+export function openProjectModal(opts: { firstRun?: boolean; project?: ProjectEntry } = {}) {
   visible.value = true;
   isFirstRun.value = !!opts.firstRun;
-  directory.value = '';
-  name.value = '';
-  agent.value = 'claude';
-  gsdFile.value = '';
-  serverCmd.value = '';
+  if (opts.project) {
+    editingName.value = opts.project.name;
+    directory.value = opts.project.path;
+    name.value = opts.project.name;
+    agent.value = opts.project.agent || 'claude';
+    gsdFile.value = opts.project.gsd_file || '';
+    serverCmd.value = opts.project.server_cmd || '';
+  } else {
+    editingName.value = null;
+    directory.value = '';
+    name.value = '';
+    agent.value = 'claude';
+    gsdFile.value = '';
+    serverCmd.value = '';
+  }
   error.value = null;
 }
 
@@ -61,17 +72,22 @@ async function handleSubmit() {
       gsd_file: gsdFile.value.trim() || undefined,
       server_cmd: serverCmd.value.trim() || undefined,
     };
-    await addProject(entry);
 
-    // Notify sidebar to refresh its project list BEFORE switching
-    document.dispatchEvent(new CustomEvent('project-added', { detail: { entry } }));
-
-    // Switch to the new project via state-manager
-    await switchProject(entry.name);
+    if (editingName.value) {
+      // Edit mode: update existing project
+      await updateProject(editingName.value, entry);
+      document.dispatchEvent(new CustomEvent('project-added', { detail: { entry } }));
+      await switchProject(entry.name);
+    } else {
+      // Add mode: create new project
+      await addProject(entry);
+      document.dispatchEvent(new CustomEvent('project-added', { detail: { entry } }));
+      await switchProject(entry.name);
+    }
 
     visible.value = false;
   } catch (err) {
-    error.value = err?.toString() || 'Failed to add project';
+    error.value = err?.toString() || 'Failed to save project';
   }
 }
 
@@ -141,7 +157,7 @@ export function ProjectModal() {
       >
         {/* Header */}
         <div class="flex items-center px-6 py-4 border-b border-border">
-          <div class="flex-1 text-base text-text-bright">Add Project</div>
+          <div class="flex-1 text-base text-text-bright">{editingName.value ? 'Edit Project' : 'Add Project'}</div>
           <div
             class="w-7 h-7 flex items-center justify-center text-base text-text cursor-pointer rounded hover:bg-bg hover:text-text-bright transition-colors"
             title="Close"
@@ -255,7 +271,7 @@ export function ProjectModal() {
                   ? 'bg-accent cursor-pointer opacity-100'
                   : 'bg-accent cursor-not-allowed opacity-40'
               }`}
-            >Add Project</button>
+            >{editingName.value ? 'Save Changes' : 'Add Project'}</button>
           </div>
         </form>
       </div>
