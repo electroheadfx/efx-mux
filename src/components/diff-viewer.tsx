@@ -54,14 +54,14 @@ function renderDiffHtml(diff: string, filePath?: string): string {
       }
       const escaped = escapeHtml(line);
       bodyLines.push(
-        `<div class="px-3 py-1.5 bg-accent/5 text-accent text-xs font-mono border-y border-border/50">${escaped}</div>`
+        `<div class="bg-accent/[0.03] px-4 py-2 text-xs font-mono text-accent">${escaped}</div>`
       );
     } else if (line.startsWith('+')) {
       addCount++;
       const content = line.substring(1);
       const escaped = escapeHtml(content);
       bodyLines.push(
-        `<div class="flex"><span class="w-12 text-right pr-2 text-[11px] text-text/50 select-none shrink-0 bg-success/5 leading-6">${newLineNo}</span><div class="flex-1 pl-2 border-l-3 border-success bg-success/10 text-success leading-6">${escaped || '&nbsp;'}</div></div>`
+        `<div class="bg-[#3FB95015] border-l-[3px] border-l-success px-4 py-[2px] gap-3 flex"><span class="text-xs font-mono text-success/50 w-8 text-right shrink-0 leading-6">${newLineNo}</span><span class="text-xs font-mono text-success leading-6">${escaped || '&nbsp;'}</span></div>`
       );
       newLineNo++;
     } else if (line.startsWith('-')) {
@@ -69,14 +69,14 @@ function renderDiffHtml(diff: string, filePath?: string): string {
       const content = line.substring(1);
       const escaped = escapeHtml(content);
       bodyLines.push(
-        `<div class="flex"><span class="w-12 text-right pr-2 text-[11px] text-text/50 select-none shrink-0 bg-danger/5 leading-6">${oldLineNo}</span><div class="flex-1 pl-2 border-l-3 border-danger bg-danger/10 text-danger leading-6">${escaped || '&nbsp;'}</div></div>`
+        `<div class="bg-[#F8514915] border-l-[3px] border-l-danger px-4 py-[2px] gap-3 flex"><span class="text-xs font-mono text-danger/50 w-8 text-right shrink-0 leading-6">${oldLineNo}</span><span class="text-xs font-mono text-danger leading-6">${escaped || '&nbsp;'}</span></div>`
       );
       oldLineNo++;
     } else if (line.startsWith(' ')) {
       const content = line.substring(1);
       const escaped = escapeHtml(content);
       bodyLines.push(
-        `<div class="flex"><span class="w-12 text-right pr-2 text-[11px] text-text/50 select-none shrink-0 leading-6">${newLineNo}</span><div class="flex-1 pl-2 text-text leading-6">${escaped || '&nbsp;'}</div></div>`
+        `<div class="px-4 py-[2px] gap-3 flex"><span class="text-xs font-mono text-[#484F58] w-8 text-right shrink-0 leading-6">${newLineNo}</span><span class="text-xs font-mono text-text leading-6">${escaped || '&nbsp;'}</span></div>`
       );
       oldLineNo++;
       newLineNo++;
@@ -84,20 +84,20 @@ function renderDiffHtml(diff: string, filePath?: string): string {
     // Skip any other lines (diff --git, index, ---, +++ headers are not sent by backend)
   }
 
-  // File header bar
+  // File header bar (per D-06: no rounded corners, bg-bg, M badge warning color)
   const fileName = filePath ? basename(filePath) : 'unknown';
-  const header = `<div class="flex items-center gap-2 px-3 py-2 bg-bg-raised border border-border rounded-t-md">
-    <span class="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-accent/15 text-accent">M</span>
-    <span class="text-sm text-text-bright font-mono flex-1">${escapeHtml(fileName)}</span>
-    <span class="text-xs font-mono">
-      <span class="text-success">+${addCount}</span>
-      <span class="text-text mx-1">/</span>
-      <span class="text-danger">-${delCount}</span>
+  const header = `<div class="bg-bg px-4 py-2.5 gap-2 border-b border-border flex items-center">
+    <span class="w-4 h-4 rounded-[3px] bg-warning/[0.125] flex items-center justify-center">
+      <span class="text-[9px] font-mono font-semibold text-warning">M</span>
     </span>
+    <span class="text-xs font-mono font-medium text-text-bright flex-1">${escapeHtml(fileName)}</span>
+    <span class="text-[11px] font-mono font-semibold text-success">+${addCount}</span>
+    <span class="gap-2"></span>
+    <span class="text-[11px] font-mono font-semibold text-danger">-${delCount}</span>
   </div>`;
 
-  // Diff body container
-  const body = `<div class="border border-t-0 border-border rounded-b-md overflow-hidden mb-2 font-mono text-[13px]">${bodyLines.join('')}</div>`;
+  // Diff body container (per D-06: bg-bg-terminal, no border, no rounded corners)
+  const body = `<div class="bg-bg-terminal py-2 font-mono text-[13px]">${bodyLines.join('')}</div>`;
 
   return header + body;
 }
