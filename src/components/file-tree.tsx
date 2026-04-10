@@ -1,13 +1,13 @@
-// file-tree.tsx -- Keyboard-navigable file tree with Lucide icons (D-07, D-08, D-12, D-13, PANEL-05, PANEL-06)
+// file-tree.tsx -- Keyboard-navigable file tree with inline SVG icons (D-07, D-08, D-12, D-13, PANEL-05, PANEL-06)
 // Loads directory contents via list_directory Rust command.
 // Dispatches file-opened CustomEvent for main.js to handle.
 // Migrated from Arrow.js to Preact TSX (Phase 6.1)
-// Upgraded with Lucide icons and file size metadata (Phase 9)
+// Rewritten with inline SVG icons and tokens.ts colors (Phase 10)
 
 import { useEffect } from 'preact/hooks';
 import { signal } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
-import { Folder, FileCode, FileText } from 'lucide-preact';
+import { colors, fonts } from '../tokens';
 import { activeProjectName, projects } from '../state-manager';
 import type { ProjectEntry } from '../state-manager';
 
@@ -23,6 +23,42 @@ const entries = signal<FileEntry[]>([]);
 const selectedIndex = signal(0);
 const currentPath = signal('');
 const loaded = signal(false);
+
+// ── Inline SVG Icons (replacing lucide-preact per reference D-08) ────────────
+
+function FolderIcon() {
+  return (
+    <svg class="shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none"
+      stroke={colors.accent} stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+    </svg>
+  );
+}
+
+function FileCodeIcon() {
+  return (
+    <svg class="shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none"
+      stroke={colors.textDim} stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <path d="m10 13-2 2 2 2" />
+      <path d="m14 17 2-2-2-2" />
+    </svg>
+  );
+}
+
+function FileTextIcon() {
+  return (
+    <svg class="shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none"
+      stroke={colors.textDim} stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <path d="M10 9H8" />
+      <path d="M16 13H8" />
+      <path d="M16 17H8" />
+    </svg>
+  );
+}
 
 /**
  * Format file size into a human-readable string.
@@ -135,51 +171,51 @@ export function FileTree() {
   }
 
   return (
-    <div class="h-full flex flex-col bg-bg-terminal overflow-hidden">
-      {/* Header bar (D-07) */}
-      <div class="bg-bg px-4 py-2.5 gap-2 border-b border-border flex items-center shrink-0">
-        <span class="text-xs font-medium text-text-bright font-sans">File Tree</span>
-        <span class="flex-1"></span>
-        <span class="text-[10px] font-mono text-text-muted">~/Dev/efx-mux</span>
+    <div style="height: 100%; display: flex; flex-direction: column; background-color: ${colors.bgDeep}; overflow: hidden;">
+      {/* Header bar */}
+      <div style="gap: 8px; padding: 10px 16px; background-color: ${colors.bgBase}; border-bottom: 1px solid ${colors.bgBorder}; display: flex; align-items: center; shrink: 0;">
+        <span style="font-family: ${fonts.sans}; font-size: 13px; font-weight: 500; color: ${colors.textPrimary};">File Tree</span>
+        <span style="flex: 1;"></span>
+        <span style="font-family: ${fonts.mono}; font-size: 11px; color: ${colors.textDim};">~/Dev/efx-mux</span>
       </div>
       {/* File list */}
       <div
-        class="flex-1 overflow-auto py-1 outline-none"
+        style="flex: 1; overflow: auto; padding: 4px 0; outline: none;"
         tabIndex={0}
         onKeyDown={handleKeydown}
       >
         {!loaded.value ? (
-          <div class="p-4 text-text text-[13px]">Loading...</div>
+          <div style="padding: 16px; color: ${colors.textMuted}; font-size: 13px;">Loading...</div>
         ) : entries.value.length === 0 ? (
-          <div class="p-4 text-text text-[13px]">Empty directory</div>
+          <div style="padding: 16px; color: ${colors.textMuted}; font-size: 13px;">Empty directory</div>
         ) : (
-          entries.value.map((entry, i) => (
-            <div
-              class={`px-4 py-[5px] gap-2 flex items-center cursor-pointer ${
-                selectedIndex.value === i
-                  ? 'text-text-bright bg-bg-raised'
-                  : 'text-text hover:bg-bg-raised/50'
-              }`}
-              onClick={() => { selectedIndex.value = i; openEntry(entry); }}
-              onMouseEnter={() => { selectedIndex.value = i; }}
-            >
-              {entry.is_dir
-                ? <Folder size={14} class="text-text-muted shrink-0" />
-                : (entry.name.match(/\.(ts|tsx|js|jsx|rs|css)$/)
-                    ? <FileCode size={14} class="text-text-muted shrink-0" />
-                    : <FileText size={14} class="text-text-muted shrink-0" />
-                  )
-              }
-              <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-xs font-sans">
-                {entry.name}
-              </span>
-              {!entry.is_dir && entry.size != null && (
-                <span class="text-[10px] font-mono text-text-muted ml-auto shrink-0">
-                  {formatSize(entry.size)}
+          entries.value.map((entry, i) => {
+            const isSelected = selectedIndex.value === i;
+            return (
+              <div
+                key={entry.path}
+                style={`padding: 7px 16px; gap: 8px; display: flex; align-items: center; cursor: pointer; background-color: ${isSelected ? colors.bgElevated : 'transparent'};`}
+                onClick={() => { selectedIndex.value = i; openEntry(entry); }}
+                onMouseEnter={() => { selectedIndex.value = i; }}
+              >
+                {entry.is_dir
+                  ? <FolderIcon />
+                  : (entry.name.match(/\.(ts|tsx|js|jsx|rs|css)$/)
+                      ? <FileCodeIcon />
+                      : <FileTextIcon />
+                    )
+                }
+                <span style={`flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ${fonts.sans}; font-size: 13px; color: ${isSelected ? colors.textPrimary : colors.textMuted};`}>
+                  {entry.name}
                 </span>
-              )}
-            </div>
-          ))
+                {!entry.is_dir && entry.size != null && (
+                  <span style={`font-family: ${fonts.mono}; font-size: 11px; color: ${colors.textDim}; margin-left: auto; shrink: 0;`}>
+                    {formatSize(entry.size)}
+                  </span>
+                )}
+              </div>
+            );
+          })
         )}
       </div>
     </div>
