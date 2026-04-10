@@ -231,10 +231,8 @@ export function Sidebar() {
         const [loadedProjects, active] = await Promise.all([getProjects(), getActiveProject()]);
         projects.value = loadedProjects;
         activeProjectName.value = active;
-        // Auto-open modal on first run
-        if (loadedProjects.length === 0) {
-          openProjectModal();
-        }
+        // Note: Zero-project detection is handled by the wizard in main.tsx initProjects().
+        // The sidebar must NOT open modals -- it only displays the project list.
         await refreshAllGitStatus();
       } catch (err) {
         console.warn('[efxmux] Failed to load projects:', err);

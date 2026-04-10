@@ -33,6 +33,7 @@ export interface AppState {
   session: Record<string, string>;
   project: { active: string | null };
   panels: Record<string, string>;
+  projects: ProjectEntry[];
 }
 
 // ---------------------------------------------------------------------------
@@ -62,6 +63,8 @@ let currentState: AppState | null = null;
 export async function loadAppState(): Promise<AppState> {
   try {
     currentState = await invoke<AppState>('load_state');
+    // Ensure projects field exists even if loaded from older state.json (T-08-07-02)
+    if (!currentState.projects) currentState.projects = [];
   } catch (err) {
     console.warn('[efxmux] Failed to load state, using defaults:', err);
     // Return a minimal default state matching Rust defaults
@@ -72,6 +75,7 @@ export async function loadAppState(): Promise<AppState> {
       session: { 'main-tmux-session': 'efx-mux', 'right-tmux-session': 'efx-mux-right' },
       project: { active: null },
       panels: { 'right-top-tab': 'gsd', 'right-bottom-tab': 'git' },
+      projects: [],
     };
   }
 
@@ -79,6 +83,11 @@ export async function loadAppState(): Promise<AppState> {
   sidebarCollapsed.value = currentState?.layout?.['sidebar-collapsed'] === true || currentState?.layout?.['sidebar-collapsed'] === 'true';
   if (currentState?.panels?.['right-top-tab']) rightTopTab.value = currentState.panels['right-top-tab'];
   if (currentState?.panels?.['right-bottom-tab']) rightBottomTab.value = currentState.panels['right-bottom-tab'];
+
+  // Restore projects from persisted state (T-08-07-02)
+  if (currentState?.projects?.length) {
+    projects.value = currentState.projects;
+  }
 
   return currentState!;
 }
@@ -88,6 +97,9 @@ export async function loadAppState(): Promise<AppState> {
  */
 export async function saveAppState(state: AppState): Promise<void> {
   try {
+    // Sync project data from signals before every save (T-08-07-02)
+    state.projects = projects.value;
+    state.project = { active: activeProjectName.value };
     const stateJson = JSON.stringify(state);
     await invoke('save_state', { stateJson });
   } catch (err) {
@@ -143,6 +155,9 @@ export async function updateSession(patch: Record<string, string>): Promise<void
 export function initBeforeUnload(): void {
   window.addEventListener('beforeunload', () => {
     if (currentState) {
+      // Sync project data from signals into state before saving (T-08-07-02)
+      currentState.projects = projects.value;
+      currentState.project = { active: activeProjectName.value };
       // Invoke save_state -- the spawn_blocking on Rust side ensures the write
       // completes before the process exits (Tauri waits for pending commands).
       invoke('save_state', { stateJson: JSON.stringify(currentState) }).catch(() => {});
