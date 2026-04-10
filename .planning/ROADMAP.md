@@ -2,7 +2,7 @@
 
 ## Overview
 
-GSD MUX goes from zero to a fully functional native macOS terminal multiplexer in 8 phases. Phase 1 locks the Tauri scaffold and macOS entitlements (no going back). Phase 2 is the critical path -- the PTY-to-xterm.js pipeline with flow control that every later phase depends on. Phases 3-6 build out theming, persistence, project management, and right-panel views (3 and 6 are parallelizable after Phase 2). Phase 7 adds server pane and agent launchers. Phase 8 wires the keyboard system and polish once all panels exist.
+GSD MUX goes from zero to a fully functional native macOS terminal multiplexer in 9 phases. Phase 1 locks the Tauri scaffold and macOS entitlements (no going back). Phase 2 is the critical path -- the PTY-to-xterm.js pipeline with flow control that every later phase depends on. Phases 3-6 build out theming, persistence, project management, and right-panel views (3 and 6 are parallelizable after Phase 2). Phase 7 adds server pane and agent launchers. Phase 8 wires the keyboard system and polish once all panels exist. Phase 9 is the professional UI overhaul -- deeper dark palette, refined typography (Geist/Geist Mono), layered depth, and polished components matching the quality bar of tools like Warp and Cursor.
 
 ## Phases
 
@@ -20,7 +20,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Right Panel Views** - Tab bar, GSD Markdown viewer with checkbox write-back, git diff viewer, file tree, bash terminal
 - [x] **Phase 6.1: Migrate Arrow.js to Preact + Vite + TS + Tailwind 4** (INSERTED) - Replace Arrow.js with Preact + Vite + TypeScript + Tailwind 4
 - [x] **Phase 7: Server Pane + Agent Support** - Server pane with controls, Claude Code / OpenCode launchers, auto-detect fallback
-- [ ] **Phase 8: Keyboard + Polish** - App-level shortcut system with terminal pass-through, tab management, crash recovery, first-run wizard
+- [x] **Phase 8: Keyboard + Polish** - App-level shortcut system with terminal pass-through, tab management, crash recovery, first-run wizard
 
 ## Phase Details
 
@@ -214,14 +214,62 @@ Phases execute in numeric order. Note: Phases 3 and 6 are parallelizable after P
 | 6. Right Panel Views | 7/7 | Complete | 2026-04-08 |
 | 6.1 Migrate Arrow.js -> Preact | 6/6 | Complete | 2026-04-08 |
 | 7. Server Pane + Agent Support | 9/9 | Complete | 2026-04-09 |
-| 8. Keyboard + Polish | 4/8 | In Progress | - |
+| 8. Keyboard + Polish | 8/8 | Complete | 2026-04-10 |
+| 9. Professional UI Overhaul | 0/5 | Not Started | — |
 
-### Phase 9: Rich Dashboard Views — Parse STATE.md and ROADMAP.md as structured data, render as designed Preact dashboard with progress bars, phase cards, status badges, decision logs
+### Phase 9: Professional UI Overhaul
+**Goal**: Transform the app from a functional but plain terminal wrapper into a professional-grade developer tool with refined visual depth, typography, and polish — matching the quality bar of tools like Warp, Cursor, and Linear
+**Depends on**: Phase 8
+**Requirements**: UI-01, UI-02, UI-03, UI-04, UI-05, UI-06, UI-07, UI-08
+**Success Criteria** (what must be TRUE):
+  1. App uses a deeper dark palette (#0D1117 bg, #161B22 raised, #010409 terminal) with layered depth instead of flat surfaces
+  2. Typography upgraded: Geist for UI chrome, Geist Mono for code/terminal — FiraCode retained only inside xterm.js
+  3. Sidebar has refined project cards with status dots, git branch badges, and colored file status badges (M/S/U with tinted backgrounds)
+  4. Terminal area has an agent header card showing Claude Code version, model info, and a "Ready" status pill with green dot
+  5. All modals (Add Project, Preferences) use rounded 12px cards with shadow depth, dark input fields with 8px radius, and proper header/footer dividers
+  6. Tab bars use pill-style active states with subtle border + filled background instead of plain underlines
+  7. Diff viewer shows GitHub-inspired colored lines with left border accents and +/- stats in the header
+  8. File tree uses Lucide icons for folders/files with proper indentation hierarchy and file size metadata
 
-**Goal:** [To be planned]
-**Requirements**: TBD
-**Depends on:** Phase 8
-**Plans:** 0 plans
+**Design Reference**: Pencil mockups in `/pencil-new.pen` — 5 screens:
+  - Main App Layout (1440×900): Full 3-panel window with sidebar, terminal, right panel
+  - Add Project Modal: Professional form with browse button, agent icon, cancel/submit buttons
+  - Preferences Panel: Settings with theme toggle, keyboard shortcut keycaps, section grouping
+  - Diff Viewer: GitHub-style unified diff with colored additions/deletions
+  - File Tree: Icon-rich file browser with folder/file distinction and metadata
+
+**Color System** (dark mode):
+  | Token | Current | New |
+  |-------|---------|-----|
+  | bg | #282d3a | #0D1117 |
+  | bg-raised | #363b3d | #161B22 |
+  | bg-terminal | (same as bg) | #010409 |
+  | border | #3e454a | #1B2028 (subtle), #30363D (interactive) |
+  | text | #8d999a | #8B949E |
+  | text-bright | #92a0a0 | #E6EDF3 |
+  | accent | #258ad1 | #258AD1 (unchanged) |
+  | success | (hardcoded) | #3FB950 |
+  | warning | (hardcoded) | #D29922 |
+  | danger | (hardcoded) | #F85149 |
+
+**Typography System**:
+  - UI headings: Geist 600, 13-16px
+  - UI body: Geist 400-500, 12-13px
+  - Section labels: Geist Mono 500, 10px, uppercase, letter-spacing 1.2px
+  - Code/terminal: Geist Mono 12-13px (chrome), FiraCode (xterm.js internal)
+
+**Key Design Patterns**:
+  - Agent header card: gradient icon (#A855F7→#6366F1), version + model info, status pill
+  - Input fields: #0D1117 fill, #30363D border, 8px radius, 10px/12px padding
+  - Status badges: tinted background (e.g. #D2992220) + colored text, 3px radius
+  - Modals: #161B22 fill, 12px radius, header divider, shadow-2xl, 24px padding
+  - Keyboard hints: keycap style (#0D1117 fill + #30363D border + 4px radius)
+
+**Plans**: 5 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 9 to break down)
+- [ ] 09-01-PLAN.md -- Foundation: color palette tokens + Geist fonts + theme-manager sync
+- [ ] 09-02-PLAN.md -- Sidebar rebuild with Lucide icons + tab bar palette update
+- [ ] 09-03-PLAN.md -- GitHub-style diff viewer + file tree with Lucide icons
+- [ ] 09-04-PLAN.md -- Modal and preferences panel restyle
+- [ ] 09-05-PLAN.md -- Agent header card + Rust version detection + GSD viewer update
