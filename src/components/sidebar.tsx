@@ -104,7 +104,7 @@ function ProjectRow({ project, index }: { project: ProjectEntry; index: number }
       {isActive ? (
         <Circle size={8} fill="currentColor" class="text-success shrink-0" />
       ) : (
-        <Circle size={8} class="text-border-interactive shrink-0" />
+        <Circle size={8} class="text-text-muted shrink-0" />
       )}
 
       {/* Project info */}
@@ -166,9 +166,9 @@ function CollapsedIcon({ project, index }: { project: ProjectEntry; index: numbe
 
 function GitFileRow({ file }: { file: { name: string; path: string; status: string } }) {
   const badgeClass: Record<string, string> = {
-    'M': 'bg-accent/15 text-accent',
-    'S': 'bg-success/15 text-success',
-    'U': 'bg-warning/15 text-warning',
+    'M': 'bg-warning/20 text-warning',
+    'S': 'bg-success/20 text-success',
+    'U': 'bg-accent/20 text-accent',
   };
   const cls = badgeClass[file.status] || 'bg-bg-raised text-text';
 

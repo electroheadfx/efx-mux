@@ -274,3 +274,13 @@ Plans:
 - [x] 09-04-PLAN.md -- Modal and preferences panel restyle
 - [x] 09-05-PLAN.md -- Agent header card + Rust version detection + GSD viewer update
 - [x] 09-06-PLAN.md -- Gap closure: hardcoded text colors, inline gradients, theme detection
+
+### Phase 10: Pixel-Perfect UI Rewrite
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 9
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 10 to break down)

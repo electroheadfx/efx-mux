@@ -164,7 +164,7 @@ export function FileTree() {
               onMouseEnter={() => { selectedIndex.value = i; }}
             >
               {entry.is_dir
-                ? <Folder size={14} class="text-accent shrink-0" />
+                ? <Folder size={14} class="text-text-muted shrink-0" />
                 : (entry.name.match(/\.(ts|tsx|js|jsx|rs|css)$/)
                     ? <FileCode size={14} class="text-text-muted shrink-0" />
                     : <FileText size={14} class="text-text-muted shrink-0" />
