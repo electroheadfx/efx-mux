@@ -151,9 +151,9 @@ export function DiffViewer() {
   }, []);
 
   return (
-    <div style="height: 100%; overflow-y: auto; padding: 8px 16px; font-family: ${fonts.mono}; font-size: 13px; line-height: 1.5;">
+    <div style={{ height: '100%', overflowY: 'auto', padding: '8px 16px', fontFamily: fonts.mono, fontSize: 13, lineHeight: 1.5 }}>
       <div ref={contentRef}>
-        <div style="color: ${colors.textMuted};">Click a file in the sidebar to view its diff</div>
+        <div style={{ color: colors.textMuted }}>Click a file in the sidebar to view its diff</div>
       </div>
     </div>
   );

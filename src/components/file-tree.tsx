@@ -171,30 +171,30 @@ export function FileTree() {
   }
 
   return (
-    <div style="height: 100%; display: flex; flex-direction: column; background-color: ${colors.bgDeep}; overflow: hidden;">
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: colors.bgDeep, overflow: 'hidden' }}>
       {/* Header bar */}
-      <div style="gap: 8px; padding: 10px 16px; background-color: ${colors.bgBase}; border-bottom: 1px solid ${colors.bgBorder}; display: flex; align-items: center; shrink: 0;">
-        <span style="font-family: ${fonts.sans}; font-size: 13px; font-weight: 500; color: ${colors.textPrimary};">File Tree</span>
-        <span style="flex: 1;"></span>
-        <span style="font-family: ${fonts.mono}; font-size: 11px; color: ${colors.textDim};">~/Dev/efx-mux</span>
+      <div style={{ gap: 8, padding: '10px 16px', backgroundColor: colors.bgBase, borderBottom: `1px solid ${colors.bgBorder}`, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+        <span style={{ fontFamily: fonts.sans, fontSize: 13, fontWeight: 500, color: colors.textPrimary }}>File Tree</span>
+        <span style={{ flex: 1 }} />
+        <span style={{ fontFamily: fonts.mono, fontSize: 11, color: colors.textDim }}>{currentPath.value || '~/Dev/efx-mux'}</span>
       </div>
       {/* File list */}
       <div
-        style="flex: 1; overflow: auto; padding: 4px 0; outline: none;"
+        style={{ flex: 1, overflow: 'auto', padding: '4px 0', outline: 'none' }}
         tabIndex={0}
         onKeyDown={handleKeydown}
       >
         {!loaded.value ? (
-          <div style="padding: 16px; color: ${colors.textMuted}; font-size: 13px;">Loading...</div>
+          <div style={{ padding: 16, color: colors.textMuted, fontSize: 13 }}>Loading...</div>
         ) : entries.value.length === 0 ? (
-          <div style="padding: 16px; color: ${colors.textMuted}; font-size: 13px;">Empty directory</div>
+          <div style={{ padding: 16, color: colors.textMuted, fontSize: 13 }}>Empty directory</div>
         ) : (
           entries.value.map((entry, i) => {
             const isSelected = selectedIndex.value === i;
             return (
               <div
                 key={entry.path}
-                style={`padding: 7px 16px; gap: 8px; display: flex; align-items: center; cursor: pointer; background-color: ${isSelected ? colors.bgElevated : 'transparent'};`}
+                style={{ padding: '7px 16px', gap: 8, display: 'flex', alignItems: 'center', cursor: 'pointer', backgroundColor: isSelected ? colors.bgElevated : 'transparent' }}
                 onClick={() => { selectedIndex.value = i; openEntry(entry); }}
                 onMouseEnter={() => { selectedIndex.value = i; }}
               >
@@ -205,11 +205,11 @@ export function FileTree() {
                       : <FileTextIcon />
                     )
                 }
-                <span style={`flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ${fonts.sans}; font-size: 13px; color: ${isSelected ? colors.textPrimary : colors.textMuted};`}>
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: fonts.sans, fontSize: 13, color: isSelected ? colors.textPrimary : colors.textMuted }}>
                   {entry.name}
                 </span>
                 {!entry.is_dir && entry.size != null && (
-                  <span style={`font-family: ${fonts.mono}; font-size: 11px; color: ${colors.textDim}; margin-left: auto; shrink: 0;`}>
+                  <span style={{ fontFamily: fonts.mono, fontSize: 11, color: colors.textDim, marginLeft: 'auto', flexShrink: 0 }}>
                     {formatSize(entry.size)}
                   </span>
                 )}

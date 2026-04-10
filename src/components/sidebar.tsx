@@ -474,7 +474,7 @@ export function Sidebar() {
             }}
           >
             {projects.value.map((p, i) => (
-              <CollapsedIcon project={p} index={i} />
+              <CollapsedIcon key={p.name} project={p} index={i} />
             ))}
             <div style={{ height: spacing.sm }} />
             <div
@@ -585,7 +585,7 @@ export function Sidebar() {
                 </div>
               ) : (
                 projects.value.map((p, i) => (
-                  <ProjectRow project={p} index={i} />
+                  <ProjectRow key={p.name} project={p} index={i} />
                 ))
               )}
             </div>
@@ -684,7 +684,7 @@ export function Sidebar() {
                   style={{ minHeight: 0 }}
                 >
                   {gitFiles.value.map(f => (
-                    <GitFileRow file={f} />
+                    <GitFileRow key={f.path} file={f} />
                   ))}
                 </div>
               )}
