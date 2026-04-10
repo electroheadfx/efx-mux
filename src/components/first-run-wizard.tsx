@@ -8,6 +8,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { addProject, switchProject } from '../state-manager';
 import type { ProjectEntry } from '../state-manager';
+import { colors, fonts } from '../tokens';
 
 // ---------------------------------------------------------------------------
 // Module-level signals
@@ -149,10 +150,10 @@ function handleSkip() {
 function StepWelcome() {
   return (
     <div class="text-center py-6">
-      <h2 class="text-xl font-semibold text-text-bright mb-4" style="font-family: system-ui, sans-serif">
+      <h2 class="text-xl font-semibold mb-4" style={{ fontFamily: fonts.sans, color: colors.textPrimary }}>
         Welcome to Efxmux
       </h2>
-      <p class="text-sm text-text leading-relaxed max-w-[360px] mx-auto">
+      <p class="text-sm leading-relaxed max-w-[360px] mx-auto" style={{ color: colors.textMuted }}>
         A terminal workspace for AI-assisted development. Let's set up your first project.
       </p>
     </div>
@@ -164,18 +165,20 @@ function StepProject() {
     <div>
       {/* Directory */}
       <div class="mb-4">
-        <label class="block text-[11px] uppercase tracking-widest text-text mb-1">Directory</label>
+        <label class="block text-[11px] uppercase tracking-widest mb-1" style={{ color: colors.textMuted }}>Directory</label>
         <div class="flex">
           <input
             type="text"
             placeholder="/path/to/project"
-            class="flex-1 h-8 px-2 text-sm bg-bg border border-border rounded-l-sm text-text-bright outline-none focus:border-accent transition-colors"
+            class="flex-1 h-8 px-2 text-sm rounded-l-sm outline-none transition-colors"
+            style={{ backgroundColor: colors.bgDeep, border: `1px solid ${colors.bgBorder}`, color: colors.textPrimary }}
             value={directory.value}
             onInput={(e) => { directory.value = (e.target as HTMLInputElement).value; }}
           />
           <button
             type="button"
-            class="w-8 h-8 bg-bg border border-border border-l-0 rounded-r-sm text-text cursor-pointer text-sm shrink-0"
+            class="w-8 h-8 border-l-0 rounded-r-sm text-sm shrink-0 cursor-pointer"
+            style={{ backgroundColor: colors.bgDeep, border: `1px solid ${colors.bgBorder}`, color: colors.textMuted }}
             title="Browse"
             onClick={handleBrowse}
           >[...]</button>
@@ -184,11 +187,12 @@ function StepProject() {
 
       {/* Name */}
       <div class="mb-4">
-        <label class="block text-[11px] uppercase tracking-widest text-text mb-1">Name</label>
+        <label class="block text-[11px] uppercase tracking-widest mb-1" style={{ color: colors.textMuted }}>Name</label>
         <input
           type="text"
           placeholder="project-name"
-          class="w-full h-8 px-2 text-sm bg-bg border border-border rounded-sm text-text-bright outline-none focus:border-accent box-border transition-colors"
+          class="w-full h-8 px-2 text-sm rounded-sm outline-none box-border transition-colors"
+          style={{ backgroundColor: colors.bgDeep, border: `1px solid ${colors.bgBorder}`, color: colors.textPrimary }}
           value={projectName.value}
           onInput={(e) => { projectName.value = (e.target as HTMLInputElement).value; }}
         />
@@ -206,20 +210,21 @@ function StepAgent() {
 
   return (
     <div>
-      <p class="text-sm text-text mb-4">Which AI coding agent do you use?</p>
+      <p class="text-sm mb-4" style={{ color: colors.textMuted }}>Which AI coding agent do you use?</p>
       <div class="flex gap-3">
         {agents.map((a) => (
           <div
             key={a.id}
-            class={`flex-1 p-4 rounded border cursor-pointer text-center transition-all duration-150 ${
-              agent.value === a.id
-                ? 'border-accent bg-accent/10 text-text-bright'
-                : 'border-border bg-bg text-text hover:border-accent/50'
-            }`}
+            class="flex-1 p-4 rounded cursor-pointer text-center transition-all duration-150"
+            style={{
+              border: `1px solid ${agent.value === a.id ? colors.accent : colors.bgBorder}`,
+              backgroundColor: agent.value === a.id ? colors.accentMuted : 'transparent',
+              color: agent.value === a.id ? colors.textPrimary : colors.textMuted,
+            }}
             onClick={() => { agent.value = a.id; }}
           >
-            <div class="text-sm font-semibold mb-1" style="font-family: system-ui, sans-serif">{a.label}</div>
-            <div class="text-[11px] text-text">{a.desc}</div>
+            <div class="text-sm font-semibold mb-1" style={{ fontFamily: fonts.sans }}>{a.label}</div>
+            <div class="text-[11px]" style={{ color: colors.textMuted }}>{a.desc}</div>
           </div>
         ))}
       </div>
@@ -230,16 +235,17 @@ function StepAgent() {
 function StepTheme() {
   return (
     <div>
-      <p class="text-sm text-text mb-4">Import your iTerm2 color profile for a familiar look.</p>
+      <p class="text-sm mb-4" style={{ color: colors.textMuted }}>Import your iTerm2 color profile for a familiar look.</p>
       <button
         type="button"
-        class="bg-bg border border-border text-text-bright px-4 py-2 rounded-sm text-sm cursor-pointer hover:border-accent transition-colors"
+        class="px-4 py-2 rounded-sm text-sm cursor-pointer transition-colors"
+        style={{ backgroundColor: colors.bgDeep, border: `1px solid ${colors.bgBorder}`, color: colors.textPrimary }}
         onClick={handleImportTheme}
       >
         Choose iTerm2 Profile...
       </button>
       {themeImported.value && (
-        <p class="text-sm text-[#859900] mt-3">Theme imported!</p>
+        <p class="text-sm mt-3" style={{ color: colors.statusGreen }}>Theme imported!</p>
       )}
     </div>
   );
@@ -250,11 +256,12 @@ function StepServer() {
     <div>
       {/* Server Command */}
       <div class="mb-4">
-        <label class="block text-[11px] uppercase tracking-widest text-text mb-1">Server Command</label>
+        <label class="block text-[11px] uppercase tracking-widest mb-1" style={{ color: colors.textMuted }}>Server Command</label>
         <input
           type="text"
           placeholder="Optional, e.g. npm run dev"
-          class="w-full h-8 px-2 text-sm bg-bg border border-border rounded-sm text-text-bright outline-none focus:border-accent box-border transition-colors"
+          class="w-full h-8 px-2 text-sm rounded-sm outline-none box-border transition-colors"
+          style={{ backgroundColor: colors.bgDeep, border: `1px solid ${colors.bgBorder}`, color: colors.textPrimary }}
           value={serverCmd.value}
           onInput={(e) => { serverCmd.value = (e.target as HTMLInputElement).value; }}
         />
@@ -262,11 +269,12 @@ function StepServer() {
 
       {/* GSD File */}
       <div class="mb-4">
-        <label class="block text-[11px] uppercase tracking-widest text-text mb-1">GSD File</label>
+        <label class="block text-[11px] uppercase tracking-widest mb-1" style={{ color: colors.textMuted }}>GSD File</label>
         <input
           type="text"
           placeholder="Optional .md path"
-          class="w-full h-8 px-2 text-sm bg-bg border border-border rounded-sm text-text-bright outline-none focus:border-accent box-border transition-colors"
+          class="w-full h-8 px-2 text-sm rounded-sm outline-none box-border transition-colors"
+          style={{ backgroundColor: colors.bgDeep, border: `1px solid ${colors.bgBorder}`, color: colors.textPrimary }}
           value={gsdFile.value}
           onInput={(e) => { gsdFile.value = (e.target as HTMLInputElement).value; }}
         />
@@ -300,14 +308,17 @@ export function FirstRunWizard() {
   }, []);
 
   return (
-    <div class="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center" role="dialog" aria-modal="true">
-      <div class="w-[520px] bg-bg-raised border border-border rounded-lg shadow-2xl">
+    <div class="fixed inset-0 z-[100] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} role="dialog" aria-modal="true">
+      <div class="w-[520px] rounded-lg shadow-2xl" style={{ backgroundColor: colors.bgElevated, border: `1px solid ${colors.bgBorder}` }}>
         {/* Header */}
-        <div class="px-6 py-4 border-b border-border flex items-center justify-between">
-          <span class="text-base text-text-bright">{STEPS[step.value]}</span>
+        <div class="px-6 py-4 flex items-center justify-between" style={{ borderBottom: `1px solid ${colors.bgBorder}` }}>
+          <span class="text-base" style={{ color: colors.textPrimary }}>{STEPS[step.value]}</span>
           <button
             onClick={closeWithDefaults}
-            class="w-7 h-7 flex items-center justify-center text-base text-text cursor-pointer rounded hover:bg-bg hover:text-text-bright transition-colors"
+            class="w-7 h-7 flex items-center justify-center text-base cursor-pointer rounded transition-colors"
+            style={{ color: colors.textMuted }}
+            onMouseEnter={(e) => { const t = e.target as HTMLElement; t.style.color = colors.textPrimary; t.style.backgroundColor = colors.bgBase; }}
+            onMouseLeave={(e) => { const t = e.target as HTMLElement; t.style.color = colors.textMuted; t.style.backgroundColor = 'transparent'; }}
             title="Close wizard"
           >{'\u2715'}</button>
         </div>
@@ -317,11 +328,13 @@ export function FirstRunWizard() {
           {STEPS.map((_, i) => (
             <div
               key={i}
-              class={`w-2 h-2 rounded-full ${
-                i === step.value ? 'bg-accent' :
-                i < step.value ? 'bg-accent opacity-50' :
-                'bg-border'
-              }`}
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                backgroundColor: i === step.value ? colors.accent : i < step.value ? colors.accent : colors.bgBorder,
+                opacity: i < step.value ? 0.5 : 1,
+              }}
             />
           ))}
         </div>
@@ -336,24 +349,30 @@ export function FirstRunWizard() {
         </div>
 
         {/* Footer */}
-        <div class="px-6 py-4 border-t border-border flex justify-between items-center">
+        <div class="px-6 py-4 flex justify-between items-center" style={{ borderTop: `1px solid ${colors.bgBorder}` }}>
           <div>
             {step.value > 0 && step.value < STEPS.length && (
-              <span onClick={handleSkip} class="text-sm text-text cursor-pointer hover:text-text-bright">Skip</span>
+              <span onClick={handleSkip} class="text-sm cursor-pointer" style={{ color: colors.textMuted }}>Skip</span>
             )}
           </div>
           <div class="flex gap-2">
             {step.value > 0 && (
               <button
                 onClick={() => { step.value--; }}
-                class="bg-transparent border border-border text-text px-4 py-2 rounded-sm text-sm cursor-pointer hover:bg-bg hover:text-text-bright transition-colors"
+                class="px-4 py-2 rounded-sm text-sm cursor-pointer transition-colors"
+                style={{ backgroundColor: 'transparent', border: `1px solid ${colors.bgBorder}`, color: colors.textMuted }}
+                onMouseEnter={(e) => { const t = e.target as HTMLElement; t.style.backgroundColor = colors.bgBase; t.style.color = colors.textPrimary; }}
+                onMouseLeave={(e) => { const t = e.target as HTMLElement; t.style.backgroundColor = 'transparent'; t.style.color = colors.textMuted; }}
               >
                 Back
               </button>
             )}
             <button
               onClick={handlePrimary}
-              class="bg-accent text-white px-4 py-2 rounded-sm text-sm cursor-pointer hover:opacity-90 transition-opacity"
+              class="px-4 py-2 rounded-sm text-sm cursor-pointer transition-opacity"
+              style={{ backgroundColor: colors.accent, color: '#fff' }}
+              onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = '0.9'; }}
+              onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = '1'; }}
             >
               {step.value === 0 ? 'Get Started' : step.value === STEPS.length - 1 ? 'Finish Setup' : 'Next'}
             </button>
