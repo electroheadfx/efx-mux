@@ -186,12 +186,16 @@ Plans:
   3. When a PTY process crashes, user sees a banner with a "Restart Session" option (no blank panel)
   4. First-run wizard prompts user to add their first project and choose a default agent
 
-**Plans**: 4 plans
+**Plans**: 8 plans
 Plans:
 - [x] 08-01-PLAN.md -- Consolidated keyboard shortcut system + cheatsheet overlay
 - [x] 08-02-PLAN.md -- Terminal tab management + PTY crash recovery
 - [x] 08-03-PLAN.md -- First-run wizard + UAT checkpoint
-- [ ] 08-04-PLAN.md -- Gap closure: fix Ctrl+P fuzzy search dispatch
+- [x] 08-04-PLAN.md -- Gap closure: fix Ctrl+P fuzzy search dispatch
+- [ ] 08-05-PLAN.md -- UAT gap closure: PTY exit detection via pane-death monitoring
+- [ ] 08-06-PLAN.md -- UAT gap closure: tab agent fix, switch reflow, tab persistence restore
+- [ ] 08-07-PLAN.md -- UAT gap closure: Cmd+W close tab, wizard/sidebar race, state projects field
+- [ ] 08-08-PLAN.md -- UAT gap closure: Ctrl+, preferences panel
 
 **UI hint**: yes
 
@@ -210,7 +214,7 @@ Phases execute in numeric order. Note: Phases 3 and 6 are parallelizable after P
 | 6. Right Panel Views | 7/7 | Complete | 2026-04-08 |
 | 6.1 Migrate Arrow.js -> Preact | 6/6 | Complete | 2026-04-08 |
 | 7. Server Pane + Agent Support | 9/9 | Complete | 2026-04-09 |
-| 8. Keyboard + Polish | 3/4 | In Progress | - |
+| 8. Keyboard + Polish | 4/8 | In Progress | - |
 
 ### Phase 9: Rich Dashboard Views — Parse STATE.md and ROADMAP.md as structured data, render as designed Preact dashboard with progress bars, phase cards, status badges, decision logs
 
