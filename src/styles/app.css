@@ -16,9 +16,9 @@
   --color-warning: #D29922;
   --color-danger: #F85149;
 
-  /* Light mode values — preserved as-is for now (Claude's discretion per D-14) */
+  /* Light mode values — harmonized per D-14 */
   --color-bg-light: #FFFFFF;
-  --color-bg-raised-light: #F6F8FA;
+  --color-bg-raised-light: #FFFFFF;
   --color-bg-terminal-light: #FFFFFF;
   --color-border-light: #D0D7DE;
   --color-border-interactive-light: #D0D7DE;
