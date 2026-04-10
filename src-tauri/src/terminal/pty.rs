@@ -90,7 +90,7 @@ pub async fn spawn_terminal(
     if let Some(ref shell_cmd) = shell_command {
         if !shell_cmd.is_empty() {
             let user_shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
-            let wrapped = format!("{} -c 'clear; {}; exec {}'", user_shell, shell_cmd, user_shell);
+            let wrapped = format!("{} -c '{}; exec {}'", user_shell, shell_cmd, user_shell);
             cmd.arg(&wrapped);
         }
     }
