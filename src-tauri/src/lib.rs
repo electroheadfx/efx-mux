@@ -45,7 +45,6 @@ pub fn run() {
             // ── Window menu ───────────────────────────────────────────────────────
             let window_menu = SubmenuBuilder::new(app, "Window")
                 .item(&PredefinedMenuItem::minimize(app, None)?)
-                .item(&PredefinedMenuItem::close_window(app, None)?)
                 .build()?;
 
             // Build and set the full menu

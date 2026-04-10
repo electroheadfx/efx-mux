@@ -103,20 +103,22 @@ async function bootstrap() {
   const TERMINAL_PASSTHROUGH = new Set(['c', 'd', 'z', 'l', 'r']);
 
   document.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (!e.ctrlKey || e.metaKey) return;
+    // Allow both Ctrl+key and Cmd+key through (Cmd+W closes tab on macOS)
+    if (!e.ctrlKey && !e.metaKey) return;
 
     const key = e.key.toLowerCase();
 
     // Terminal passthrough: never intercept Ctrl+C/D/Z/L/R (D-02)
-    if (TERMINAL_PASSTHROUGH.has(key) && !e.shiftKey && !e.altKey) return;
+    // Only applies to Ctrl -- Cmd variants are not terminal signals
+    if (e.ctrlKey && TERMINAL_PASSTHROUGH.has(key) && !e.shiftKey && !e.altKey) return;
 
     // App shortcuts
     switch (true) {
-      case key === 'b' && !e.shiftKey && !e.altKey:
+      case key === 'b' && e.ctrlKey && !e.shiftKey && !e.altKey:
         e.preventDefault(); e.stopPropagation();
         sidebarCollapsed.value = !sidebarCollapsed.value;
         break;
-      case key === 's' && !e.shiftKey && !e.altKey:
+      case key === 's' && e.ctrlKey && !e.shiftKey && !e.altKey:
         e.preventDefault(); e.stopPropagation();
         serverPaneState.value = serverPaneState.value === 'strip' ? 'expanded' : 'strip';
         updateLayout({ 'server-pane-state': serverPaneState.value });
@@ -124,11 +126,11 @@ async function bootstrap() {
           requestAnimationFrame(() => initDragManager());
         }
         break;
-      case key === 't' && !e.shiftKey && !e.altKey:
+      case key === 't' && e.ctrlKey && !e.shiftKey && !e.altKey:
         e.preventDefault(); e.stopPropagation();
         createNewTab();
         break;
-      case key === 'w' && !e.shiftKey && !e.altKey:
+      case key === 'w' && !e.shiftKey && !e.altKey && (e.ctrlKey || e.metaKey):
         e.preventDefault(); e.stopPropagation();
         closeActiveTab();
         break;
@@ -136,21 +138,21 @@ async function bootstrap() {
         e.preventDefault(); e.stopPropagation();
         cycleToNextTab();
         break;
-      case key === 'p' && !e.shiftKey && !e.altKey:
+      case key === 'p' && e.ctrlKey && !e.shiftKey && !e.altKey:
         e.preventDefault(); e.stopPropagation();
         document.dispatchEvent(new CustomEvent('open-fuzzy-search'));
         break;
-      case (key === '/' && e.shiftKey) || (e.key === '?' && !e.altKey):
+      case (key === '/' && e.ctrlKey && e.shiftKey) || (e.key === '?' && e.ctrlKey && !e.altKey):
         // Ctrl+? = Ctrl+Shift+/ on US layout, also handle e.key === '?' for AZERTY (D-03)
         e.preventDefault(); e.stopPropagation();
         toggleCheatsheet();
         break;
-      case key === '/' && !e.shiftKey && !e.altKey:
+      case key === '/' && e.ctrlKey && !e.shiftKey && !e.altKey:
         // Ctrl+/ as AZERTY fallback for cheatsheet (UI-SPEC)
         e.preventDefault(); e.stopPropagation();
         toggleCheatsheet();
         break;
-      case key === 't' && e.shiftKey && !e.altKey:
+      case key === 't' && e.ctrlKey && e.shiftKey && !e.altKey:
         e.preventDefault(); e.stopPropagation();
         toggleThemeMode();
         break;
