@@ -18,6 +18,7 @@ import { ProjectModal } from './components/project-modal';
 import { FuzzySearch } from './components/fuzzy-search';
 import { ShortcutCheatsheet, toggleCheatsheet } from './components/shortcut-cheatsheet';
 import { FirstRunWizard, openWizard } from './components/first-run-wizard';
+import { PreferencesPanel, togglePreferences } from './components/preferences-panel';
 import { initDragManager } from './drag-manager';
 import { initTheme, registerTerminal, toggleThemeMode } from './theme/theme-manager';
 import { createNewTab, closeActiveTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs } from './components/terminal-tabs';
@@ -57,6 +58,7 @@ function App() {
       <FuzzySearch />
       <ShortcutCheatsheet />
       <FirstRunWizard />
+      <PreferencesPanel />
     </div>
   );
 }
@@ -155,6 +157,10 @@ async function bootstrap() {
       case key === 't' && e.ctrlKey && e.shiftKey && !e.altKey:
         e.preventDefault(); e.stopPropagation();
         toggleThemeMode();
+        break;
+      case key === ',' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey:
+        e.preventDefault(); e.stopPropagation();
+        togglePreferences();
         break;
     }
   }, { capture: true });
