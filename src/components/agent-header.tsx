@@ -1,6 +1,6 @@
-// agent-header.tsx -- Agent header card with version detection and status pill (D-17, D-18, D-19)
+// agent-header.tsx -- Agent header card with version detection and status pill (D-01)
 // Shows agent type (Claude Code / OpenCode / Bash), version string, and PTY running status.
-// Sits above the terminal tab bar in the main panel.
+// Sits inside the terminal area as a floating card.
 
 import { signal, computed } from '@preact/signals';
 import { useEffect } from 'preact/hooks';
