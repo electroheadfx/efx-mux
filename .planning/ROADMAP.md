@@ -268,8 +268,8 @@ Phases execute in numeric order. Note: Phases 3 and 6 are parallelizable after P
 **Plans**: 5 plans
 
 Plans:
-- [ ] 09-01-PLAN.md -- Foundation: color palette tokens + Geist fonts + theme-manager sync
-- [ ] 09-02-PLAN.md -- Sidebar rebuild with Lucide icons + tab bar palette update
-- [ ] 09-03-PLAN.md -- GitHub-style diff viewer + file tree with Lucide icons
-- [ ] 09-04-PLAN.md -- Modal and preferences panel restyle
-- [ ] 09-05-PLAN.md -- Agent header card + Rust version detection + GSD viewer update
+- [x] 09-01-PLAN.md -- Foundation: color palette tokens + Geist fonts + theme-manager sync
+- [x] 09-02-PLAN.md -- Sidebar rebuild with Lucide icons + tab bar palette update
+- [x] 09-03-PLAN.md -- GitHub-style diff viewer + file tree with Lucide icons
+- [x] 09-04-PLAN.md -- Modal and preferences panel restyle
+- [x] 09-05-PLAN.md -- Agent header card + Rust version detection + GSD viewer update
