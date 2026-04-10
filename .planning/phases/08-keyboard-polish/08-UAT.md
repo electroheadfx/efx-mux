@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 08-keyboard-polish
 source:
   - 08-01-SUMMARY.md
@@ -106,45 +106,122 @@ blocked: 0
   reason: "User reported: After the third terminal tab is created, it becomes a Claude session instead of a plain terminal. Also when quitting the app, new terminal session tabs are not stored/restored."
   severity: major
   test: 3
+  root_cause: "createNewTab() in terminal-tabs.tsx line 129 unconditionally calls resolveAgentBinary() for all tabs. Only first tab should get the agent."
+  artifacts:
+    - path: "src/components/terminal-tabs.tsx"
+      issue: "createNewTab() resolves agent binary for all tabs (line 129)"
+  missing:
+    - "Conditional agent resolution: only first tab gets agent, subsequent tabs get plain shell"
+  debug_session: .planning/debug/tab-spawns-claude-session.md
 
 - truth: "Cmd+W closes the active tab when multiple tabs are present (not the app)"
   status: failed
   reason: "User reported: Cmd+W closes the app without warning when it should close the active tab like Ctrl+W does."
   severity: major
   test: 4
+  root_cause: "JS handler ignores metaKey (line 106: if (!e.ctrlKey || e.metaKey) return) so Cmd+W never reaches closeActiveTab(). Native Tauri menu binds PredefinedMenuItem::close_window to Cmd+W."
+  artifacts:
+    - path: "src/main.tsx"
+      issue: "Guard clause excludes Cmd-based shortcuts (line 106)"
+    - path: "src-tauri/src/lib.rs"
+      issue: "PredefinedMenuItem::close_window registers native Cmd+W accelerator (lines 46-49)"
+  missing:
+    - "Intercept Cmd+W in JS handler to call closeActiveTab()"
+    - "Remove or replace PredefinedMenuItem::close_window in Tauri menu"
+  debug_session: .planning/debug/cmdw-quits-app.md
 
 - truth: "Tab switching with Ctrl+Tab preserves terminal input functionality"
   status: failed
   reason: "User reported: When switching tabs with Ctrl+Tab, the terminal input becomes invisible and unresponsive. Cannot type CLI commands in the switched-to tab."
   severity: major
   test: 5
+  root_cause: "switchToTab() calls terminal.focus() and fitAddon.fit() synchronously after display:block — browser hasn't reflowed yet, fit() reads zero dimensions."
+  artifacts:
+    - path: "src/components/terminal-tabs.tsx"
+      issue: "switchToTab() lines 320-332 missing requestAnimationFrame deferral"
+  missing:
+    - "Wrap focus+fit in requestAnimationFrame after display:block"
+  debug_session: .planning/debug/ctrl-tab-breaks-terminal.md
 
 - truth: "Terminal tabs are persisted across app restart"
   status: failed
   reason: "User reported: New terminal session tabs are not stored/restored after app quit."
   severity: major
   test: 6
+  root_cause: "persistTabState() saves tab data to state.json correctly, but no restore logic exists. bootstrap() always creates a single tab via initFirstTab() and never reads saved tab data."
+  artifacts:
+    - path: "src/components/terminal-tabs.tsx"
+      issue: "persistTabState() saves but no restoreTabs() exists"
+    - path: "src/main.tsx"
+      issue: "bootstrap() missing tab restore logic after initFirstTab()"
+  missing:
+    - "Add restore logic in bootstrap() to read saved tabs from state.json"
+    - "Create restoreTab() function that reuses saved tmux session names"
+  debug_session: .planning/debug/tab-persistence.md
 
 - truth: "Crash overlay shows red status dot, exit code, and working Restart button"
   status: failed
   reason: "tmux pane shows 'Pane is dead' with status 0. Restart button does not work - app remains blocked in dead state even after quit and relaunch."
   severity: blocker
   test: 8
+  root_cause: "remain-on-exit on keeps tmux client alive after shell exits, so PTY master never gets EOF. Exit detection code (pty.rs:183-229) is unreachable. pty-exited event never fires, CrashOverlay never renders. On restart, tmux -A reattaches to dead session."
+  artifacts:
+    - path: "src-tauri/src/terminal/pty.rs"
+      issue: "remain-on-exit prevents PTY EOF; exit detection unreachable (lines 107-109, 183-229)"
+    - path: "src/components/crash-overlay.tsx"
+      issue: "Component correct but pty-exited event never arrives"
+  missing:
+    - "Remove remain-on-exit or add separate monitoring thread for pane death"
+    - "Clean up dead tmux sessions on app startup"
+  debug_session: .planning/debug/tmux-pane-dead-restart-blocked.md
 
 - truth: "After completing wizard, user lands in the main terminal view"
   status: failed
   reason: "User reported: After completing wizard (even with a valid project setup), user is shown the Add Project modal instead of the main terminal view."
   severity: major
   test: 10
+  root_cause: "Race condition: both initProjects() in main.tsx and sidebar.tsx useEffect independently detect 0 projects and open competing modals (wizard vs AddProject)."
+  artifacts:
+    - path: "src/components/sidebar.tsx"
+      issue: "Independent zero-project check opens AddProject modal (lines 234-236)"
+    - path: "src/main.tsx"
+      issue: "initProjects() correctly opens wizard (lines 264-283)"
+  missing:
+    - "Remove sidebar's openProjectModal() call — let initProjects() own first-run detection exclusively"
+  debug_session: .planning/debug/wizard-shows-add-project-modal.md
 
 - truth: "Wizard project settings are persisted and restored after app restart"
   status: failed
   reason: "User reported: When quitting the app after wizard setup and re-running, the app goes to /tmp default project instead of the project added in the wizard."
   severity: major
   test: 11
+  root_cause: "save_state does full overwrite of ManagedAppState. Concurrent save_state with pre-wizard state overwrites project data written by add_project. Also JS AppState type missing projects field, catch-block default omits projects array."
+  artifacts:
+    - path: "src-tauri/src/state.rs"
+      issue: "save_state full-overwrite of ManagedAppState (lines 297-315)"
+    - path: "src/state/state-manager.ts"
+      issue: "AppState type missing projects field; catch-block default missing projects array (lines 29-36, 68-76)"
+    - path: "src/components/sidebar.tsx"
+      issue: "Concurrent zero-project check fires save_state with stale state"
+  missing:
+    - "Fix AppState type to include projects"
+    - "Fix catch-block default to include projects: []"
+    - "Make save_state merge or coordinate with add_project/switch_project"
+  debug_session: .planning/debug/wizard-settings-not-persisted.md
 
 - truth: "Ctrl+, opens preferences/settings panel"
   status: failed
   reason: "User reported: Ctrl+, shortcut does not work."
   severity: major
   test: 15
+  root_cause: "Feature not implemented. No keyboard handler for comma key in main.tsx. No preferences panel component exists in src/components/."
+  artifacts:
+    - path: "src/main.tsx"
+      issue: "No case for comma key in keyboard handler"
+    - path: "src/components/"
+      issue: "No preferences-panel.tsx component"
+  missing:
+    - "Create preferences-panel.tsx component"
+    - "Add comma key case to keyboard handler"
+    - "Add Ctrl+, to shortcut cheatsheet"
+  debug_session: .planning/debug/ctrl-comma-preferences.md
