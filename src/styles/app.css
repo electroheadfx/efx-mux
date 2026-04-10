@@ -2,22 +2,33 @@
 @import "@xterm/xterm/css/xterm.css";
 
 @theme {
-  --color-bg: #282d3a;
-  --color-bg-raised: #363b3d;
-  --color-border: #3e454a;
-  --color-text: #8d999a;
-  --color-text-bright: #92a0a0;
-  --color-accent: #258ad1;
+  --color-bg: #0D1117;
+  --color-bg-raised: #161B22;
+  --color-bg-terminal: #010409;
+  --color-border: #1B2028;
+  --color-border-interactive: #30363D;
+  --color-text: #8B949E;
+  --color-text-bright: #E6EDF3;
+  --color-accent: #258AD1;
+  --color-success: #3FB950;
+  --color-warning: #D29922;
+  --color-danger: #F85149;
 
-  /* Light mode values (used by [data-theme="light"] override below) */
-  --color-bg-light: #fdf6e3;
-  --color-bg-raised-light: #eee8d5;
-  --color-border-light: #d3cfc2;
-  --color-text-light: #657b83;
-  --color-text-bright-light: #586e75;
-  --color-accent-light: #268bd2;
+  /* Light mode values */
+  --color-bg-light: #FFFFFF;
+  --color-bg-raised-light: #F6F8FA;
+  --color-bg-terminal-light: #FFFFFF;
+  --color-border-light: #D0D7DE;
+  --color-border-interactive-light: #D0D7DE;
+  --color-text-light: #656D76;
+  --color-text-bright-light: #1F2328;
+  --color-accent-light: #0969DA;
+  --color-success-light: #1A7F37;
+  --color-warning-light: #9A6700;
+  --color-danger-light: #CF222E;
 
-  --font-family-mono: 'FiraCode', 'Fira Code', 'JetBrains Mono', monospace;
+  --font-family-sans: 'Geist', system-ui, sans-serif;
+  --font-family-mono: 'GeistMono', 'FiraCode', monospace;
 }
 
 @font-face {
@@ -32,10 +43,15 @@
 [data-theme="light"] {
   --color-bg: var(--color-bg-light);
   --color-bg-raised: var(--color-bg-raised-light);
+  --color-bg-terminal: var(--color-bg-terminal-light);
   --color-border: var(--color-border-light);
+  --color-border-interactive: var(--color-border-interactive-light);
   --color-text: var(--color-text-light);
   --color-text-bright: var(--color-text-bright-light);
   --color-accent: var(--color-accent-light);
+  --color-success: var(--color-success-light);
+  --color-warning: var(--color-warning-light);
+  --color-danger: var(--color-danger-light);
 }
 
 /* Dynamic layout properties (set by JS drag-manager) */
@@ -125,6 +141,7 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  background: var(--color-bg-terminal);
 }
 
 .server-pane {
@@ -177,7 +194,7 @@
   border-radius: 2px;
   font-size: 11px;
   font-weight: 600;
-  font-family: system-ui, sans-serif;
+  font-family: var(--font-family-sans);
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -239,8 +256,8 @@ html, body {
 .gsd-content pre code { background: none; padding: 0; }
 
 /* ─── Diff Viewer color classes ─── */
-.diff-add { border-left: 3px solid #859900; }
-.diff-del { border-left: 3px solid #dc322f; }
+.diff-add { border-left: 3px solid var(--color-success); }
+.diff-del { border-left: 3px solid var(--color-danger); }
 
 /* ─── File Tree focus ─── */
 .file-tree:focus { outline: 1px solid var(--color-accent); outline-offset: -1px; }
