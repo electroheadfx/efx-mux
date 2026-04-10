@@ -87,9 +87,7 @@ function ProjectRow({ project, index }: { project: ProjectEntry; index: number }
         display: 'flex',
         alignItems: 'center',
         gap: spacing['2xl'],
-        padding: '10px 16px',
-        marginLeft: spacing['4xl'],
-        marginRight: spacing['4xl'],
+        padding: '10px 2px 10px 2px',
         borderRadius: radii.lg,
         backgroundColor: isActive ? colors.bgElevated : 'transparent',
         borderLeft: isActive ? `3px solid ${colors.accent}` : '3px solid transparent',
@@ -554,7 +552,7 @@ export function Sidebar() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
-                padding: '10px 16px 6px 16px',
+                padding: '1px 7px 4px',
               }}
             >
               <span
@@ -610,7 +608,7 @@ export function Sidebar() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: 8,
-                  padding: '10px 16px 6px 16px',
+                  padding: '1px 7px 4px',
                 }}
               >
                 <span
