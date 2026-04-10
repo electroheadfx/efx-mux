@@ -439,3 +439,29 @@ pub fn cleanup_dead_sessions() -> Result<Vec<String>, String> {
 
     Ok(cleaned)
 }
+
+/// Get the version string of an AI agent binary (claude, opencode).
+/// Validates agent name against a whitelist before executing (T-09-09 mitigation).
+#[tauri::command]
+pub async fn get_agent_version(agent: String) -> Result<String, String> {
+    let valid_agents = ["claude", "opencode"];
+    if !valid_agents.contains(&agent.as_str()) {
+        return Err(format!("Unknown agent: {}", agent));
+    }
+
+    let output = tokio::task::spawn_blocking(move || {
+        std::process::Command::new(&agent)
+            .arg("--version")
+            .output()
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+    .map_err(|e| format!("Failed to run {} --version: {}", agent, e))?;
+
+    if !output.status.success() {
+        return Err(format!("{} --version exited with {}", agent, output.status));
+    }
+
+    let version_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok(version_str.lines().next().unwrap_or(&version_str).to_string())
+}

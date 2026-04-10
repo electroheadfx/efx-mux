@@ -8,6 +8,7 @@ import { signal } from '@preact/signals';
 import { useEffect } from 'preact/hooks';
 import { ServerPane, serverPaneState } from './server-pane';
 import { TerminalTabBar, ActiveTabCrashOverlay } from './terminal-tabs';
+import { AgentHeader } from './agent-header';
 
 // Module-level signals for file viewer state
 const fileViewerVisible = signal(false);
@@ -62,8 +63,9 @@ export function MainPanel() {
 
   return (
     <main class="main-panel relative" aria-label="Main panel">
+      <AgentHeader />
       <TerminalTabBar />
-      <div class="terminal-area flex-1 bg-bg overflow-hidden relative min-h-[100px]">
+      <div class="terminal-area flex-1 bg-bg-terminal overflow-hidden relative min-h-[100px]">
         <div class="terminal-containers absolute inset-0" />
         <ActiveTabCrashOverlay />
       </div>
