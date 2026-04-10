@@ -13,6 +13,7 @@ import { attachResizeHandler } from '../terminal/resize-handler';
 import { registerTerminal, getTheme } from '../theme/theme-manager';
 import { updateSession, activeProjectName, projects } from '../state-manager';
 import { detectAgent } from '../server/server-bridge';
+import { colors, fonts } from '../tokens';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -530,7 +531,11 @@ export function TerminalTabBar() {
   const currentId = activeTabId.value;
 
   return (
-    <div class="flex gap-0.5 px-2 bg-bg border-b border-border shrink-0 items-center h-[34px]" role="tablist">
+    <div
+      class="flex gap-0.5 px-2 shrink-0 items-center h-[34px]"
+      role="tablist"
+      style={{ backgroundColor: colors.bgBase, borderBottom: `1px solid ${colors.bgBorder}` }}
+    >
       {tabs.map(tab => {
         const isActive = tab.id === currentId;
         return (
@@ -539,22 +544,26 @@ export function TerminalTabBar() {
             role="tab"
             aria-selected={isActive}
             class={isActive
-              ? 'flex items-center gap-1.5 px-3 py-2 border-b-2 border-accent text-xs font-medium text-text-bright font-sans cursor-pointer bg-transparent transition-all duration-150'
-              : 'flex items-center gap-1 px-3 py-2 text-xs text-text-muted font-sans cursor-pointer bg-transparent transition-all duration-150 hover:text-text-bright'}
+              ? 'flex items-center gap-1.5 px-3 py-2 border-b-2 border-accent text-xs font-medium font-sans cursor-pointer bg-transparent transition-all duration-150'
+              : 'flex items-center gap-1 px-3 py-2 text-xs font-sans cursor-pointer bg-transparent transition-all duration-150'}
+            style={{ color: isActive ? colors.textPrimary : colors.textDim }}
             onClick={() => {
               activeTabId.value = tab.id;
               switchToTab(tab.id);
             }}
             title={tab.sessionName}
           >
-            {isActive && <span class="w-1.5 h-1.5 rounded-full bg-success shrink-0" />}
+            {isActive && <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: colors.statusGreen, flexShrink: 0 }} />}
             <span>{tab.label}</span>
             <span
-              class="ml-1 text-text-muted text-[10px] hover:text-text-bright"
+              class="ml-1 text-[10px]"
+              style={{ color: colors.textDim }}
               onClick={(e) => {
                 e.stopPropagation();
                 closeTab(tab.id);
               }}
+              onMouseEnter={(e) => { (e.target as HTMLElement).style.color = colors.textPrimary; }}
+              onMouseLeave={(e) => { (e.target as HTMLElement).style.color = colors.textDim; }}
               title="Close tab"
             >{'\u00D7'}</span>
           </button>
@@ -562,7 +571,10 @@ export function TerminalTabBar() {
       })}
       {/* New tab button */}
       <button
-        class="w-6 h-6 rounded flex items-center justify-center text-text-muted text-sm hover:text-text-bright hover:bg-bg-raised cursor-pointer"
+        class="w-6 h-6 rounded flex items-center justify-center text-sm cursor-pointer"
+        style={{ color: colors.textDim, fontFamily: fonts.sans }}
+        onMouseEnter={(e) => { const t = e.target as HTMLElement; t.style.color = colors.textPrimary; t.style.backgroundColor = colors.bgElevated; }}
+        onMouseLeave={(e) => { const t = e.target as HTMLElement; t.style.color = colors.textDim; t.style.backgroundColor = 'transparent'; }}
         onClick={() => createNewTab()}
         title="New terminal tab (Ctrl+T)"
       >+</button>
