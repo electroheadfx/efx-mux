@@ -47,7 +47,7 @@ pub struct ChromeTheme {
 
 // Chrome defaults (Solarized Dark)
 fn default_chrome_bg() -> String { "#282d3a".into() }
-fn default_chrome_bg_raised() -> String { "#363b3d".into() }
+fn default_chrome_bg_raised() -> String { "#19243A".into() }
 fn default_chrome_border() -> String { "#3e454a".into() }
 fn default_chrome_text() -> String { "#8d999a".into() }
 fn default_chrome_text_bright() -> String { "#92a0a0".into() }
