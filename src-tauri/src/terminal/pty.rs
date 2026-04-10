@@ -449,14 +449,10 @@ pub async fn get_agent_version(agent: String) -> Result<String, String> {
         return Err(format!("Unknown agent: {}", agent));
     }
 
-    let output = tokio::task::spawn_blocking(move || {
-        std::process::Command::new(&agent)
-            .arg("--version")
-            .output()
-    })
-    .await
-    .map_err(|e| format!("Task failed: {}", e))?
-    .map_err(|e| format!("Failed to run {} --version: {}", agent, e))?;
+    let output = std::process::Command::new(&agent)
+        .arg("--version")
+        .output()
+        .map_err(|e| format!("Failed to run {} --version: {}", agent, e))?;
 
     if !output.status.success() {
         return Err(format!("{} --version exited with {}", agent, output.status));
