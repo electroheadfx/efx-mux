@@ -13,6 +13,7 @@
   --color-success: #3FB950;
   --color-warning: #D29922;
   --color-danger: #F85149;
+  --color-text-muted: #484F58;
 
   /* Light mode values */
   --color-bg-light: #FFFFFF;
@@ -326,4 +327,9 @@ html, body {
 .split-handle-h:hover,
 .split-handle-h.dragging {
   background: var(--color-accent);
+}
+
+/* Agent icon gradient utility (D-17: replaces inline style={{ background: 'linear-gradient(180deg, #A855F7, #6366F1)' }}) */
+.agent-icon-gradient {
+  background: linear-gradient(180deg, #A855F7, #6366F1);
 }
