@@ -19,10 +19,15 @@ import type { FitAddon } from '@xterm/addon-fit';
 export interface ChromeTheme {
   bg?: string;
   bgRaised?: string;
+  bgTerminal?: string;
   border?: string;
+  borderInteractive?: string;
   text?: string;
   textBright?: string;
   accent?: string;
+  success?: string;
+  warning?: string;
+  danger?: string;
   font?: string;
   fontSize?: number;
 }
@@ -77,13 +82,18 @@ export function applyTheme(theme: ThemeData): void {
 
   if (theme.chrome) {
     const style = document.documentElement.style;
-    if (theme.chrome.bg) style.setProperty('--bg', theme.chrome.bg);
-    if (theme.chrome.bgRaised) style.setProperty('--bg-raised', theme.chrome.bgRaised);
-    if (theme.chrome.border) style.setProperty('--border', theme.chrome.border);
-    if (theme.chrome.text) style.setProperty('--text', theme.chrome.text);
-    if (theme.chrome.textBright) style.setProperty('--text-bright', theme.chrome.textBright);
-    if (theme.chrome.accent) style.setProperty('--accent', theme.chrome.accent);
-    if (theme.chrome.font) style.setProperty('--font', `'${theme.chrome.font}', monospace`);
+    if (theme.chrome.bg) style.setProperty('--color-bg', theme.chrome.bg);
+    if (theme.chrome.bgRaised) style.setProperty('--color-bg-raised', theme.chrome.bgRaised);
+    if (theme.chrome.bgTerminal) style.setProperty('--color-bg-terminal', theme.chrome.bgTerminal);
+    if (theme.chrome.border) style.setProperty('--color-border', theme.chrome.border);
+    if (theme.chrome.borderInteractive) style.setProperty('--color-border-interactive', theme.chrome.borderInteractive);
+    if (theme.chrome.text) style.setProperty('--color-text', theme.chrome.text);
+    if (theme.chrome.textBright) style.setProperty('--color-text-bright', theme.chrome.textBright);
+    if (theme.chrome.accent) style.setProperty('--color-accent', theme.chrome.accent);
+    if (theme.chrome.success) style.setProperty('--color-success', theme.chrome.success);
+    if (theme.chrome.warning) style.setProperty('--color-warning', theme.chrome.warning);
+    if (theme.chrome.danger) style.setProperty('--color-danger', theme.chrome.danger);
+    if (theme.chrome.font) style.setProperty('--font-family-sans', `'${theme.chrome.font}', system-ui, sans-serif`);
     if (theme.chrome.fontSize) style.setProperty('--font-size', `${theme.chrome.fontSize}px`);
   }
 
@@ -118,7 +128,7 @@ export function getTheme(): ThemeData | null {
 }
 
 /** Chrome CSS properties set by applyTheme() -- must be cleared for light mode CSS to take effect */
-const CHROME_PROPS = ['--bg', '--bg-raised', '--border', '--text', '--text-bright', '--accent'];
+const CHROME_PROPS = ['--color-bg', '--color-bg-raised', '--color-bg-terminal', '--color-border', '--color-border-interactive', '--color-text', '--color-text-bright', '--color-accent', '--color-success', '--color-warning', '--color-danger'];
 
 /**
  * Set dark/light chrome mode and persist to state.json via Rust backend.
@@ -140,12 +150,17 @@ export function setThemeMode(mode: 'dark' | 'light'): void {
   } else if (currentTheme?.chrome) {
     // Re-apply dark theme chrome vars from cached theme
     const c = currentTheme.chrome;
-    if (c.bg) style.setProperty('--bg', c.bg);
-    if (c.bgRaised) style.setProperty('--bg-raised', c.bgRaised);
-    if (c.border) style.setProperty('--border', c.border);
-    if (c.text) style.setProperty('--text', c.text);
-    if (c.textBright) style.setProperty('--text-bright', c.textBright);
-    if (c.accent) style.setProperty('--accent', c.accent);
+    if (c.bg) style.setProperty('--color-bg', c.bg);
+    if (c.bgRaised) style.setProperty('--color-bg-raised', c.bgRaised);
+    if (c.bgTerminal) style.setProperty('--color-bg-terminal', c.bgTerminal);
+    if (c.border) style.setProperty('--color-border', c.border);
+    if (c.borderInteractive) style.setProperty('--color-border-interactive', c.borderInteractive);
+    if (c.text) style.setProperty('--color-text', c.text);
+    if (c.textBright) style.setProperty('--color-text-bright', c.textBright);
+    if (c.accent) style.setProperty('--color-accent', c.accent);
+    if (c.success) style.setProperty('--color-success', c.success);
+    if (c.warning) style.setProperty('--color-warning', c.warning);
+    if (c.danger) style.setProperty('--color-danger', c.danger);
   }
 }
 
