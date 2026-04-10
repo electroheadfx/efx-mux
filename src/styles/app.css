@@ -4,7 +4,7 @@
 @theme {
   --color-bg: #111927;           /* bgBase */
   --color-bg-raised: #19243A;    /* bgElevated */
-  --color-bg-terminal: #0B1120;  /* bgDeep */
+  --color-bg-terminal: #111927;  /* bgDeep — harmonized with bgBase per user preference */
   --color-border: #243352;       /* bgBorder */
   --color-border-interactive: #324568; /* bgSurface */
   --color-text: #8B949E;         /* textMuted */
@@ -29,8 +29,8 @@
   --color-warning-light: #9A6700;
   --color-danger-light: #CF222E;
 
-  --font-family-sans: 'Geist', system-ui, sans-serif;
-  --font-family-mono: 'GeistMono', 'FiraCode', monospace;
+  --font-family-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+  --font-family-mono: 'GeistMono', 'FiraCode', 'SF Mono', 'Monaco', 'Menlo', monospace;
 }
 
 @font-face {
@@ -212,6 +212,7 @@
   color: var(--color-text);
   white-space: pre-wrap;
   word-break: break-all;
+  background: var(--color-bg-raised);
 }
 
 .server-btn {
