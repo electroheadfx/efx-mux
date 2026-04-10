@@ -16,6 +16,7 @@ import {
 import { ansiToHtml, extractServerUrl } from '../server/ansi-html';
 import { projects, activeProjectName, updateLayout } from '../state-manager';
 import { initDragManager } from '../drag-manager';
+import { colors, fonts } from '../tokens';
 
 // ---------------------------------------------------------------------------
 // Module-level signals (exported for main.tsx Ctrl+S handler and state restore)
@@ -119,11 +120,11 @@ export function ServerPane() {
   const restartEnabled = status === 'running';
   const openEnabled = status === 'running' && !!detectedUrl.value;
 
-  // Status dot color
+  // Status dot color (D-08: navy-blue palette)
   const dotColor =
-    status === 'running' ? '#859900' :
-    status === 'crashed' ? '#dc322f' :
-    'currentColor';
+    status === 'running' ? colors.statusGreen :
+    status === 'crashed' ? colors.diffRed :
+    'transparent';
   const dotOpacity = (status === 'stopped' || status === 'unconfigured') ? '0.4' : '1';
 
   // Auto-scroll on new logs (07-07: unconditional + requestAnimationFrame for correct timing)
@@ -298,45 +299,45 @@ export function ServerPane() {
   return (
     <div class={`server-pane ${stateClass}`} aria-label="Server pane">
         <div class="server-pane-toolbar">
-          <div class="flex items-center gap-2 min-w-0 overflow-hidden flex-1 bg-bg px-3 py-1 border-t border-border">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', flex: 1, backgroundColor: colors.bgBase, padding: '4px 12px', borderTop: `1px solid ${colors.bgBorder}` }}>
             <span
-              class="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 bg-success"
+              class="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0"
               style={{ backgroundColor: dotColor, opacity: dotOpacity }}
               aria-label={`Server status: ${status}`}
             />
-            <span class="text-[11px] font-mono text-text truncate">{activeProjectName.value ?? 'Server'}</span>
+            <span style={{ color: colors.textMuted, fontFamily: fonts.mono, fontSize: 11 }} class="truncate">{activeProjectName.value ?? 'Server'}</span>
             <button
-              class="rounded border border-border-interactive px-2 py-[2px] text-[10px] font-mono text-text hover:bg-bg-raised"
+              style={{ borderRadius: 4, border: `1px solid ${colors.bgBorder}`, padding: '2px 8px', fontSize: 10, fontFamily: fonts.mono, color: colors.textMuted, backgroundColor: 'transparent' }}
               title={paneState === 'expanded' ? 'Collapse server pane' : 'Expand server pane'}
               onClick={handleToggle}
             >{paneState === 'expanded' ? '▾' : '▸'}</button>
           </div>
-          <div class="flex gap-1.5 items-center px-3 py-1 border-t border-border">
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '4px 12px', borderTop: `1px solid ${colors.bgBorder}`, backgroundColor: colors.bgBase }}>
             <button
-              class="rounded border border-border-interactive px-2 py-[2px] text-[10px] font-mono text-text hover:bg-bg-raised"
+              style={{ borderRadius: 4, border: `1px solid ${colors.bgBorder}`, padding: '2px 8px', fontSize: 10, fontFamily: fonts.mono, color: colors.textMuted, backgroundColor: 'transparent' }}
               title="Clear server log"
               onClick={() => { serverLogs.value = []; }}
             >Clear</button>
             <button
-              class="rounded bg-accent/[0.125] px-2 py-[2px] text-[10px] font-mono text-accent hover:bg-accent/[0.25]"
+              style={{ borderRadius: 4, backgroundColor: colors.accentMuted, border: 'none', padding: '2px 8px', fontSize: 10, fontFamily: fonts.mono, color: colors.accent, cursor: 'pointer' }}
               title="Start server"
               disabled={!startEnabled}
               onClick={handleStart}
             >Start</button>
             <button
-              class="rounded bg-accent/[0.125] px-2 py-[2px] text-[10px] font-mono text-accent hover:bg-accent/[0.25]"
+              style={{ borderRadius: 4, backgroundColor: colors.accentMuted, border: 'none', padding: '2px 8px', fontSize: 10, fontFamily: fonts.mono, color: colors.accent, cursor: 'pointer' }}
               title="Stop server"
               disabled={!stopEnabled}
               onClick={handleStop}
             >Stop</button>
             <button
-              class="rounded bg-accent/[0.125] px-2 py-[2px] text-[10px] font-mono text-accent hover:bg-accent/[0.25]"
+              style={{ borderRadius: 4, backgroundColor: colors.accentMuted, border: 'none', padding: '2px 8px', fontSize: 10, fontFamily: fonts.mono, color: colors.accent, cursor: 'pointer' }}
               title="Restart server"
               disabled={!restartEnabled}
               onClick={handleRestart}
             >Restart</button>
             <button
-              class="rounded bg-accent/[0.125] px-2 py-[2px] text-[10px] font-mono text-accent hover:bg-accent/[0.25]"
+              style={{ borderRadius: 4, backgroundColor: colors.accentMuted, border: 'none', padding: '2px 8px', fontSize: 10, fontFamily: fonts.mono, color: colors.accent, cursor: 'pointer' }}
               title="Open in browser"
               disabled={!openEnabled}
               onClick={handleOpen}
@@ -347,7 +348,7 @@ export function ServerPane() {
       {paneState === 'expanded' && (
         <div class="server-pane-logs" ref={logRef}>
           {isUnconfigured && serverLogs.value.length === 0 ? (
-            <span class="text-text text-[11px] opacity-60">No server command configured. Edit project settings to add one.</span>
+            <span style={{ color: colors.textMuted, fontSize: 11, opacity: 0.6 }}>No server command configured. Edit project settings to add one.</span>
           ) : (
             <div dangerouslySetInnerHTML={{ __html: logHtml }} />
           )}
