@@ -7,7 +7,7 @@
 import { useEffect } from 'preact/hooks';
 import { signal } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
-import { Folder, File } from 'lucide-preact';
+import { Folder, FileCode, FileText } from 'lucide-preact';
 import { activeProjectName, projects } from '../state-manager';
 import type { ProjectEntry } from '../state-manager';
 
@@ -135,41 +135,53 @@ export function FileTree() {
   }
 
   return (
-    <div
-      class="h-full overflow-y-auto py-1 outline-none bg-bg"
-      tabIndex={0}
-      onKeyDown={handleKeydown}
-    >
-      {!loaded.value ? (
-        <div class="p-4 text-text text-[13px]">Loading...</div>
-      ) : entries.value.length === 0 ? (
-        <div class="p-4 text-text text-[13px]">Empty directory</div>
-      ) : (
-        entries.value.map((entry, i) => (
-          <div
-            class={`flex items-center gap-2 px-3 py-1.5 cursor-pointer text-[13px] ${
-              selectedIndex.value === i
-                ? 'text-text-bright bg-bg-raised'
-                : 'text-text hover:bg-bg-raised/50'
-            }`}
-            onClick={() => { selectedIndex.value = i; openEntry(entry); }}
-            onMouseEnter={() => { selectedIndex.value = i; }}
-          >
-            {entry.is_dir
-              ? <Folder size={14} class="text-accent shrink-0" />
-              : <File size={14} class="text-text/60 shrink-0" />
-            }
-            <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-              {entry.name}
-            </span>
-            {!entry.is_dir && entry.size != null && (
-              <span class="text-[11px] text-text/50 font-mono shrink-0 ml-auto">
-                {formatSize(entry.size)}
+    <div class="h-full flex flex-col bg-bg-terminal overflow-hidden">
+      {/* Header bar (D-07) */}
+      <div class="bg-bg px-4 py-2.5 gap-2 border-b border-border flex items-center shrink-0">
+        <span class="text-xs font-medium text-text-bright font-sans">File Tree</span>
+        <span class="flex-1"></span>
+        <span class="text-[10px] font-mono text-[#484F58]">~/Dev/efx-mux</span>
+      </div>
+      {/* File list */}
+      <div
+        class="flex-1 overflow-auto py-1 outline-none"
+        tabIndex={0}
+        onKeyDown={handleKeydown}
+      >
+        {!loaded.value ? (
+          <div class="p-4 text-text text-[13px]">Loading...</div>
+        ) : entries.value.length === 0 ? (
+          <div class="p-4 text-text text-[13px]">Empty directory</div>
+        ) : (
+          entries.value.map((entry, i) => (
+            <div
+              class={`px-4 py-[5px] gap-2 flex items-center cursor-pointer ${
+                selectedIndex.value === i
+                  ? 'text-text-bright bg-bg-raised'
+                  : 'text-text hover:bg-bg-raised/50'
+              }`}
+              onClick={() => { selectedIndex.value = i; openEntry(entry); }}
+              onMouseEnter={() => { selectedIndex.value = i; }}
+            >
+              {entry.is_dir
+                ? <Folder size={14} class="text-accent shrink-0" />
+                : (entry.name.match(/\.(ts|tsx|js|jsx|rs|css)$/)
+                    ? <FileCode size={14} class="text-[#484F58] shrink-0" />
+                    : <FileText size={14} class="text-[#484F58] shrink-0" />
+                  )
+              }
+              <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-xs font-sans">
+                {entry.name}
               </span>
-            )}
-          </div>
-        ))
-      )}
+              {!entry.is_dir && entry.size != null && (
+                <span class="text-[10px] font-mono text-[#484F58] ml-auto shrink-0">
+                  {formatSize(entry.size)}
+                </span>
+              )}
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }
