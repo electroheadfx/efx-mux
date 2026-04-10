@@ -82,14 +82,14 @@ Font family resolution: `'Geist'` for sans, `'GeistMono'` for mono. The `@font-f
 |------|------|------|--------|-------------|-------|
 | Display | Geist | 20px | 600 | 1.2 | GSD viewer title |
 | Subheading | Geist | 15px | 600 | 1.3 | GSD viewer subheadings |
-| Project name | Geist | 13px | 500 | 1.3 | Sidebar project names, terminal output, prompt text |
+| Project name | Geist | 13px | 600 | 1.3 | Sidebar project names, terminal output, prompt text |
 | Body | Geist | 12px | 400 | 1.4 | File tree items, terminal tabs, phase items |
 | Tab label | GeistMono | 11px | 500 | 1.2 | Tab labels, server strip text |
 | Badge/Status | GeistMono | 10px | 500 | 1.0 | Section labels (uppercase, letter-spacing 1.2px), branch names, badges, status pills |
 | Prompt badge | GeistMono | 9px | 500 | 1.0 | Prompt mode badges |
 
 Only 2 weights used per font family:
-- **Geist:** 400 (body) + 500-600 (headings/labels)
+- **Geist:** 400 (body) + 600 (headings/labels)
 - **GeistMono:** 500 (all monospace UI elements)
 
 ### Scale Override Justification
@@ -208,7 +208,7 @@ Modal outer radius: 12px (Tailwind `rounded-xl`).
 - Header: textPrimary title, divider below
 - Input fields: bgDeep (#0B1120) fill, bgBorder border, 8px radius, 10px 12px padding
 - Field labels: textMuted, 12px
-- Footer: divider above, Cancel (ghost) + Add Project (accent fill) buttons
+- Footer: divider above, Discard (ghost) + Add Project (accent fill) buttons
 - Browse button: bgBorder background, textSecondary text
 
 ### Preferences Panel
@@ -235,7 +235,7 @@ Modal outer radius: 12px (Tailwind `rounded-xl`).
 | Element | Copy |
 |---------|------|
 | Primary CTA (modal) | "Add Project" |
-| Cancel action (modal) | "Cancel" |
+| Dismiss action (modal) | "Discard" |
 | Empty state heading (no projects) | "Welcome to Efxmux" |
 | Empty state body (no projects) | "Add your first project to get started." |
 | Empty state (no GSD file) | "No GSD file configured for this project." |
