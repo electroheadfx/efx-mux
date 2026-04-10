@@ -192,10 +192,10 @@ Plans:
 - [x] 08-02-PLAN.md -- Terminal tab management + PTY crash recovery
 - [x] 08-03-PLAN.md -- First-run wizard + UAT checkpoint
 - [x] 08-04-PLAN.md -- Gap closure: fix Ctrl+P fuzzy search dispatch
-- [ ] 08-05-PLAN.md -- UAT gap closure: PTY exit detection via pane-death monitoring
-- [ ] 08-06-PLAN.md -- UAT gap closure: tab agent fix, switch reflow, tab persistence restore
-- [ ] 08-07-PLAN.md -- UAT gap closure: Cmd+W close tab, wizard/sidebar race, state projects field
-- [ ] 08-08-PLAN.md -- UAT gap closure: Ctrl+, preferences panel
+- [x] 08-05-PLAN.md -- UAT gap closure: PTY exit detection via pane-death monitoring
+- [x] 08-06-PLAN.md -- UAT gap closure: tab agent fix, switch reflow, tab persistence restore
+- [x] 08-07-PLAN.md -- UAT gap closure: Cmd+W close tab, wizard/sidebar race, state projects field
+- [x] 08-08-PLAN.md -- UAT gap closure: Ctrl+, preferences panel
 
 **UI hint**: yes
 
