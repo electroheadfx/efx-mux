@@ -1,9 +1,11 @@
 // sidebar.tsx -- Project sidebar with projects, git status, git files, collapsed mode
 // Migrated from Arrow.js to Preact TSX (Phase 6.1)
+// Restyled with Lucide icons, status dots, git badges (Phase 9)
 
 import { useEffect } from 'preact/hooks';
 import { signal, computed } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
+import { Circle, GitBranch, Plus, RotateCw, X } from 'lucide-preact';
 import {
   projects,
   activeProjectName,
@@ -78,10 +80,10 @@ function ProjectRow({ project, index }: { project: ProjectEntry; index: number }
 
   return (
     <div
-      class={`flex items-center px-2 py-1 min-h-[32px] cursor-pointer border-l-[3px] ${
+      class={`group flex items-center gap-2.5 px-3 py-2 rounded-md cursor-pointer ${
         isActive
-          ? 'text-text-bright bg-accent/8 border-accent pl-[5px]'
-          : 'text-text bg-transparent border-transparent pl-2 hover:bg-bg-raised'
+          ? 'bg-bg-raised'
+          : 'hover:bg-bg-raised/50'
       }`}
       title={project.path}
       data-index={index}
@@ -98,22 +100,38 @@ function ProjectRow({ project, index }: { project: ProjectEntry; index: number }
         removeTarget.value = project.name;
       }}
     >
-      <span class="flex-1 text-sm overflow-hidden text-ellipsis whitespace-nowrap">
-        {project.name}
-      </span>
+      {/* Status dot */}
+      {isActive ? (
+        <Circle size={8} fill="currentColor" class="text-success shrink-0" />
+      ) : (
+        <Circle size={8} class="text-border-interactive shrink-0" />
+      )}
+
+      {/* Project info */}
+      <div class="flex-1 min-w-0">
+        <div class="text-sm font-medium text-text-bright truncate">{project.name}</div>
+        <div class="text-[11px] text-text truncate">{project.path}</div>
+      </div>
+
+      {/* Git branch badge */}
       {git.branch && (
-        <span class="text-[11px] text-accent ml-2 shrink-0">
+        <span class="flex items-center gap-1 text-[11px] text-accent px-1.5 py-0.5 bg-accent/10 rounded shrink-0">
+          <GitBranch size={10} />
           {git.branch}
         </span>
       )}
+
+      {/* Remove button */}
       <span
-        class="opacity-0 text-xs text-text cursor-pointer ml-1 shrink-0 transition-opacity group-hover:opacity-100 hover:!opacity-100"
+        class="opacity-0 group-hover:opacity-100 cursor-pointer shrink-0 text-text hover:text-danger transition-opacity"
         title="Remove project"
         onClick={(e) => {
           e.stopPropagation();
           removeTarget.value = project.name;
         }}
-      >{'\u2715'}</span>
+      >
+        <X size={12} />
+      </span>
     </div>
   );
 }
@@ -124,7 +142,7 @@ function CollapsedIcon({ project, index }: { project: ProjectEntry; index: numbe
 
   return (
     <div
-      class={`w-6 h-6 flex items-center justify-center text-xs cursor-pointer ${
+      class={`relative w-6 h-6 flex items-center justify-center text-xs cursor-pointer ${
         isActive ? 'text-accent' : 'text-text'
       }`}
       title={project.name}
@@ -137,17 +155,22 @@ function CollapsedIcon({ project, index }: { project: ProjectEntry; index: numbe
           console.warn('[efxmux] Failed to switch project:', err);
         }
       }}
-    >{initial}</div>
+    >
+      {initial}
+      {isActive && (
+        <Circle size={6} fill="currentColor" class="text-success absolute -bottom-0.5 left-1/2 -translate-x-1/2" />
+      )}
+    </div>
   );
 }
 
 function GitFileRow({ file }: { file: { name: string; path: string; status: string } }) {
-  const statusColor: Record<string, string> = {
-    'M': '#b58900',
-    'S': '#859900',
-    'U': '#6c7b83',
+  const badgeClass: Record<string, string> = {
+    'M': 'bg-accent/15 text-accent',
+    'S': 'bg-success/15 text-success',
+    'U': 'bg-warning/15 text-warning',
   };
-  const color = statusColor[file.status] || 'var(--text)';
+  const cls = badgeClass[file.status] || 'bg-bg-raised text-text';
 
   return (
     <div
@@ -159,7 +182,7 @@ function GitFileRow({ file }: { file: { name: string; path: string; status: stri
       <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
         {file.name}
       </span>
-      <span class="ml-2 text-[11px] shrink-0" style={{ color }}>
+      <span class={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded ml-2 shrink-0 ${cls}`}>
         {file.status}
       </span>
     </div>
@@ -192,7 +215,7 @@ function RemoveDialog() {
             onClick={() => { removeTarget.value = null; }}
           >Cancel</button>
           <button
-            class="bg-[#dc322f] border-none text-white px-4 py-2 rounded-sm cursor-pointer text-sm"
+            class="bg-danger border-none text-white px-4 py-2 rounded-sm cursor-pointer text-sm"
             onClick={async () => {
               await removeProject(name);
               removeTarget.value = null;
@@ -288,29 +311,31 @@ export function Sidebar() {
             ))}
             <div class="h-2" />
             <div
-              class="w-6 h-6 flex items-center justify-center text-base text-text cursor-pointer"
+              class="w-6 h-6 flex items-center justify-center text-text cursor-pointer hover:text-accent"
               title="Add project"
               aria-label="Add project"
               onClick={() => { openProjectModal(); }}
-            >+</div>
+            >
+              <Plus size={14} />
+            </div>
           </div>
         ) : (
           <div class="sidebar-content-full flex flex-col h-full">
             <div class="flex items-center py-1 pb-2 border-b border-border mb-2">
-              <div class="flex-1 text-text-bright text-[11px] tracking-widest uppercase">
-                EFXMUX
+              <div class="flex-1 section-label">
+                Efxmux
               </div>
               <div
-                class="text-base text-text cursor-pointer w-6 h-6 flex items-center justify-center"
+                class="text-text cursor-pointer w-6 h-6 flex items-center justify-center hover:text-accent"
                 title="Add project"
                 aria-label="Add project"
                 onClick={() => { openProjectModal(); }}
-              >+</div>
+              >
+                <Plus size={14} />
+              </div>
             </div>
 
-            <div class="text-[11px] tracking-widest uppercase text-text pb-1">
-              PROJECTS
-            </div>
+            <div class="section-label pb-1">Projects</div>
 
             <div class="flex-1 overflow-y-auto">
               {projects.value.length === 0 ? (
@@ -325,31 +350,34 @@ export function Sidebar() {
             </div>
 
             <div class="border-t border-border mt-2 pt-2 flex-1 min-h-0 flex flex-col">
-              <div class="flex items-center text-[11px] tracking-widest uppercase text-text pb-1">
-                <span class="flex-1">GIT CHANGES</span>
+              <div class="flex items-center pb-1">
+                <span class="section-label flex-1">Git Changes</span>
                 <div
-                  class="w-5 h-5 flex items-center justify-center text-xs text-text cursor-pointer hover:text-accent"
+                  class="w-5 h-5 flex items-center justify-center text-text cursor-pointer hover:text-accent"
                   title="Refresh git status"
                   aria-label="Refresh git status"
                   onClick={async () => { await refreshAllGitStatus(); }}
-                >{'\u21BB'}</div>
+                >
+                  <RotateCw size={12} />
+                </div>
               </div>
 
               {git.value.branch && (
-                <div class="px-2 py-0.5 text-[11px] text-accent">
+                <div class="flex items-center gap-1 px-2 py-0.5 text-[11px] text-accent">
+                  <GitBranch size={10} />
                   {git.value.branch}
                 </div>
               )}
 
               <div class="flex gap-2 px-2 py-1 flex-wrap">
                 {git.value.modified > 0 && (
-                  <span class="text-xs" style={{ color: '#b58900' }}>M {git.value.modified}</span>
+                  <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-accent/15 text-accent">M {git.value.modified}</span>
                 )}
                 {git.value.staged > 0 && (
-                  <span class="text-xs" style={{ color: '#859900' }}>S {git.value.staged}</span>
+                  <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-success/15 text-success">S {git.value.staged}</span>
                 )}
                 {git.value.untracked > 0 && (
-                  <span class="text-xs" style={{ color: '#6c7b83' }}>U {git.value.untracked}</span>
+                  <span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-warning/15 text-warning">U {git.value.untracked}</span>
                 )}
                 {totalChanges.value === 0 && (
                   <span class="text-xs text-text">No changes</span>
