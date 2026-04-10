@@ -6,7 +6,7 @@ use std::sync::Mutex;
 /// Updated on every save_state call; written to disk on window close.
 pub struct ManagedAppState(pub Mutex<AppState>);
 
-/// Application state persisted to ~/.config/efxmux/state.json (per D-07)
+/// Application state persisted to ~/.config/efx-mux/state.json (per D-07)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppState {
     #[serde(default = "default_version")]
@@ -187,7 +187,7 @@ fn default_right_session() -> String {
     "efx-mux-right".into()
 }
 fn default_right_top_tab() -> String {
-    "gsd".into()
+    "GSD".into()
 }
 fn default_right_bottom_tab() -> String {
     "git".into()
@@ -207,16 +207,16 @@ pub fn state_path() -> PathBuf {
     config_dir().join("state.json")
 }
 
-/// Returns ~/.config/efxmux/
+/// Returns ~/.config/efx-mux/
 fn config_dir() -> PathBuf {
     let home = std::env::var("HOME")
         .ok()
         .filter(|h| !h.is_empty())
         .expect("[efxmux] FATAL: HOME environment variable is not set");
-    PathBuf::from(home).join(".config/efxmux")
+    PathBuf::from(home).join(".config/efx-mux")
 }
 
-/// Ensure ~/.config/efxmux/ exists
+/// Ensure ~/.config/efx-mux/ exists
 pub fn ensure_config_dir() {
     let dir = config_dir();
     if !dir.exists() {
@@ -320,7 +320,7 @@ pub async fn save_state(
         .map_err(|e| e.to_string())?
 }
 
-/// Return the config directory path (~/.config/efxmux/)
+/// Return the config directory path (~/.config/efx-mux/)
 #[tauri::command]
 pub fn get_config_dir() -> String {
     get_config_dir_path()

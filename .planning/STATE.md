@@ -106,9 +106,10 @@ None yet.
 | 260410-vc7 | UI fixes: left sidebar padding, TUI newlines, pane backgrounds, git pane font size | 2026-04-10 | 6567be1 | [260410-vc7-ui-fixes-left-sidebar-padding-tui-newlin](./quick/260410-vc7-ui-fixes-left-sidebar-padding-tui-newlin/) |
 | 260410-wky | make git change left sidebar, title 'Git changes' padding to: 1px 7px 4px | 2026-04-10 | d8ad110 | [260410-wky-make-git-change-left-sidebar-title-git-c](./quick/260410-wky-make-git-change-left-sidebar-title-git-c/) |
 | 260410-wne | make git change 'Git changes' content padding to: 4px (every) in left sidebar | 2026-04-10 | 65bfc0a | [260410-wne-make-git-change-git-changes-content-padd](./quick/260410-wne-make-git-change-git-changes-content-padd/) |
+| 260410-wtw | right sidebar, Filetree pane no open by default when I Open the app | 2026-04-10 | | [260410-wtw-right-sidebar-filetree-pane-no-open-by-d](./quick/260410-wtw-right-sidebar-filetree-pane-no-open-by-d/) |
 
 ## Session Continuity
 
-Last activity: 2026-04-10 - Completed quick task 260410-wne: make git change 'Git changes' content padding to: 4px (every) in left sidebar
-Stopped at: Completed quick task 260410-wky
+Last activity: 2026-04-10 - Completed quick task 260410-wtw: right sidebar, Filetree pane no open by default when I Open the app
+Stopped at: Completed quick task 260410-wtw
 Resume file: None
