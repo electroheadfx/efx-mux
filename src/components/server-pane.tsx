@@ -298,53 +298,45 @@ export function ServerPane() {
   return (
     <div class={`server-pane ${stateClass}`} aria-label="Server pane">
         <div class="server-pane-toolbar">
-          <div class="flex items-center gap-2 min-w-0 overflow-hidden flex-1">
+          <div class="flex items-center gap-2 min-w-0 overflow-hidden flex-1 bg-bg px-3 py-1 border-t border-border">
             <span
-              class="inline-block w-2 h-2 rounded-full flex-shrink-0"
+              class="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 bg-success"
               style={{ backgroundColor: dotColor, opacity: dotOpacity }}
               aria-label={`Server status: ${status}`}
             />
-            <span class="text-text-bright text-[11px] tracking-wider uppercase flex-shrink-0">Server</span>
-            {activeProjectName.value && (
-              <span
-                class="text-text text-[11px] opacity-70 normal-case ml-1 truncate"
-                title={activeProjectName.value}
-              >
-                {activeProjectName.value}
-              </span>
-            )}
+            <span class="text-[11px] font-mono text-text truncate">{activeProjectName.value ?? 'Server'}</span>
             <button
-              class="server-btn flex-shrink-0"
+              class="rounded border border-border-interactive px-2 py-[2px] text-[10px] font-mono text-text hover:bg-bg-raised"
               title={paneState === 'expanded' ? 'Collapse server pane' : 'Expand server pane'}
               onClick={handleToggle}
             >{paneState === 'expanded' ? '▾' : '▸'}</button>
           </div>
-          <div class="flex gap-1.5 items-center">
+          <div class="flex gap-1.5 items-center px-3 py-1 border-t border-border">
             <button
-              class="server-btn"
+              class="rounded border border-border-interactive px-2 py-[2px] text-[10px] font-mono text-text hover:bg-bg-raised"
               title="Clear server log"
               onClick={() => { serverLogs.value = []; }}
             >Clear</button>
             <button
-              class="server-btn"
+              class="rounded bg-accent/[0.125] px-2 py-[2px] text-[10px] font-mono text-accent hover:bg-accent/[0.25]"
               title="Start server"
               disabled={!startEnabled}
               onClick={handleStart}
             >Start</button>
             <button
-              class="server-btn"
+              class="rounded bg-accent/[0.125] px-2 py-[2px] text-[10px] font-mono text-accent hover:bg-accent/[0.25]"
               title="Stop server"
               disabled={!stopEnabled}
               onClick={handleStop}
             >Stop</button>
             <button
-              class="server-btn"
+              class="rounded bg-accent/[0.125] px-2 py-[2px] text-[10px] font-mono text-accent hover:bg-accent/[0.25]"
               title="Restart server"
               disabled={!restartEnabled}
               onClick={handleRestart}
             >Restart</button>
             <button
-              class="server-btn"
+              class="rounded bg-accent/[0.125] px-2 py-[2px] text-[10px] font-mono text-accent hover:bg-accent/[0.25]"
               title="Open in browser"
               disabled={!openEnabled}
               onClick={handleOpen}
