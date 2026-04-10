@@ -425,6 +425,87 @@ export function clearAllTabs(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Tab restoration (called from main.tsx bootstrap for session persistence)
+// ---------------------------------------------------------------------------
+
+/**
+ * Restore tabs from persisted state.json data on app startup.
+ * Returns true if at least 1 tab was restored, false otherwise.
+ */
+export async function restoreTabs(
+  savedData: { tabs: Array<{ sessionName: string; label: string }>; activeTabId: string },
+  projectPath?: string,
+  agentBinary?: string,
+): Promise<boolean> {
+  if (!savedData?.tabs?.length) return false;
+
+  const wrapper = getTerminalContainersEl();
+  if (!wrapper) return false;
+
+  const restoredTabs: TerminalTab[] = [];
+
+  for (let i = 0; i < savedData.tabs.length; i++) {
+    const saved = savedData.tabs[i];
+    tabCounter++;
+    const id = `tab-${Date.now()}-${tabCounter}`;
+
+    // Create container
+    const container = document.createElement('div');
+    container.className = 'absolute inset-0';
+    container.style.display = 'none'; // switchToTab will show the active one
+    wrapper.appendChild(container);
+
+    // Create terminal
+    const themeOpts = getThemeOptions();
+    const { terminal, fitAddon } = createTerminal(container, themeOpts);
+    registerTerminal(terminal, fitAddon);
+
+    // Connect PTY -- first tab gets agent binary (it's the agent tab), rest are plain shell
+    const shellCmd = (i === 0 && agentBinary) ? agentBinary : undefined;
+    let disconnectPty: (() => void) | undefined;
+    let ptyConnected = false;
+
+    try {
+      const conn = await connectPty(terminal, saved.sessionName, projectPath, shellCmd);
+      disconnectPty = conn.disconnect;
+      ptyConnected = true;
+    } catch (err) {
+      console.error('[efxmux] Failed to restore PTY for tab:', saved.sessionName, err);
+      terminal.writeln(`\r\n\x1b[33mFailed to restore session "${saved.sessionName}": ${err}\x1b[0m`);
+    }
+
+    // Attach resize handler
+    const resizeHandle = attachResizeHandler(container, terminal, fitAddon, saved.sessionName);
+
+    restoredTabs.push({
+      id,
+      sessionName: saved.sessionName,
+      label: saved.label,
+      terminal,
+      fitAddon,
+      container,
+      ptyConnected,
+      disconnectPty,
+      detachResize: resizeHandle.detach,
+      exitCode: undefined,
+    });
+  }
+
+  if (restoredTabs.length === 0) return false;
+
+  terminalTabs.value = restoredTabs;
+
+  // Activate the saved active tab (or first if saved ID no longer maps)
+  // Since we generate new IDs, activate by index -- savedData.activeTabId won't match
+  // Default to first tab
+  activeTabId.value = restoredTabs[0].id;
+  switchToTab(restoredTabs[0].id);
+
+  persistTabState();
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // PTY exit event listener
 // ---------------------------------------------------------------------------
 

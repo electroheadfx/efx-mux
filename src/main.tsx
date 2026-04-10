@@ -20,7 +20,7 @@ import { ShortcutCheatsheet, toggleCheatsheet } from './components/shortcut-chea
 import { FirstRunWizard, openWizard } from './components/first-run-wizard';
 import { initDragManager } from './drag-manager';
 import { initTheme, registerTerminal, toggleThemeMode } from './theme/theme-manager';
-import { createNewTab, closeActiveTab, cycleToNextTab, initFirstTab, clearAllTabs } from './components/terminal-tabs';
+import { createNewTab, closeActiveTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs } from './components/terminal-tabs';
 import {
   loadAppState, initBeforeUnload, sidebarCollapsed, updateLayout, updateSession,
   getProjects, getActiveProject, projects, activeProjectName
@@ -207,6 +207,9 @@ async function bootstrap() {
       ? projectSessionName(activeName, 'right')
       : (appState?.session?.['right-tmux-session'] ?? 'efx-mux-right');
 
+    // Clean up dead tmux sessions from previous runs (Plan 05)
+    try { await invoke('cleanup_dead_sessions'); } catch {}
+
     // Agent detection (D-10, D-11, AGENT-03/04/05)
     let agentBinary: string | null = null;
     if (activeProject?.agent && activeProject.agent !== 'bash') {
@@ -218,33 +221,48 @@ async function bootstrap() {
       }
     }
 
-    // Initialize first terminal tab (replaces inline createTerminal + connectPty)
-    const themeOptions = {
-      theme: loadedTheme?.terminal,
-      font: loadedTheme?.chrome?.font,
-      fontSize: loadedTheme?.chrome?.fontSize,
-    };
-    const firstTab = await initFirstTab(themeOptions, sessionName, activeProject?.path, agentBinary ?? undefined);
-
-    if (firstTab) {
-      const { terminal, fitAddon } = firstTab;
-      registerTerminal(terminal, fitAddon);
-      updateSession({ 'main-tmux-session': sessionName });
-
-      // Agent fallback banner (D-13, AGENT-05, per UI-SPEC copywriting)
-      if (activeProject?.agent && activeProject.agent !== 'bash' && !agentBinary) {
-        terminal.writeln('');
-        terminal.writeln('');
-        terminal.writeln('');
-        terminal.writeln('\x1b[33mNo agent binary found.\x1b[0m');
-        terminal.writeln('\x1b[33mInstall claude or opencode to enable AI assistance.\x1b[0m');
-        terminal.writeln('\x1b[33mStarting plain bash session...\x1b[0m');
-        terminal.writeln('');
-        terminal.writeln('');
+    // Try to restore tabs from persisted state (UAT gap -- tab persistence)
+    let tabsRestored = false;
+    if (appState?.session?.['terminal-tabs']) {
+      try {
+        const parsedData = JSON.parse(appState.session['terminal-tabs']);
+        if (parsedData?.tabs?.length > 0) {
+          tabsRestored = await restoreTabs(parsedData, activeProject?.path, agentBinary ?? undefined);
+        }
+      } catch (err) {
+        console.warn('[efxmux] Failed to restore tabs, will create fresh:', err);
       }
+    }
 
-      setTimeout(() => fitAddon.fit(), 100);
-      terminal.focus();
+    // Fall through to fresh first tab if restore failed or no saved data
+    if (!tabsRestored) {
+      const themeOptions = {
+        theme: loadedTheme?.terminal,
+        font: loadedTheme?.chrome?.font,
+        fontSize: loadedTheme?.chrome?.fontSize,
+      };
+      const firstTab = await initFirstTab(themeOptions, sessionName, activeProject?.path, agentBinary ?? undefined);
+
+      if (firstTab) {
+        const { terminal, fitAddon } = firstTab;
+        registerTerminal(terminal, fitAddon);
+        updateSession({ 'main-tmux-session': sessionName });
+
+        // Agent fallback banner (D-13, AGENT-05, per UI-SPEC copywriting)
+        if (activeProject?.agent && activeProject.agent !== 'bash' && !agentBinary) {
+          terminal.writeln('');
+          terminal.writeln('');
+          terminal.writeln('');
+          terminal.writeln('\x1b[33mNo agent binary found.\x1b[0m');
+          terminal.writeln('\x1b[33mInstall claude or opencode to enable AI assistance.\x1b[0m');
+          terminal.writeln('\x1b[33mStarting plain bash session...\x1b[0m');
+          terminal.writeln('');
+          terminal.writeln('');
+        }
+
+        setTimeout(() => fitAddon.fit(), 100);
+        terminal.focus();
+      }
     }
 
     // Apply right-h-pct after DOM is ready
