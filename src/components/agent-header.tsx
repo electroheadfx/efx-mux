@@ -5,7 +5,6 @@
 import { signal, computed } from '@preact/signals';
 import { useEffect } from 'preact/hooks';
 import { invoke } from '@tauri-apps/api/core';
-import { Circle } from 'lucide-preact';
 import { activeProjectName, projects } from '../state-manager';
 import { terminalTabs, activeTabId } from './terminal-tabs';
 
@@ -73,29 +72,25 @@ export function AgentHeader() {
   }, []);
 
   return (
-    <div class="flex items-center gap-3 px-4 py-2 bg-bg-raised border-b border-border shrink-0">
-      {/* Agent icon -- gradient circle */}
-      <div class="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0"
-        style={{ background: 'linear-gradient(135deg, #A855F7, #6366F1)' }}>
-        {agentName.value === 'claude' ? 'C' : agentName.value === 'opencode' ? 'O' : 'B'}
-      </div>
+    <div class="flex items-center gap-2.5 rounded-lg bg-bg-raised px-3 py-2 w-full">
+      {/* Gradient diamond icon */}
+      <div class="w-7 h-7 rounded-md flex items-center justify-center text-white text-xs shrink-0"
+        style={{ background: 'linear-gradient(180deg, #A855F7, #6366F1)' }}>&#x25C6;</div>
 
-      {/* Agent name + version */}
-      <div class="flex flex-col min-w-0">
-        <span class="text-sm font-semibold text-text-bright font-sans leading-tight">{displayName.value}</span>
-        {agentVersion.value && (
-          <span class="text-[11px] text-text font-mono leading-tight truncate">{agentVersion.value}</span>
-        )}
+      {/* Info column */}
+      <div class="flex flex-col gap-px flex-1 min-w-0">
+        <span class="text-xs font-medium text-text-bright font-sans leading-tight">
+          {displayName.value} {agentVersion.value}
+        </span>
+        <span class="text-[10px] text-[#484F58] font-mono leading-tight truncate">
+          {agentName.value === 'claude' ? 'Opus 4' : agentName.value === 'opencode' ? 'OpenCode' : 'Bash'} · {activeProjectName.value || 'No project'}
+        </span>
       </div>
 
       {/* Status pill */}
-      <div class="ml-auto flex items-center gap-1.5">
-        <Circle
-          size={8}
-          fill="currentColor"
-          class={isRunning.value ? 'text-success' : 'text-danger'}
-        />
-        <span class={`text-xs font-mono ${isRunning.value ? 'text-success' : 'text-danger'}`}>
+      <div class={`flex items-center gap-1 rounded px-2 py-[3px] ${isRunning.value ? 'bg-success/[0.125]' : 'bg-danger/[0.125]'}`}>
+        <span class={`w-1.5 h-1.5 rounded-full ${isRunning.value ? 'bg-success' : 'bg-danger'}`}></span>
+        <span class={`text-[10px] font-mono font-medium ${isRunning.value ? 'text-success' : 'text-danger'}`}>
           {isRunning.value ? 'Ready' : 'Stopped'}
         </span>
       </div>
