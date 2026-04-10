@@ -2,7 +2,7 @@ use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::collections::HashMap;
 use std::io::Read;
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
     Arc, Mutex,
 };
 use tauri::{Emitter, Manager};
@@ -139,15 +139,21 @@ pub async fn spawn_terminal(
     let sent = sent_bytes;
     let acked = acked_bytes;
 
-    // Clone app handle and session name for exit detection after read loop (UX-03, D-08)
-    let app_for_exit = app.clone();
-    let session_for_exit = sanitized.clone();
+    // Shared stop flag: monitoring thread sets this when pane dies,
+    // read loop checks it to break out (since remain-on-exit keeps PTY alive).
+    let stopped = Arc::new(AtomicBool::new(false));
+    let stopped_for_reader = stopped.clone();
 
     // PTY read loop on dedicated OS thread (NOT tokio::spawn -- Research Pitfall 5)
     std::thread::spawn(move || {
         let mut buf = vec![0u8; 4096];
         let mut paused = false;
         loop {
+            // Check if monitoring thread detected pane death
+            if stopped_for_reader.load(Ordering::Relaxed) {
+                break;
+            }
+
             // Flow control: hysteresis between HIGH (400KB) and LOW (100KB) watermarks
             let unacked = sent.load(Ordering::Relaxed)
                 .saturating_sub(acked.load(Ordering::Relaxed));
@@ -179,25 +185,42 @@ pub async fn spawn_terminal(
                 Err(_) => break,
             }
         }
+        // Read loop exited (EOF, error, or stopped flag). No exit detection here --
+        // the monitoring thread handles that independently.
+    });
 
-        // --- PTY exit detection with real exit code (D-08, UX-03) ---
-        // Brief delay for tmux to register pane death (Pitfall 3)
-        std::thread::sleep(std::time::Duration::from_millis(300));
+    // --- Pane-death monitoring thread (08-05, UX-03, D-08) ---
+    // remain-on-exit keeps the PTY master alive after shell exit, so the read loop
+    // never gets EOF. This separate thread polls tmux pane_dead status to detect
+    // process exit and emit pty-exited with the real exit code.
+    let app_for_monitor = app.clone();
+    let session_for_monitor = sanitized.clone();
+    std::thread::spawn(move || {
+        // Initial delay: let tmux stabilize after session creation
+        std::thread::sleep(std::time::Duration::from_secs(1));
 
-        // Step 1: Check if tmux session still exists
-        // With remain-on-exit=on, session stays alive after process exits,
-        // allowing us to query the inner process's actual exit code.
-        let session_alive = std::process::Command::new("tmux")
-            .args(["has-session", "-t", &session_for_exit])
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
+        loop {
+            // Check if session still exists at all
+            let session_exists = std::process::Command::new("tmux")
+                .args(["has-session", "-t", &session_for_monitor])
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
 
-        let exit_code = if session_alive {
-            // Step 2: Query the dead pane's exit status via tmux
-            // #{pane_dead_status} returns the exit code of the process that ran in the pane
-            let code = std::process::Command::new("tmux")
-                .args(["display-message", "-t", &session_for_exit, "-p", "#{pane_dead_status}"])
+            if !session_exists {
+                // Session gone (external kill, tmux server died) -- emit exit code 0
+                stopped.store(true, Ordering::Relaxed);
+                let payload = serde_json::json!({
+                    "session": session_for_monitor,
+                    "code": 0
+                });
+                let _ = app_for_monitor.emit("pty-exited", payload);
+                break;
+            }
+
+            // Poll pane_dead status
+            let pane_dead = std::process::Command::new("tmux")
+                .args(["display-message", "-t", &session_for_monitor, "-p", "#{pane_dead}"])
                 .output()
                 .ok()
                 .and_then(|o| {
@@ -207,26 +230,45 @@ pub async fn spawn_terminal(
                         None
                     }
                 })
-                .and_then(|s| s.trim().parse::<i32>().ok())
-                .unwrap_or(0); // If parsing fails, assume normal exit
+                .map(|s| s.trim() == "1")
+                .unwrap_or(false);
 
-            // Step 3: Clean up the remain-on-exit session now that we have the exit code
-            let _ = std::process::Command::new("tmux")
-                .args(["kill-session", "-t", &session_for_exit])
-                .output();
+            if pane_dead {
+                // Pane is dead -- query real exit code before killing session
+                let exit_code = std::process::Command::new("tmux")
+                    .args(["display-message", "-t", &session_for_monitor, "-p", "#{pane_dead_status}"])
+                    .output()
+                    .ok()
+                    .and_then(|o| {
+                        if o.status.success() {
+                            String::from_utf8(o.stdout).ok()
+                        } else {
+                            None
+                        }
+                    })
+                    .and_then(|s| s.trim().parse::<i32>().ok())
+                    .unwrap_or(0); // T-08-05-02: default to 0 if parsing fails
 
-            code
-        } else {
-            // Session already gone (race condition or external kill) -- assume normal exit
-            0
-        };
+                // Kill the dead session now that we have the exit code
+                let _ = std::process::Command::new("tmux")
+                    .args(["kill-session", "-t", &session_for_monitor])
+                    .output();
 
-        // Step 4: Emit pty-exited event with real exit code
-        let payload = serde_json::json!({
-            "session": session_for_exit,
-            "code": exit_code
-        });
-        let _ = app_for_exit.emit("pty-exited", payload);
+                // Signal read loop to stop
+                stopped.store(true, Ordering::Relaxed);
+
+                // Emit pty-exited with real exit code
+                let payload = serde_json::json!({
+                    "session": session_for_monitor,
+                    "code": exit_code
+                });
+                let _ = app_for_monitor.emit("pty-exited", payload);
+                break;
+            }
+
+            // Poll every 500ms
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
     });
 
     Ok(())
@@ -364,4 +406,36 @@ pub fn switch_tmux_session(
 pub fn get_pty_sessions(manager: tauri::State<'_, PtyManager>) -> Result<Vec<String>, String> {
     let map = manager.0.lock().map_err(|e| e.to_string())?;
     Ok(map.keys().cloned().collect())
+}
+
+/// Clean up dead tmux sessions left over from prior runs (08-05, UX-03).
+/// Queries all tmux sessions for pane_dead=1 and kills them.
+/// Called from JS on app startup to prevent reattaching to dead sessions.
+#[tauri::command]
+pub fn cleanup_dead_sessions() -> Result<Vec<String>, String> {
+    let output = std::process::Command::new("tmux")
+        .args(["list-sessions", "-F", "#{session_name}:#{pane_dead}"])
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if !output.status.success() {
+        // No tmux server running -- nothing to clean up
+        return Ok(vec![]);
+    }
+
+    let stdout = String::from_utf8(output.stdout).map_err(|e| e.to_string())?;
+    let mut cleaned = Vec::new();
+
+    for line in stdout.lines() {
+        let parts: Vec<&str> = line.splitn(2, ':').collect();
+        if parts.len() == 2 && parts[1] == "1" {
+            let session_name = parts[0];
+            let _ = std::process::Command::new("tmux")
+                .args(["kill-session", "-t", session_name])
+                .output();
+            cleaned.push(session_name.to_string());
+        }
+    }
+
+    Ok(cleaned)
 }
