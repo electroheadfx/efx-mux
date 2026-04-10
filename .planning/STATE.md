@@ -103,9 +103,10 @@ None yet.
 | 260409-ciq | Replace Ctrl+` with Ctrl+S, fix terminal exit, free-text agent input | 2026-04-09 | 4d824b3 | [260409-ciq-replace-ctrl-backtick-with-ctrl-s-for-se](./quick/260409-ciq-replace-ctrl-backtick-with-ctrl-s-for-se/) |
 | 260409-f4m | Add shortcut cmd+k for clear TUI for main and sider terminal | 2026-04-09 | bebeb2f | [260409-f4m-add-shortcut-cmd-k-for-clear-tui-for-mai](./quick/260409-f4m-add-shortcut-cmd-k-for-clear-tui-for-mai/) |
 | 260410-uy5 | Right sidebar UI polish: tab order/defaults, font sizes, File Tree controls | 2026-04-10 | b64815b | [260410-uy5-right-sidebar-ui-polish-tab-order-defaul](./quick/260410-uy5-right-sidebar-ui-polish-tab-order-defaul/) |
+| 260410-vc7 | UI fixes: left sidebar padding, TUI newlines, pane backgrounds, git pane font size | 2026-04-10 | 6567be1 | [260410-vc7-ui-fixes-left-sidebar-padding-tui-newlin](./quick/260410-vc7-ui-fixes-left-sidebar-padding-tui-newlin/) |
 
 ## Session Continuity
 
-Last activity: 2026-04-10 - Completed quick task 260410-uy5: Right sidebar UI polish: tab order/defaults, font sizes, File Tree controls
+Last activity: 2026-04-10 - Completed quick task 260410-vc7: UI fixes: left sidebar padding, TUI newlines, pane backgrounds, git pane font size
 Stopped at: Phase 10 UI-SPEC approved
 Resume file: .planning/phases/10-pixel-perfect-ui-rewrite/10-UI-SPEC.md
