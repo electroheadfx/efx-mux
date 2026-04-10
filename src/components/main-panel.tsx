@@ -3,12 +3,14 @@
 // Phase 6 gap closure: file viewer overlay for read-only file display (PANEL-06)
 // Phase 7: Server pane component with 3-state collapse
 // Migrated from Arrow.js to Preact TSX (Phase 6.1)
+// Phase 10: Navy-blue palette rewrite (Plan 06)
 
 import { signal } from '@preact/signals';
 import { useEffect } from 'preact/hooks';
 import { ServerPane, serverPaneState } from './server-pane';
 import { TerminalTabBar, ActiveTabCrashOverlay } from './terminal-tabs';
 import { AgentHeader } from './agent-header';
+import { colors } from '../tokens';
 
 // Module-level signals for file viewer state
 const fileViewerVisible = signal(false);
@@ -73,19 +75,20 @@ export function MainPanel() {
       </div>
 
       {fileViewerVisible.value && (
-        <div class="absolute inset-0 flex flex-col bg-bg z-10">
-          <div class="flex items-center justify-between px-3 py-1.5 bg-bg-raised border-b border-border shrink-0">
+        <div class="absolute inset-0 flex flex-col" style={{ backgroundColor: colors.bgBase }}>
+          <div class="flex items-center justify-between px-3 py-1.5 shrink-0" style={{ backgroundColor: colors.bgElevated, borderBottom: `1px solid ${colors.bgBorder}` }}>
             <div class="flex items-center gap-2 min-w-0">
-              <span class="text-[10px] px-1.5 py-px rounded-sm bg-accent text-bg font-semibold tracking-wider shrink-0">READ-ONLY</span>
-              <span class="text-text-bright text-[13px] font-mono overflow-hidden text-ellipsis whitespace-nowrap">{fileName.value}</span>
+              <span class="text-[10px] px-1.5 py-px rounded-sm font-semibold tracking-wider shrink-0" style={{ backgroundColor: colors.accent, color: colors.bgBase }}>READ-ONLY</span>
+              <span class="text-[13px] font-mono overflow-hidden text-ellipsis whitespace-nowrap" style={{ fontFamily: 'GeistMono', color: colors.textSecondary }}>{fileName.value}</span>
             </div>
             <button
               onClick={closeFileViewer}
-              class="bg-transparent border border-border text-text cursor-pointer px-2.5 py-1 rounded text-xs font-mono transition-colors duration-150 hover:bg-bg hover:text-text-bright hover:border-accent"
+              class="cursor-pointer px-2.5 py-1 rounded text-xs font-mono transition-colors duration-150"
+              style={{ fontFamily: 'GeistMono', backgroundColor: 'transparent', border: `1px solid ${colors.bgBorder}`, color: colors.textMuted }}
               title="Close file viewer (Esc)"
             >Close</button>
           </div>
-          <pre class="flex-1 m-0 px-4 py-3 overflow-auto text-text text-[13px] font-mono leading-relaxed whitespace-pre tab-[4]"
+          <pre class="flex-1 m-0 px-4 py-3 overflow-auto text-[13px] font-mono leading-relaxed whitespace-pre tab-[4]" style={{ fontFamily: 'GeistMono', color: colors.textMuted }}
             dangerouslySetInnerHTML={{ __html: escapeHtml(fileContent.value) }}
           />
         </div>

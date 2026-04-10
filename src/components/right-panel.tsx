@@ -2,11 +2,13 @@
 // D-11: Tab bars for right-top (GSD/Diff/File Tree) and right-bottom (Bash)
 // D-12: Bash terminal lazy-connects via connectPty on first tab selection
 // Migrated from Arrow.js to Preact TSX (Phase 6.1)
+// Phase 10: Navy-blue palette rewrite (Plan 06)
 
 import { useEffect, useRef } from 'preact/hooks';
 import { invoke } from '@tauri-apps/api/core';
 import { rightTopTab, rightBottomTab, loadAppState, activeProjectName, projects } from '../state-manager';
 import { getTheme, registerTerminal } from '../theme/theme-manager';
+import { colors } from '../tokens';
 import { TabBar } from './tab-bar';
 import { GSDViewer } from './gsd-viewer';
 import { DiffViewer } from './diff-viewer';
@@ -98,7 +100,7 @@ export function RightPanel() {
   }, []);
 
   return (
-    <aside class="right-panel" aria-label="Right panel">
+    <aside class="right-panel" aria-label="Right panel" style={{ backgroundColor: colors.bgBase, borderLeft: `1px solid ${colors.bgBorder}` }}>
       {/* Top panel: GSD / Diff / File Tree */}
       <div class="right-top flex flex-col min-h-0">
         <TabBar
@@ -135,7 +137,7 @@ export function RightPanel() {
           activeTab={rightBottomTab}
           onSwitch={(tab) => { rightBottomTab.value = tab; }}
         />
-        <div class="right-bottom-content flex-1 min-h-0 overflow-hidden">
+        <div class="right-bottom-content flex-1 min-h-0 overflow-hidden" style={{ backgroundColor: colors.bgDeep }}>
           <div
             ref={bashContainerRef}
             class="bash-terminal h-full"
