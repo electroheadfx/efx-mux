@@ -2,20 +2,21 @@
 @import "@xterm/xterm/css/xterm.css";
 
 @theme {
-  --color-bg: #0D1117;
-  --color-bg-raised: #161B22;
-  --color-bg-terminal: #010409;
-  --color-border: #1B2028;
-  --color-border-interactive: #30363D;
-  --color-text: #8B949E;
-  --color-text-bright: #E6EDF3;
-  --color-accent: #258AD1;
+  --color-bg: #111927;           /* bgBase */
+  --color-bg-raised: #19243A;    /* bgElevated */
+  --color-bg-terminal: #0B1120;  /* bgDeep */
+  --color-border: #243352;       /* bgBorder */
+  --color-border-interactive: #324568; /* bgSurface */
+  --color-text: #8B949E;         /* textMuted */
+  --color-text-bright: #E6EDF3;  /* textPrimary */
+  --color-text-secondary: #C9D1D9; /* textSecondary (NEW — for GSD content subheadings) */
+  --color-text-muted: #556A85;   /* textDim */
+  --color-accent: #258AD1;       /* unchanged from Phase 9 */
   --color-success: #3FB950;
   --color-warning: #D29922;
   --color-danger: #F85149;
-  --color-text-muted: #484F58;
 
-  /* Light mode values */
+  /* Light mode values — preserved as-is for now (Claude's discretion per D-14) */
   --color-bg-light: #FFFFFF;
   --color-bg-raised-light: #F6F8FA;
   --color-bg-terminal-light: #FFFFFF;
@@ -78,7 +79,7 @@
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 1.2px;
-  color: var(--color-text);
+  color: var(--color-text-muted);
 }
 
 /* Dynamic layout properties (set by JS drag-manager) */
