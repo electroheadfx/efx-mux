@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed quick task 260410-wky
-last_updated: "2026-04-10T21:28:49.253Z"
+stopped_at: Completed quick task 260410-x7o
+last_updated: "2026-04-10T21:58:56.402Z"
 last_activity: 2026-04-10 -- Phase 10 execution started
 progress:
   total_phases: 12
@@ -108,9 +108,10 @@ None yet.
 | 260410-wne | make git change 'Git changes' content padding to: 4px (every) in left sidebar | 2026-04-10 | 65bfc0a | [260410-wne-make-git-change-git-changes-content-padd](./quick/260410-wne-make-git-change-git-changes-content-padd/) |
 | 260410-wtw | right sidebar, Filetree pane no open by default when I Open the app | 2026-04-10 | ee94fe1 | [260410-wtw-right-sidebar-filetree-pane-no-open-by-d](./quick/260410-wtw-right-sidebar-filetree-pane-no-open-by-d/) |
 | 260410-x26 | server pane at bottom has no the default color, instead it has: #282D3A, instead the color of other TUI | 2026-04-10 | 0a611ba | [260410-x26-server-pane-at-bottom-has-no-the-default](./quick/260410-x26-server-pane-at-bottom-has-no-the-default/) |
+| 260410-x7o | claude code, when App open, get plenty new lines in command line | 2026-04-10 | 54ace1e | [260410-x7o-claude-code-when-app-open-get-plenty-new](./quick/260410-x7o-claude-code-when-app-open-get-plenty-new/) |
 
 ## Session Continuity
 
-Last activity: 2026-04-10 - Completed quick task 260410-x26: server pane at bottom has no the default color, instead it has: #282D3A, instead the color of other TUI
-Stopped at: Completed quick task 260410-wtw
+Last activity: 2026-04-10 - Completed quick task 260410-x7o: claude code, when App open, get plenty new lines in command line
+Stopped at: Completed quick task 260410-x7o
 Resume file: None
