@@ -240,7 +240,7 @@ function GitFileRow({ file }: { file: { name: string; path: string; status: stri
         display: 'flex',
         alignItems: 'center',
         gap: 8,
-        padding: '5px 16px 5px 32px',
+        padding: '4px',
         cursor: 'pointer',
       }}
       class="hover:bg-bg-raised"
@@ -664,7 +664,7 @@ export function Sidebar() {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 6,
-                    padding: '6px 16px',
+                    padding: '4px',
                   }}
                 >
                   <span
@@ -689,7 +689,7 @@ export function Sidebar() {
               {gitFiles.value.length === 0 && totalChanges.value === 0 && (
                 <div
                   style={{
-                    padding: '6px 16px',
+                    padding: '4px',
                     fontFamily: fonts.mono,
                     fontSize: 12,
                     color: colors.textMuted,
