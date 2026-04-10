@@ -265,7 +265,7 @@ Phases execute in numeric order. Note: Phases 3 and 6 are parallelizable after P
   - Modals: #161B22 fill, 12px radius, header divider, shadow-2xl, 24px padding
   - Keyboard hints: keycap style (#0D1117 fill + #30363D border + 4px radius)
 
-**Plans**: 5 plans
+**Plans**: 6 plans
 
 Plans:
 - [x] 09-01-PLAN.md -- Foundation: color palette tokens + Geist fonts + theme-manager sync
@@ -273,3 +273,4 @@ Plans:
 - [x] 09-03-PLAN.md -- GitHub-style diff viewer + file tree with Lucide icons
 - [x] 09-04-PLAN.md -- Modal and preferences panel restyle
 - [x] 09-05-PLAN.md -- Agent header card + Rust version detection + GSD viewer update
+- [x] 09-06-PLAN.md -- Gap closure: hardcoded text colors, inline gradients, theme detection
