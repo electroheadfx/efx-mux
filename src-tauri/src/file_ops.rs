@@ -15,6 +15,7 @@ pub struct FileEntry {
     pub name: String,
     pub path: String,
     pub is_dir: bool,
+    pub size: Option<u64>,
 }
 
 /// Validate that a path does not contain traversal components.
@@ -65,11 +66,19 @@ pub async fn get_file_diff(path: String) -> Result<String, String> {
         diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
             let origin = line.origin();
             match origin {
-                '+' | '-' | ' ' => output.push(origin),
+                '+' | '-' | ' ' => {
+                    output.push(origin);
+                    if let Ok(content) = std::str::from_utf8(line.content()) {
+                        output.push_str(content);
+                    }
+                }
+                'H' => {
+                    // Hunk header line (@@...@@)
+                    if let Ok(content) = std::str::from_utf8(line.content()) {
+                        output.push_str(content);
+                    }
+                }
                 _ => {}
-            }
-            if let Ok(content) = std::str::from_utf8(line.content()) {
-                output.push_str(content);
             }
             true
         })
@@ -121,10 +130,12 @@ pub async fn list_directory(path: String, project_root: Option<String>) -> Resul
             .filter_map(|entry| {
                 let entry = entry.ok()?;
                 let metadata = entry.metadata().ok()?;
+                let is_dir = metadata.is_dir();
                 Some(FileEntry {
                     name: entry.file_name().to_string_lossy().to_string(),
                     path: entry.path().to_string_lossy().to_string(),
-                    is_dir: metadata.is_dir(),
+                    is_dir,
+                    size: if is_dir { None } else { Some(metadata.len()) },
                 })
             })
             .collect();
