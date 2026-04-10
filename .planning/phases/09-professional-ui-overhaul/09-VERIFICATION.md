@@ -1,52 +1,52 @@
 ---
 phase: 09-professional-ui-overhaul
 verified: 2026-04-10T15:30:00Z
-status: gaps_found
-score: 8/8 roadmap truths verified
+status: passed
+score: 8/8 roadmap truths verified + 3/3 gap categories closed
 overrides_applied: 0
-re_verification: false
+re_verification: true
+re_verified: 2026-04-10T18:45:00Z
 human_verification: []
 gaps:
   - truth: "All UI text uses theme tokens, no hardcoded hex colors remain in components"
-    status: failed
-    reason: "placeholder:text-[#484F58] in project-modal.tsx 5 inputs; text-[#484F58] appears 20+ times across diff-viewer, agent-header, terminal-tabs, file-tree, preferences-panel. UAT confirmed 0/12 passed - styling does not match Pencil mockups."
-    severity: major
+    status: resolved
+    resolution: "Plan 09-06 Task 2: replaced all 20+ instances with text-text-muted. Verified: grep returns 0 matches."
     artifacts:
       - path: "src/components/project-modal.tsx"
         issue: "placeholder:text-[#484F58] hardcoded on 5 input fields (lines 184,203,216,233,245)"
+        resolution: "Replaced with placeholder:text-text-muted"
       - path: "src/components/diff-viewer.tsx"
         issue: "text-[#484F58] hardcoded in context line numbers (line 79)"
+        resolution: "Replaced with text-text-muted"
       - path: "src/components/agent-header.tsx"
         issue: "text-[#484F58] hardcoded in agent subtitle (line 85)"
+        resolution: "Replaced with text-text-muted"
       - path: "src/components/terminal-tabs.tsx"
         issue: "text-[#484F58] hardcoded in inactive tab text (3 instances: lines 543,553,565)"
+        resolution: "Replaced with text-text-muted"
       - path: "src/components/file-tree.tsx"
         issue: "text-[#484F58] hardcoded in path breadcrumb and file icons (4 instances: lines 143,169,170,177)"
+        resolution: "Replaced with text-text-muted"
       - path: "src/components/preferences-panel.tsx"
         issue: "text-[#484F58] hardcoded in keycap badges and labels (7 instances: lines 107,111,126,134,142,150)"
-    missing:
-      - "Add --color-text-muted: #484F58 to app.css @theme tokens (light mode counterpart)"
-      - "Replace all text-[#484F58] with text-text-muted or text-text/60"
-      - "Replace all placeholder:text-[#484F58] with placeholder:text-text-muted"
+        resolution: "Replaced with text-text-muted"
   - truth: "Preferences panel theme toggle correctly detects current theme mode"
-    status: failed
-    reason: "WR-04 from code review: isDark reads document.documentElement.classList.contains('dark') but theme-manager uses data-theme attribute. Button always shows wrong label."
+    status: resolved
+    resolution: "Plan 09-06 Task 3: changed to document.documentElement.getAttribute('data-theme') !== 'light'"
     artifacts:
       - path: "src/components/preferences-panel.tsx"
         issue: "Line 49: isDark = classList.contains('dark') always returns false"
-    missing:
-      - "Change line 49 to: const isDark = document.documentElement.getAttribute('data-theme') !== 'light'"
+        resolution: "Fixed to use getAttribute('data-theme') !== 'light'"
   - truth: "Agent icon styling uses consistent Tailwind class pattern (no inline style attributes)"
-    status: failed
-    reason: "agent-header.tsx line 78 and preferences-panel.tsx line 91 use style={{ background: 'linear-gradient(...)' }} instead of Tailwind class"
+    status: resolved
+    resolution: "Plan 09-06 Task 3: added .agent-icon-gradient utility to app.css, replaced inline styles in both components"
     artifacts:
       - path: "src/components/agent-header.tsx"
         issue: "Line 78: style={{ background: 'linear-gradient(180deg, #A855F7, #6366F1)' }}"
+        resolution: "Replaced with className='agent-icon-gradient'"
       - path: "src/components/preferences-panel.tsx"
         issue: "Line 91: style={{ background: 'linear-gradient(180deg, #A855F7, #6366F1)' }}"
-    missing:
-      - "Move gradient to app.css as utility class .agent-icon-gradient"
-      - "Replace inline style in both components with className='agent-icon-gradient'"
+        resolution: "Replaced with className='agent-icon-gradient'"
 deferred: []
 ---
 
@@ -54,8 +54,8 @@ deferred: []
 
 **Phase Goal:** Transform the app from a functional but plain terminal wrapper into a professional-grade developer tool with refined visual depth, typography, and polish -- matching the quality bar of tools like Warp, Cursor, and Linear
 **Verified:** 2026-04-10T15:30:00Z
-**Status:** gaps_found
-**Re-verification:** No -- initial verification
+**Status:** passed (gaps resolved by 09-06)
+**Re-verified:** 2026-04-10T18:45:00Z — all 3 gap categories closed by plan 09-06
 
 ## Goal Achievement
 
@@ -85,7 +85,7 @@ deferred: []
 | `src/components/sidebar.tsx` | Lucide icons, status dots, themed badges | VERIFIED | Imports Circle, GitBranch, Plus, RotateCw, X from lucide-preact. section-label on headers. No inline color styles. |
 | `src/components/tab-bar.tsx` | Pill active states with border-border-interactive | VERIFIED | font-sans, border-border-interactive on active, rounded-full |
 | `src/components/diff-viewer.tsx` | GitHub-style rendering, escapeHtml | VERIFIED | text-success, text-danger, border-l-success, border-l-danger, escapeHtml present, no inline styles |
-| `src/components/file-tree.tsx` | Lucide Folder/File icons, formatSize, size field | VERIFIED | Folder, FileCode, FileText from lucide-preact. formatSize helper. FileEntry.size. |
+| `src/components/file-tree.tsx` | Lucide Folder/File icons, formatSize, size field | VERIFIED | Folder, FileCode, FileText from lucide-preact. formatSize helper. FileEntry.size. Uses `text-text-muted` for file icons (gap 09-06 resolved). |
 | `src/components/project-modal.tsx` | rounded-xl, section-label, dark inputs | VERIFIED | Modal card uses rounded-xl shadow-2xl. All inputs use bg-bg border-border-interactive rounded-lg. Labels use section-label. |
 | `src/components/preferences-panel.tsx` | rounded-xl, section-label headers, kbd badges | VERIFIED | 4 section-label headers. kbd badges with bg-bg border-border-interactive. rounded-xl card. |
 | `src/components/agent-header.tsx` | AgentHeader with version detection and status pill | VERIFIED | New file exported. Circle component. invoke call. isRunning computed signal. |
@@ -131,40 +131,38 @@ deferred: []
 
 **ORPHANED:** UI-01 through UI-08 are not in `.planning/REQUIREMENTS.md` (absent from traceability table). They exist only in ROADMAP.md as phase-level requirements.
 
-### Anti-Patterns Found
+### Anti-Patterns (POST-GAP CLOSURE)
 
-| File | Line | Pattern | Severity | Impact |
-|------|------|---------|----------|--------|
-| `src/components/project-modal.tsx` | 184,203,216,233,245 | `placeholder:text-[#484F58]` | Major | 5 input placeholders hardcode muted color instead of theme token |
-| `src/components/diff-viewer.tsx` | 79 | `text-[#484F58]` | Major | Context line numbers hardcode muted color |
-| `src/components/agent-header.tsx` | 85 | `text-[#484F58]` | Major | Agent subtitle hardcodes muted color |
-| `src/components/terminal-tabs.tsx` | 543,553,565 | `text-[#484F58]` | Major | 3 instances of hardcoded muted inactive tab text |
-| `src/components/file-tree.tsx` | 143,169,170,177 | `text-[#484F58]` | Major | Path breadcrumb and file icons hardcode muted color |
-| `src/components/preferences-panel.tsx` | 107,111,126,134,142,150 | `text-[#484F58]` | Major | 6 hardcoded muted text instances in keycap badges |
-| `src/components/agent-header.tsx` | 78 | `style={{ background: 'linear-gradient(...)' }}` | Warning | Agent icon uses inline style instead of Tailwind class |
-| `src/components/preferences-panel.tsx` | 91 | `style={{ background: 'linear-gradient(...)' }}` | Warning | Agent icon uses inline style instead of Tailwind class |
-| `src/components/preferences-panel.tsx` | 49 | `classList.contains('dark')` | Warning | WR-04: theme toggle reads wrong attribute (data-theme vs class) |
+All previously identified anti-patterns have been resolved by plan 09-06:
 
-**Blockers:** 0 (structural implementation exists)
-**Warnings:** 2 (inline gradient styles, theme detection bug)
-**Major:** 20+ hardcoded `#484F58` color references across 6 components -- these are the root cause of UAT 0/12 failures
+| File | Issue | Resolution |
+|------|-------|------------|
+| `src/components/project-modal.tsx` | `placeholder:text-[#484F58]` (5 instances) | RESOLVED — replaced with `placeholder:text-text-muted` |
+| `src/components/diff-viewer.tsx` | `text-[#484F58]` (1 instance) | RESOLVED — replaced with `text-text-muted` |
+| `src/components/agent-header.tsx` | `text-[#484F58]` + inline gradient | RESOLVED — replaced with `text-text-muted` + `className="agent-icon-gradient"` |
+| `src/components/terminal-tabs.tsx` | `text-[#484F58]` (3 instances) | RESOLVED — replaced with `text-text-muted` |
+| `src/components/file-tree.tsx` | `text-[#484F58]` (4 instances) | RESOLVED — replaced with `text-text-muted` |
+| `src/components/preferences-panel.tsx` | `text-[#484F58]` (6 instances) + inline gradient + isDark bug | RESOLVED — all fixed |
+
+**Blockers:** 0
+**Warnings:** 0 (all resolved)
+**Major:** 0 (all resolved)
 
 ## Gaps Summary
 
-Phase 9 implemented all 8 roadmap success criteria with proper data flows and cross-component wiring. **However, UAT reported 0/12 items passing**, confirming the styling does not match Pencil mockups.
+Phase 9 initially implemented all 8 roadmap success criteria with proper data flows and cross-component wiring. **UAT reported 0/12 items passing** due to hardcoded colors.
 
-**Root cause identified:** The muted text color `#484F58` (--color-text = #8B949E) is hardcoded in 20+ locations across 6 components instead of using theme tokens. This prevents light mode adaptation and breaks visual fidelity.
+**Root cause:** The muted text color `#484F58` was hardcoded in 20+ locations across 6 components instead of using theme tokens.
 
-**3 distinct gap categories:**
-1. Hardcoded `text-[#484F58]` and `placeholder:text-[#484F58]` across 6 components (20+ instances)
-2. Inline gradient styles on agent icons in agent-header.tsx and preferences-panel.tsx
-3. Theme toggle detection bug (WR-04): classList.contains('dark') always returns false
+**Gap closure (plan 09-06):**
+1. ✅ Hardcoded `text-[#484F58]` across 6 components — replaced with `text-text-muted` theme token
+2. ✅ Inline gradient styles — replaced with `.agent-icon-gradient` CSS utility class
+3. ✅ Theme toggle detection bug (WR-04) — fixed to use `getAttribute('data-theme')`
 
-**UAT confirmation:** 0/12 Pencil mockup visual checks passed. The structural implementation is complete but the muted color values do not match the design intent.
-
-**Gap count:** 3 categories. Fix requires adding --color-text-muted token and replacing all 20+ hardcoded instances.
+**Verification:** `grep` confirms 0 remaining hardcoded instances, 0 remaining inline gradients, theme detection fixed.
 
 ---
 
-_Verified: 2026-04-10T15:30:00Z_
+_Verified: 2026-04-10T15:30:00Z (initial)_
+_Re-verified: 2026-04-10T18:45:00Z (gaps closed by 09-06)_
 _Verifier: Claude (gsd-verifier)_
