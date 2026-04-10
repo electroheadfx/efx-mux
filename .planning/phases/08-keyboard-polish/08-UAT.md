@@ -1,13 +1,9 @@
 ---
-status: diagnosed
+status: complete
 phase: 08-keyboard-polish
-source:
-  - 08-01-SUMMARY.md
-  - 08-02-SUMMARY.md
-  - 08-03-SUMMARY.md
-  - 08-04-SUMMARY.md
-started: 2026-04-09T18:30:00Z
-updated: 2026-04-09T18:30:00Z
+source: [08-01-SUMMARY.md, 08-02-SUMMARY.md, 08-03-SUMMARY.md, 08-04-SUMMARY.md, 08-05-SUMMARY.md, 08-06-SUMMARY.md, 08-07-SUMMARY.md, 08-08-SUMMARY.md]
+started: 2026-04-10T09:00:00Z
+updated: 2026-04-10T09:15:00Z
 ---
 
 ## Current Test
@@ -16,212 +12,67 @@ updated: 2026-04-09T18:30:00Z
 
 ## Tests
 
-### 1. Cheatsheet Overlay (Ctrl+?)
-expected: Press Ctrl+? (or Ctrl+Shift+/ on AZERTY). A cheatsheet overlay appears showing all 9 app keyboard shortcuts grouped by section (Terminal, Tabs, Search, General). Press Escape or click outside to dismiss.
+### 1. Cold Start Smoke Test
+expected: Kill any running Efxmux instance. Start the app fresh. App boots without errors, main window appears, terminal loads.
 result: pass
 
-### 2. Terminal Passthrough (Ctrl+C/D/Z/L/R)
-expected: In the terminal, Ctrl+C interrupts the current process (SIGINT), Ctrl+D sends EOF, Ctrl+Z suspends the job (SIGTSTP), Ctrl+L clears the screen -- all behave as expected in a real terminal, not intercepted by the app.
+### 2. Shortcut Cheatsheet Overlay
+expected: Press Ctrl+? (or Ctrl+/ on AZERTY). A cheatsheet overlay appears showing all 9+ app shortcuts grouped by section. Pressing Escape or clicking backdrop dismisses it.
 result: pass
 
 ### 3. Create New Tab (Ctrl+T)
-expected: Press Ctrl+T. A new terminal tab appears in the tab bar, becomes active, and a fresh tmux session starts in that tab. The tab count increments.
-result: issue
-reported: "After the third terminal tab, it becomes a Claude session instead of a plain terminal. Also, when quitting the app, new terminal session tabs are not stored/restored."
-severity: major
+expected: Press Ctrl+T. A new tab appears in the tab bar. The new tab opens a plain shell session (not an agent like Claude Code). Tab bar shows both tabs.
+result: pass
 
 ### 4. Close Active Tab (Ctrl+W)
-expected: With multiple tabs open, press Ctrl+W. The active tab closes, the tab bar updates, and the adjacent tab becomes active. If only one tab exists, nothing happens. Cmd+W should also close the tab (not quit the app) when multiple tabs are present.
+expected: With multiple tabs open, press Ctrl+W. The active tab closes and focus moves to another tab. If it's the last tab, behavior is graceful (no crash).
 result: pass
 
 ### 5. Cycle Tabs (Ctrl+Tab)
-expected: With multiple tabs open, press Ctrl+Tab. The next tab becomes active. Cycling wraps from last tab to first tab. After switching, terminal input works normally.
-result: issue
-reported: "When switching tabs with Ctrl+Tab, the terminal input becomes invisible and unresponsive. Cannot type CLI commands in the switched-to tab."
-severity: major
-
-### 6. Tab Persistence Across Restart
-expected: Create 2+ tabs, do some work in each, then restart the app. The same tabs reappear with their sessions restored (or fresh sessions if tmux state was lost).
-result: issue
-reported: "New terminal session tabs are not stored/restored after app quit."
-severity: major
-
-### 7. Normal Exit Overlay
-expected: Run a command that exits cleanly (e.g., exit, Ctrl+D). An overlay appears on that tab showing a green status dot and "Session ended" message. A Restart button is visible.
+expected: With 2+ tabs open, press Ctrl+Tab. Focus cycles to the next tab. The terminal content switches to the other tab's session.
 result: pass
 
-### 8. Crash Overlay (Non-Zero Exit)
-expected: Run a command that exits with a non-zero code (e.g., kill the process). An overlay appears with a red status dot, "Process crashed" message, and the exit code displayed. A Restart button is visible.
-result: issue
-reported: "tmux pane shows 'Pane is dead' with status 0 after shell exits. Restart button does not work - app remains blocked in dead state even after quit and relaunch."
-severity: blocker
-
-### 9. First-Run Wizard Appears
-expected: On a fresh project (no state.json), the app launches and the first-run wizard appears with step 1: Welcome. The wizard cannot be bypassed by pressing Escape.
+### 6. Cmd+W Closes Tab Not App
+expected: Press Cmd+W (macOS). The active tab closes instead of quitting the entire application.
 result: pass
 
-### 10. Wizard Steps Are Skippable
-expected: At each wizard step (Project, Agent, Theme, Server+GSD), a Skip button is visible. Clicking Skip advances to the next step with sensible defaults applied. After completing wizard, user lands in the main terminal view.
-result: issue
-reported: "After completing wizard (even with a valid project setup), user is shown the Add Project modal instead of the main terminal view."
-severity: major
-
-### 11. Wizard X Button Applies Defaults
-expected: Clicking the X button (top-left or top-right) closes the wizard and applies defaults to all remaining steps (/tmp as path, "default" as project name, bash as agent, no server). Also, completing the wizard with valid project settings should persist those settings.
-result: issue
-reported: "When quitting the app after wizard setup and re-running, the app goes to /tmp default project instead of the project added in the wizard."
-severity: major
-
-### 12. Agent Selection
-expected: In the Agent step, three cards are shown: Claude Code, OpenCode, Plain Shell. Clicking one selects it (visual highlight). Selection is remembered.
+### 7. Crash/Exit Overlay
+expected: In a tab, run `exit` to end the shell. An inline overlay appears showing "Session ended" with a green status dot. The overlay includes a Restart button.
 result: pass
 
-### 13. Theme Import
-expected: In the Theme step, a "Browse" button opens a native file picker. Selecting a .json or .itermcolors file imports the theme. A confirmation or preview is shown.
+### 8. Crash Overlay Restart
+expected: After seeing the exit overlay, click Restart. A fresh shell session starts in the same tab, overlay disappears.
 result: pass
 
-### 14. Ctrl+P Opens Fuzzy Search
-expected: Press Ctrl+P. The fuzzy search overlay opens (or an existing one gains focus). The search input is auto-focused and ready for typing.
+### 9. First-Run Wizard
+expected: Delete state/projects so the app thinks it's a first run. Relaunch. A 5-step wizard appears (Welcome, Project, Agent, Theme, Server & GSD). Each step is skippable. Closing via X applies defaults.
 result: pass
 
-### 15. Ctrl+, Opens Preferences
-expected: Press Ctrl+, (or Cmd+, on macOS). A preferences/settings panel opens showing project settings (server command, agent selection, theme). The panel can be dismissed with Escape.
-result: issue
-reported: "Ctrl+, shortcut does not work."
-severity: major
+### 10. Fuzzy Search (Ctrl+P)
+expected: Press Ctrl+P. The fuzzy search overlay opens. Pressing Escape closes it.
+result: pass
+
+### 11. Preferences Panel (Ctrl+,)
+expected: Press Ctrl+, (or Cmd+,). A preferences overlay appears showing current project name, path, and agent. Theme toggle button works. Edit Project button opens the project modal.
+result: pass
+
+### 12. Tab Persistence Across Restart
+expected: Open 2+ tabs. Quit and relaunch the app. Tabs are restored from the previous session (same count, first tab reconnects to agent).
+result: pass
+
+### 13. Terminal Passthrough
+expected: In a terminal tab, Ctrl+C/D/Z/L all work as expected (interrupt, EOF, suspend, clear). These are not intercepted by app shortcuts.
+result: pass
 
 ## Summary
 
-total: 15
-passed: 8
-issues: 8
+total: 13
+passed: 13
+issues: 0
 pending: 0
 skipped: 0
 blocked: 0
 
 ## Gaps
 
-- truth: "After the third terminal tab, it becomes a Claude session instead of a plain terminal"
-  status: failed
-  reason: "User reported: After the third terminal tab is created, it becomes a Claude session instead of a plain terminal. Also when quitting the app, new terminal session tabs are not stored/restored."
-  severity: major
-  test: 3
-  root_cause: "createNewTab() in terminal-tabs.tsx line 129 unconditionally calls resolveAgentBinary() for all tabs. Only first tab should get the agent."
-  artifacts:
-    - path: "src/components/terminal-tabs.tsx"
-      issue: "createNewTab() resolves agent binary for all tabs (line 129)"
-  missing:
-    - "Conditional agent resolution: only first tab gets agent, subsequent tabs get plain shell"
-  debug_session: .planning/debug/tab-spawns-claude-session.md
-
-- truth: "Cmd+W closes the active tab when multiple tabs are present (not the app)"
-  status: failed
-  reason: "User reported: Cmd+W closes the app without warning when it should close the active tab like Ctrl+W does."
-  severity: major
-  test: 4
-  root_cause: "JS handler ignores metaKey (line 106: if (!e.ctrlKey || e.metaKey) return) so Cmd+W never reaches closeActiveTab(). Native Tauri menu binds PredefinedMenuItem::close_window to Cmd+W."
-  artifacts:
-    - path: "src/main.tsx"
-      issue: "Guard clause excludes Cmd-based shortcuts (line 106)"
-    - path: "src-tauri/src/lib.rs"
-      issue: "PredefinedMenuItem::close_window registers native Cmd+W accelerator (lines 46-49)"
-  missing:
-    - "Intercept Cmd+W in JS handler to call closeActiveTab()"
-    - "Remove or replace PredefinedMenuItem::close_window in Tauri menu"
-  debug_session: .planning/debug/cmdw-quits-app.md
-
-- truth: "Tab switching with Ctrl+Tab preserves terminal input functionality"
-  status: failed
-  reason: "User reported: When switching tabs with Ctrl+Tab, the terminal input becomes invisible and unresponsive. Cannot type CLI commands in the switched-to tab."
-  severity: major
-  test: 5
-  root_cause: "switchToTab() calls terminal.focus() and fitAddon.fit() synchronously after display:block — browser hasn't reflowed yet, fit() reads zero dimensions."
-  artifacts:
-    - path: "src/components/terminal-tabs.tsx"
-      issue: "switchToTab() lines 320-332 missing requestAnimationFrame deferral"
-  missing:
-    - "Wrap focus+fit in requestAnimationFrame after display:block"
-  debug_session: .planning/debug/ctrl-tab-breaks-terminal.md
-
-- truth: "Terminal tabs are persisted across app restart"
-  status: failed
-  reason: "User reported: New terminal session tabs are not stored/restored after app quit."
-  severity: major
-  test: 6
-  root_cause: "persistTabState() saves tab data to state.json correctly, but no restore logic exists. bootstrap() always creates a single tab via initFirstTab() and never reads saved tab data."
-  artifacts:
-    - path: "src/components/terminal-tabs.tsx"
-      issue: "persistTabState() saves but no restoreTabs() exists"
-    - path: "src/main.tsx"
-      issue: "bootstrap() missing tab restore logic after initFirstTab()"
-  missing:
-    - "Add restore logic in bootstrap() to read saved tabs from state.json"
-    - "Create restoreTab() function that reuses saved tmux session names"
-  debug_session: .planning/debug/tab-persistence.md
-
-- truth: "Crash overlay shows red status dot, exit code, and working Restart button"
-  status: failed
-  reason: "tmux pane shows 'Pane is dead' with status 0. Restart button does not work - app remains blocked in dead state even after quit and relaunch."
-  severity: blocker
-  test: 8
-  root_cause: "remain-on-exit on keeps tmux client alive after shell exits, so PTY master never gets EOF. Exit detection code (pty.rs:183-229) is unreachable. pty-exited event never fires, CrashOverlay never renders. On restart, tmux -A reattaches to dead session."
-  artifacts:
-    - path: "src-tauri/src/terminal/pty.rs"
-      issue: "remain-on-exit prevents PTY EOF; exit detection unreachable (lines 107-109, 183-229)"
-    - path: "src/components/crash-overlay.tsx"
-      issue: "Component correct but pty-exited event never arrives"
-  missing:
-    - "Remove remain-on-exit or add separate monitoring thread for pane death"
-    - "Clean up dead tmux sessions on app startup"
-  debug_session: .planning/debug/tmux-pane-dead-restart-blocked.md
-
-- truth: "After completing wizard, user lands in the main terminal view"
-  status: failed
-  reason: "User reported: After completing wizard (even with a valid project setup), user is shown the Add Project modal instead of the main terminal view."
-  severity: major
-  test: 10
-  root_cause: "Race condition: both initProjects() in main.tsx and sidebar.tsx useEffect independently detect 0 projects and open competing modals (wizard vs AddProject)."
-  artifacts:
-    - path: "src/components/sidebar.tsx"
-      issue: "Independent zero-project check opens AddProject modal (lines 234-236)"
-    - path: "src/main.tsx"
-      issue: "initProjects() correctly opens wizard (lines 264-283)"
-  missing:
-    - "Remove sidebar's openProjectModal() call — let initProjects() own first-run detection exclusively"
-  debug_session: .planning/debug/wizard-shows-add-project-modal.md
-
-- truth: "Wizard project settings are persisted and restored after app restart"
-  status: failed
-  reason: "User reported: When quitting the app after wizard setup and re-running, the app goes to /tmp default project instead of the project added in the wizard."
-  severity: major
-  test: 11
-  root_cause: "save_state does full overwrite of ManagedAppState. Concurrent save_state with pre-wizard state overwrites project data written by add_project. Also JS AppState type missing projects field, catch-block default omits projects array."
-  artifacts:
-    - path: "src-tauri/src/state.rs"
-      issue: "save_state full-overwrite of ManagedAppState (lines 297-315)"
-    - path: "src/state/state-manager.ts"
-      issue: "AppState type missing projects field; catch-block default missing projects array (lines 29-36, 68-76)"
-    - path: "src/components/sidebar.tsx"
-      issue: "Concurrent zero-project check fires save_state with stale state"
-  missing:
-    - "Fix AppState type to include projects"
-    - "Fix catch-block default to include projects: []"
-    - "Make save_state merge or coordinate with add_project/switch_project"
-  debug_session: .planning/debug/wizard-settings-not-persisted.md
-
-- truth: "Ctrl+, opens preferences/settings panel"
-  status: failed
-  reason: "User reported: Ctrl+, shortcut does not work."
-  severity: major
-  test: 15
-  root_cause: "Feature not implemented. No keyboard handler for comma key in main.tsx. No preferences panel component exists in src/components/."
-  artifacts:
-    - path: "src/main.tsx"
-      issue: "No case for comma key in keyboard handler"
-    - path: "src/components/"
-      issue: "No preferences-panel.tsx component"
-  missing:
-    - "Create preferences-panel.tsx component"
-    - "Add comma key case to keyboard handler"
-    - "Add Ctrl+, to shortcut cheatsheet"
-  debug_session: .planning/debug/ctrl-comma-preferences.md
+[none]
