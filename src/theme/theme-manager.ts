@@ -11,6 +11,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
+import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from '../components/file-tree';
 
 // ---------------------------------------------------------------------------
 // Type definitions
@@ -30,6 +31,10 @@ export interface ChromeTheme {
   danger?: string;
   font?: string;
   fontSize?: number;
+  fileTreeBg?: string;
+  fileTreeFont?: string;
+  fileTreeFontSize?: number;
+  fileTreeLineHeight?: number;
 }
 
 export interface ThemeData {
@@ -95,6 +100,11 @@ export function applyTheme(theme: ThemeData): void {
     if (theme.chrome.danger) style.setProperty('--color-danger', theme.chrome.danger);
     if (theme.chrome.font) style.setProperty('--font-family-sans', `'${theme.chrome.font}', system-ui, sans-serif`);
     if (theme.chrome.fontSize) style.setProperty('--font-size', `${theme.chrome.fontSize}px`);
+    // File tree customization from theme
+    if (theme.chrome.fileTreeBg) fileTreeBgColor.value = theme.chrome.fileTreeBg;
+    if (theme.chrome.fileTreeFont) style.setProperty('--file-tree-font', theme.chrome.fileTreeFont);
+    if (theme.chrome.fileTreeFontSize) fileTreeFontSize.value = theme.chrome.fileTreeFontSize;
+    if (theme.chrome.fileTreeLineHeight) fileTreeLineHeight.value = theme.chrome.fileTreeLineHeight;
   }
 
   if (theme.terminal) {

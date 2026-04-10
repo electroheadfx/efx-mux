@@ -56,7 +56,7 @@ function renderDiffHtml(diff: string, filePath?: string): string {
       }
       const escaped = escapeHtml(line);
       bodyLines.push(
-        `<div style="background-color: ${colors.diffHunkBg}; padding: 8px 16px;">
+        `<div style="background-color: ${colors.diffHunkBg}; padding: 1px 7px 4px;">
           <span style="font-family: ${fonts.mono}; font-size: 12px; color: ${colors.accent};">${escaped}</span>
         </div>`
       );
@@ -65,9 +65,9 @@ function renderDiffHtml(diff: string, filePath?: string): string {
       const content = line.substring(1);
       const escaped = escapeHtml(content);
       bodyLines.push(
-        `<div style="background-color: ${colors.diffGreenBg}; border-left: 3px solid ${colors.statusGreen}; padding: 2px 16px; display: flex; gap: 12px;">
-          <span style="font-family: ${fonts.mono}; font-size: 12px; color: ${colors.diffGreenLineno}; width: 32px; text-align: right; shrink: 0; line-height: 24px;">${newLineNo}</span>
-          <span style="font-family: ${fonts.mono}; font-size: 12px; color: ${colors.statusGreen}; line-height: 24px;">${escaped || '&nbsp;'}</span>
+        `<div style="background-color: ${colors.diffGreenBg}; border-left: 3px solid ${colors.statusGreen}; padding: 4px; display: flex; gap: 12px;">
+          <span style="font-family: ${fonts.mono}; font-size: 13px; color: ${colors.diffGreenLineno}; width: 32px; text-align: right; shrink: 0; line-height: 24px;">${newLineNo}</span>
+          <span style="font-family: ${fonts.mono}; font-size: 13px; color: ${colors.statusGreen}; line-height: 24px;">${escaped || '&nbsp;'}</span>
         </div>`
       );
       newLineNo++;
@@ -76,9 +76,9 @@ function renderDiffHtml(diff: string, filePath?: string): string {
       const content = line.substring(1);
       const escaped = escapeHtml(content);
       bodyLines.push(
-        `<div style="background-color: ${colors.diffRedBg}; border-left: 3px solid ${colors.diffRed}; padding: 2px 16px; display: flex; gap: 12px;">
-          <span style="font-family: ${fonts.mono}; font-size: 12px; color: ${colors.diffRedLineno}; width: 32px; text-align: right; shrink: 0; line-height: 24px;">${oldLineNo}</span>
-          <span style="font-family: ${fonts.mono}; font-size: 12px; color: ${colors.diffRed}; line-height: 24px;">${escaped || '&nbsp;'}</span>
+        `<div style="background-color: ${colors.diffRedBg}; border-left: 3px solid ${colors.diffRed}; padding: 4px; display: flex; gap: 12px;">
+          <span style="font-family: ${fonts.mono}; font-size: 13px; color: ${colors.diffRedLineno}; width: 32px; text-align: right; shrink: 0; line-height: 24px;">${oldLineNo}</span>
+          <span style="font-family: ${fonts.mono}; font-size: 13px; color: ${colors.diffRed}; line-height: 24px;">${escaped || '&nbsp;'}</span>
         </div>`
       );
       oldLineNo++;
@@ -86,9 +86,9 @@ function renderDiffHtml(diff: string, filePath?: string): string {
       const content = line.substring(1);
       const escaped = escapeHtml(content);
       bodyLines.push(
-        `<div style="padding: 2px 16px; display: flex; gap: 12px;">
-          <span style="font-family: ${fonts.mono}; font-size: 12px; color: ${colors.textDim}; width: 32px; text-align: right; shrink: 0; line-height: 24px;">${newLineNo}</span>
-          <span style="font-family: ${fonts.mono}; font-size: 12px; color: ${colors.textMuted}; line-height: 24px;">${escaped || '&nbsp;'}</span>
+        `<div style="padding: 4px; display: flex; gap: 12px;">
+          <span style="font-family: ${fonts.mono}; font-size: 13px; color: ${colors.textDim}; width: 32px; text-align: right; shrink: 0; line-height: 24px;">${newLineNo}</span>
+          <span style="font-family: ${fonts.mono}; font-size: 13px; color: ${colors.textMuted}; line-height: 24px;">${escaped || '&nbsp;'}</span>
         </div>`
       );
       oldLineNo++;
@@ -99,18 +99,18 @@ function renderDiffHtml(diff: string, filePath?: string): string {
 
   // File header bar
   const fileName = filePath ? basename(filePath) : 'unknown';
-  const header = `<div style="background-color: ${colors.bgBase}; padding: 10px 16px; gap: 8px; border-bottom: 1px solid ${colors.bgBorder}; display: flex; align-items: center;">
+  const header = `<div style="background-color: ${colors.bgBase}; padding: 1px 7px 4px; gap: 8px; border-bottom: 1px solid ${colors.bgBorder}; display: flex; align-items: center;">
     <span style="width: 16px; height: 16px; border-radius: 3px; background-color: ${colors.statusYellowBg}; display: flex; align-items: center; justify-content: center;">
       <span style="font-family: ${fonts.mono}; font-size: 9px; font-weight: 600; color: ${colors.statusYellow};">M</span>
     </span>
-    <span style="font-family: ${fonts.mono}; font-size: 12px; font-weight: 500; color: ${colors.textPrimary}; flex: 1;">${escapeHtml(fileName)}</span>
-    <span style="font-family: ${fonts.mono}; font-size: 11px; font-weight: 600; color: ${colors.statusGreen};">+${addCount}</span>
+    <span style="font-family: ${fonts.mono}; font-size: 14px; font-weight: 500; color: ${colors.textPrimary}; flex: 1;">${escapeHtml(fileName)}</span>
+    <span style="font-family: ${fonts.mono}; font-size: 12px; font-weight: 600; color: ${colors.statusGreen};">+${addCount}</span>
     <span style="gap: 8px;"></span>
-    <span style="font-family: ${fonts.mono}; font-size: 11px; font-weight: 600; color: ${colors.diffRed};">-${delCount}</span>
+    <span style="font-family: ${fonts.mono}; font-size: 12px; font-weight: 600; color: ${colors.diffRed};">-${delCount}</span>
   </div>`;
 
   // Diff body container
-  const body = `<div style="padding: 8px 0; font-family: ${fonts.mono}; font-size: 13px;">${bodyLines.join('')}</div>`;
+  const body = `<div style="padding: 8px 0; font-family: ${fonts.mono}; font-size: 14px;">${bodyLines.join('')}</div>`;
 
   return header + body;
 }
@@ -151,7 +151,7 @@ export function DiffViewer() {
   }, []);
 
   return (
-    <div style={{ height: '100%', overflowY: 'auto', padding: '8px 16px', fontFamily: fonts.mono, fontSize: 13, lineHeight: 1.5 }}>
+    <div style={{ height: '100%', overflowY: 'auto', padding: '8px 2px', fontFamily: fonts.mono, fontSize: 14, lineHeight: 1.5 }}>
       <div ref={contentRef}>
         <div style={{ color: colors.textMuted }}>Click a file in the sidebar to view its diff</div>
       </div>

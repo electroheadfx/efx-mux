@@ -104,7 +104,7 @@ None yet.
 | 260409-f4m | Add shortcut cmd+k for clear TUI for main and sider terminal | 2026-04-09 | bebeb2f | [260409-f4m-add-shortcut-cmd-k-for-clear-tui-for-mai](./quick/260409-f4m-add-shortcut-cmd-k-for-clear-tui-for-mai/) |
 | 260410-uy5 | Right sidebar UI polish: tab order/defaults, font sizes, File Tree controls | 2026-04-10 | b64815b | [260410-uy5-right-sidebar-ui-polish-tab-order-defaul](./quick/260410-uy5-right-sidebar-ui-polish-tab-order-defaul/) |
 | 260410-vc7 | UI fixes: left sidebar padding, TUI newlines, pane backgrounds, git pane font size | 2026-04-10 | 6567be1 | [260410-vc7-ui-fixes-left-sidebar-padding-tui-newlin](./quick/260410-vc7-ui-fixes-left-sidebar-padding-tui-newlin/) |
-| 260410-vs4 | More UI fixes: git padding, file tree defaults, server pane BG, theme options | 2026-04-10 | 5bcdf31 | [260410-vs4-more-ui-fixes-git-padding-file-tree-defa](./quick/260410-vs4-more-ui-fixes-git-padding-file-tree-defa/) |
+| 260410-vs4 | More UI fixes: git padding, file tree defaults, server pane BG, theme options | 2026-04-10 | c8f559a | [260410-vs4-more-ui-fixes-git-padding-file-tree-defa](./quick/260410-vs4-more-ui-fixes-git-padding-file-tree-defa/) |
 
 ## Session Continuity
 
