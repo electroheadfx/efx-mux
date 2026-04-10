@@ -58,94 +58,115 @@ export function PreferencesPanel() {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div class="px-6 py-4 border-b border-border flex items-center justify-between">
-          <span class="text-text-bright text-base font-semibold font-sans">Preferences</span>
+        <div class="px-6 pt-5 pb-4 flex items-center justify-between border-b border-border">
+          <span class="text-base font-semibold text-text-bright font-sans">Preferences</span>
           <button
             onClick={closePreferences}
-            class="w-7 h-7 flex items-center justify-center text-base text-text cursor-pointer rounded hover:bg-bg hover:text-text-bright transition-colors"
+            class="w-7 h-7 rounded-md border border-border-interactive flex items-center justify-center hover:bg-bg"
             title="Close preferences"
-          >{'\u2715'}</button>
+          ><span class="text-sm text-text">{'\u2715'}</span></button>
         </div>
 
-        {/* Current Project */}
-        <div>
-          <div class="px-6 py-3 section-label">
-            Current Project
+        {/* Body */}
+        <div class="pt-4">
+          {/* Current Project */}
+          <div>
+            <div class="px-6 py-2 pt-2 section-label">
+              Current Project
+            </div>
+            <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/50">
+              <span class="text-[13px] text-text font-sans">Name</span>
+              <span class="text-[13px] font-medium text-text-bright font-sans">{name ?? 'None'}</span>
+            </div>
+            <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/50">
+              <span class="text-[13px] text-text font-sans">Path</span>
+              <span class="text-[11px] font-mono text-text truncate max-w-[280px]" title={activeProject?.path ?? ''}>
+                {activeProject?.path ?? 'N/A'}
+              </span>
+            </div>
+            <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/50">
+              <span class="text-[13px] text-text font-sans">Agent</span>
+              <div class="flex items-center gap-1.5">
+                <div class="w-4 h-4 rounded flex items-center justify-center text-white text-[8px]"
+                     style="background: linear-gradient(180deg, #A855F7, #6366F1)">&#x25C6;</div>
+                <span class="text-[13px] font-medium text-text-bright font-sans">Claude Code</span>
+              </div>
+            </div>
           </div>
-          <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/30">
-            <span class="text-sm text-text-bright font-sans">Name</span>
-            <span class="text-sm text-text font-mono">{name ?? 'None'}</span>
-          </div>
-          <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/30">
-            <span class="text-sm text-text-bright font-sans">Path</span>
-            <span class="text-sm text-text font-mono truncate max-w-[280px]" title={activeProject?.path ?? ''}>
-              {activeProject?.path ?? 'N/A'}
-            </span>
-          </div>
-          <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/30">
-            <span class="text-sm text-text-bright font-sans">Agent</span>
-            <span class="text-sm text-text font-mono">{activeProject?.agent ?? 'N/A'}</span>
-          </div>
-        </div>
 
-        {/* Appearance */}
-        <div>
-          <div class="px-6 py-3 section-label">
-            Appearance
+          {/* Appearance */}
+          <div>
+            <div class="px-6 py-2 pt-4 section-label">
+              Appearance
+            </div>
+            <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/50">
+              <span class="text-[13px] text-text font-sans">Theme</span>
+              <div class="rounded-md border border-border-interactive flex">
+                <button
+                  onClick={() => toggleThemeMode()}
+                  class={`rounded-md px-3 py-[5px] text-[11px] font-medium font-sans ${isDark ? 'bg-accent text-white' : 'text-[#484F58]'}`}
+                >Dark</button>
+                <button
+                  onClick={() => toggleThemeMode()}
+                  class={`rounded-md px-3 py-[5px] text-[11px] font-medium font-sans ${!isDark ? 'bg-accent text-white' : 'text-[#484F58]'}`}
+                >Light</button>
+              </div>
+            </div>
           </div>
-          <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/30">
-            <span class="text-sm text-text-bright font-sans">Theme</span>
-            <button
-              onClick={() => toggleThemeMode()}
-              class="inline-flex items-center gap-2 px-3 py-1.5 bg-bg border border-border-interactive text-text-bright text-xs font-mono rounded-lg cursor-pointer hover:border-accent transition-colors"
-            >
-              {isDark ? 'Dark' : 'Light'} -- click to toggle
-            </button>
-          </div>
-        </div>
 
-        {/* Shortcuts */}
-        <div>
-          <div class="px-6 py-3 section-label">
-            Shortcuts
+          {/* Shortcuts */}
+          <div>
+            <div class="px-6 py-2 pt-4 section-label">
+              Shortcuts
+            </div>
+            <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/50">
+              <span class="text-[13px] text-text font-sans">Toggle sidebar</span>
+              <div class="flex items-center gap-1">
+                <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">Ctrl</span>
+                <span class="text-[10px] font-mono text-[#484F58]">+</span>
+                <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">B</span>
+              </div>
+            </div>
+            <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/50">
+              <span class="text-[13px] text-text font-sans">Quick switch</span>
+              <div class="flex items-center gap-1">
+                <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">Ctrl</span>
+                <span class="text-[10px] font-mono text-[#484F58]">+</span>
+                <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">P</span>
+              </div>
+            </div>
+            <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/50">
+              <span class="text-[13px] text-text font-sans">New tab</span>
+              <div class="flex items-center gap-1">
+                <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">Ctrl</span>
+                <span class="text-[10px] font-mono text-[#484F58]">+</span>
+                <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">T</span>
+              </div>
+            </div>
+            <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/50">
+              <span class="text-[13px] text-text font-sans">Close tab</span>
+              <div class="flex items-center gap-1">
+                <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">&#x2318;</span>
+                <span class="text-[10px] font-mono text-[#484F58]">+</span>
+                <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">W</span>
+              </div>
+            </div>
           </div>
-          <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/30">
-            <span class="text-sm text-text font-sans">Toggle sidebar</span>
-            <kbd class="inline-flex items-center gap-1 px-2 py-0.5 bg-bg border border-border-interactive text-text-bright text-xs font-mono rounded">Ctrl+B</kbd>
-          </div>
-          <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/30">
-            <span class="text-sm text-text font-sans">Quick switch</span>
-            <kbd class="inline-flex items-center gap-1 px-2 py-0.5 bg-bg border border-border-interactive text-text-bright text-xs font-mono rounded">Ctrl+P</kbd>
-          </div>
-          <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/30">
-            <span class="text-sm text-text font-sans">New tab</span>
-            <kbd class="inline-flex items-center gap-1 px-2 py-0.5 bg-bg border border-border-interactive text-text-bright text-xs font-mono rounded">Ctrl+T</kbd>
-          </div>
-          <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/30">
-            <span class="text-sm text-text font-sans">Close tab</span>
-            <kbd class="inline-flex items-center gap-1 px-2 py-0.5 bg-bg border border-border-interactive text-text-bright text-xs font-mono rounded">{'\u2318'}+W</kbd>
-          </div>
-          <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/30">
-            <span class="text-sm text-text font-sans">All shortcuts</span>
-            <kbd class="inline-flex items-center gap-1 px-2 py-0.5 bg-bg border border-border-interactive text-text-bright text-xs font-mono rounded">Ctrl+?</kbd>
-          </div>
-        </div>
 
-        {/* Actions */}
-        <div>
-          <div class="px-6 py-3 section-label">
-            Actions
-          </div>
-          <div class="px-6 py-3">
-            <button
-              onClick={() => { closePreferences(); openProjectModal({ project: activeProject ?? undefined }); }}
-              class="bg-accent text-white px-4 py-2 rounded-lg text-sm font-sans cursor-pointer hover:opacity-90 transition-opacity"
-            >
-              Edit Project
-            </button>
+          {/* Actions */}
+          <div>
+            <div class="px-6 py-2 pt-4 section-label">
+              Actions
+            </div>
+            <div class="px-6 py-3">
+              <button
+                onClick={() => { closePreferences(); openProjectModal({ project: activeProject ?? undefined }); }}
+                class="rounded-lg bg-accent px-5 py-2 text-[13px] font-semibold text-white font-sans hover:bg-accent/90 cursor-pointer transition-opacity"
+              >
+                Edit Project
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
   );
 }
