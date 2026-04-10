@@ -46,7 +46,7 @@ export function PreferencesPanel() {
 
   const name = activeProjectName.value;
   const activeProject = name ? projects.value.find(p => p.name === name) : null;
-  const isDark = document.documentElement.classList.contains('dark');
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
 
   return (
     <div
@@ -87,8 +87,7 @@ export function PreferencesPanel() {
             <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/50">
               <span class="text-[13px] text-text font-sans">Agent</span>
               <div class="flex items-center gap-1.5">
-                <div class="w-4 h-4 rounded flex items-center justify-center text-white text-[8px]"
-                     style="background: linear-gradient(180deg, #A855F7, #6366F1)">&#x25C6;</div>
+                <div class="w-4 h-4 rounded flex items-center justify-center text-white text-[8px] agent-icon-gradient">&#x25C6;</div>
                 <span class="text-[13px] font-medium text-text-bright font-sans">Claude Code</span>
               </div>
             </div>

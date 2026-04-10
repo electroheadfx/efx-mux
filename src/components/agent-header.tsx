@@ -74,8 +74,7 @@ export function AgentHeader() {
   return (
     <div class="flex items-center gap-2.5 rounded-lg bg-bg-raised px-3 py-2 w-full">
       {/* Gradient diamond icon */}
-      <div class="w-7 h-7 rounded-md flex items-center justify-center text-white text-xs shrink-0"
-        style={{ background: 'linear-gradient(180deg, #A855F7, #6366F1)' }}>&#x25C6;</div>
+      <div class="w-7 h-7 rounded-md flex items-center justify-center text-white text-xs shrink-0 agent-icon-gradient">&#x25C6;</div>
 
       {/* Info column */}
       <div class="flex flex-col gap-px flex-1 min-w-0">
