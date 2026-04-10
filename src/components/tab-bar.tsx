@@ -15,8 +15,8 @@ export function TabBar({ tabs, activeTab, onSwitch }: TabBarProps) {
       {tabs.map(tab => (
         <button
           class={activeTab.value === tab
-            ? 'px-3 py-1 text-xs cursor-pointer font-[inherit] bg-bg-raised text-text-bright rounded-full border border-border transition-all duration-150'
-            : 'px-3 py-1 text-xs cursor-pointer font-[inherit] bg-transparent text-text rounded-full border border-transparent transition-all duration-150 hover:text-text-bright hover:bg-bg-raised/40'}
+            ? 'px-3 py-1 text-xs cursor-pointer font-sans bg-bg-raised text-text-bright rounded-full border border-border-interactive transition-all duration-150'
+            : 'px-3 py-1 text-xs cursor-pointer font-sans bg-transparent text-text rounded-full border border-transparent transition-all duration-150 hover:text-text-bright hover:bg-bg-raised/40'}
           onClick={() => onSwitch(tab)}
         >{tab}</button>
       ))}
