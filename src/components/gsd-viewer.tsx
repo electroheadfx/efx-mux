@@ -142,12 +142,12 @@ export function GSDViewer() {
 
   return (
     <div
-      class="h-full overflow-y-auto p-4"
+      class="h-full overflow-y-auto bg-bg-terminal p-5 flex flex-col gap-4"
       onClick={handleClick}
     >
       <div
         ref={contentRef}
-        class="text-text text-sm leading-relaxed"
+        class="text-text text-sm leading-relaxed flex-1"
       >
         <div class="text-text text-[13px]">Loading GSD...</div>
       </div>
