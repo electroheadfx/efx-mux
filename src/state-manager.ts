@@ -74,13 +74,13 @@ export async function loadAppState(): Promise<AppState> {
       theme: { mode: 'dark' },
       session: { 'main-tmux-session': 'efx-mux', 'right-tmux-session': 'efx-mux-right' },
       project: { active: null, projects: [] },
-      panels: { 'right-top-tab': 'gsd', 'right-bottom-tab': 'git' },
+      panels: { 'right-top-tab': 'File Tree', 'right-bottom-tab': 'Bash' },
     };
   }
 
   // Set signals from loaded state
   sidebarCollapsed.value = currentState?.layout?.['sidebar-collapsed'] === true || currentState?.layout?.['sidebar-collapsed'] === 'true';
-  if (currentState?.panels?.['right-top-tab']) rightTopTab.value = currentState.panels['right-top-tab'];
+  if (currentState?.panels?.['right-top-tab'] && currentState.panels['right-top-tab'] !== 'gsd') rightTopTab.value = currentState.panels['right-top-tab'];
   if (currentState?.panels?.['right-bottom-tab']) rightBottomTab.value = currentState.panels['right-bottom-tab'];
 
   // Restore projects and active project from persisted state (T-08-07-02)
