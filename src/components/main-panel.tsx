@@ -67,9 +67,7 @@ export function MainPanel() {
     <main class="main-panel relative" aria-label="Main panel">
       <TerminalTabBar />
       <div class="terminal-area flex-1 bg-bg-terminal overflow-hidden relative min-h-[100px]">
-        <div class="p-3 pb-0">
-          <AgentHeader />
-        </div>
+        <AgentHeader />
         <div class="terminal-containers absolute inset-0" />
         <ActiveTabCrashOverlay />
       </div>

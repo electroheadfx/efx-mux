@@ -170,6 +170,19 @@
   min-height: 0;
   overflow: hidden;
   background: var(--color-bg-terminal);
+  position: relative;
+}
+
+.terminal-area .xterm {
+  height: 100%;
+}
+
+.terminal-area .xterm-viewport {
+  background-color: var(--color-bg-terminal) !important;
+}
+
+.terminal-area .xterm-screen {
+  background-color: var(--color-bg-terminal);
 }
 
 .server-pane {
