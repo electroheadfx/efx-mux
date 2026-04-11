@@ -109,9 +109,10 @@ None yet.
 | 260410-wtw | right sidebar, Filetree pane no open by default when I Open the app | 2026-04-10 | ee94fe1 | [260410-wtw-right-sidebar-filetree-pane-no-open-by-d](./quick/260410-wtw-right-sidebar-filetree-pane-no-open-by-d/) |
 | 260410-x26 | server pane at bottom has no the default color, instead it has: #282D3A, instead the color of other TUI | 2026-04-10 | 0a611ba | [260410-x26-server-pane-at-bottom-has-no-the-default](./quick/260410-x26-server-pane-at-bottom-has-no-the-default/) |
 | 260410-x7o | claude code, when App open, get plenty new lines in command line | 2026-04-10 | 54ace1e | [260410-x7o-claude-code-when-app-open-get-plenty-new](./quick/260410-x7o-claude-code-when-app-open-get-plenty-new/) |
+| 260411-c1y | File tree: tighter line height default, add BG color control to preferences | 2026-04-11 | 4c83882 | [260411-c1y-add-smaller-line-height-in-filetree-list](./quick/260411-c1y-add-smaller-line-height-in-filetree-list/) |
 
 ## Session Continuity
 
-Last activity: 2026-04-10 - Completed quick task 260410-x7o: claude code, when App open, get plenty new lines in command line
+Last activity: 2026-04-11 - Completed quick task 260411-c1y: File tree tighter line height and BG color control
 Stopped at: Completed quick task 260410-x7o
 Resume file: None
