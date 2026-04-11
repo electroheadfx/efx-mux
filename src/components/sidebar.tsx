@@ -6,7 +6,7 @@
 import { useEffect } from 'preact/hooks';
 import { signal, computed } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
-import { GitBranch, Plus, RotateCw, X } from 'lucide-preact';
+import { GitBranch, Plus, RotateCw, Settings, X } from 'lucide-preact';
 import {
   projects,
   activeProjectName,
@@ -156,24 +156,43 @@ function ProjectRow({ project, index }: { project: ProjectEntry; index: number }
         </div>
       </div>
 
-      {/* Remove button */}
-      <span
-        style={{
-          opacity: 0,
-          cursor: 'pointer',
-          flexShrink: 0,
-          color: colors.textMuted,
-          transition: 'opacity 0.15s',
-        }}
-        class="group-hover:opacity-100 hover:text-danger"
-        title="Remove project"
-        onClick={(e) => {
-          e.stopPropagation();
-          removeTarget.value = project.name;
-        }}
-      >
-        <X size={12} />
-      </span>
+      {/* Action buttons (edit + remove) */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
+        <span
+          style={{
+            opacity: 0,
+            cursor: 'pointer',
+            flexShrink: 0,
+            color: colors.textMuted,
+            transition: 'opacity 0.15s',
+          }}
+          class="group-hover:opacity-100 hover:text-accent"
+          title="Edit project settings"
+          onClick={(e) => {
+            e.stopPropagation();
+            openProjectModal({ project });
+          }}
+        >
+          <Settings size={12} />
+        </span>
+        <span
+          style={{
+            opacity: 0,
+            cursor: 'pointer',
+            flexShrink: 0,
+            color: colors.textMuted,
+            transition: 'opacity 0.15s',
+          }}
+          class="group-hover:opacity-100 hover:text-danger"
+          title="Remove project"
+          onClick={(e) => {
+            e.stopPropagation();
+            removeTarget.value = project.name;
+          }}
+        >
+          <X size={12} />
+        </span>
+      </div>
     </div>
   );
 }
