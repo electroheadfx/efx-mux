@@ -7,7 +7,7 @@ import { signal } from '@preact/signals';
 import { activeProjectName, projects } from '../state-manager';
 import { toggleThemeMode } from '../theme/theme-manager';
 import { openProjectModal } from './project-modal';
-import { fileTreeFontSize, fileTreeLineHeight } from './file-tree';
+import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from './file-tree';
 import { colors, fonts } from '../tokens';
 
 // ---------------------------------------------------------------------------
@@ -346,6 +346,35 @@ export function PreferencesPanel() {
               }}
               style={{ width: 80, accentColor: colors.accent }}
             />
+          </SettingRow>
+          <SettingRow label="BG color">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="color"
+                value={fileTreeBgColor.value || colors.bgDeep}
+                onInput={(e) => {
+                  fileTreeBgColor.value = (e.target as HTMLInputElement).value;
+                }}
+                style={{ width: 28, height: 28, border: `1px solid ${colors.bgSurface}`, borderRadius: 4, padding: 0, cursor: 'pointer', backgroundColor: 'transparent' }}
+              />
+              {fileTreeBgColor.value && (
+                <button
+                  onClick={() => { fileTreeBgColor.value = ''; }}
+                  style={{
+                    fontFamily: fonts.mono,
+                    fontSize: 10,
+                    color: colors.textMuted,
+                    backgroundColor: 'transparent',
+                    border: `1px solid ${colors.bgSurface}`,
+                    borderRadius: 4,
+                    padding: '3px 8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Reset
+                </button>
+              )}
+            </div>
           </SettingRow>
 
           {/* Shortcuts */}

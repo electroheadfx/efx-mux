@@ -13,7 +13,7 @@ import type { ProjectEntry } from '../state-manager';
 
 // File Tree appearance settings (shared with preferences panel)
 export const fileTreeFontSize = signal(13);
-export const fileTreeLineHeight = signal(5);
+export const fileTreeLineHeight = signal(2);
 export const fileTreeBgColor = signal('');
 
 // Local signals for component state
