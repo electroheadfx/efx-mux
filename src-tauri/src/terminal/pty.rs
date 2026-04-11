@@ -108,6 +108,12 @@ pub async fn spawn_terminal(
         .args(["set-option", "-t", &sanitized, "remain-on-exit", "on"])
         .output();
 
+    // Hide tmux green status bar -- reclaim the row for terminal content
+    std::process::Command::new("tmux")
+        .args(["set-option", "-t", &sanitized, "status", "off"])
+        .output()
+        .ok();
+
     // take_writer() is one-shot -- store in Arc<Mutex<>> for reuse (CLAUDE.md gotcha)
     let writer = pair
         .master
@@ -370,6 +376,12 @@ pub fn switch_tmux_session(
     // Enable mouse mode on target session
     std::process::Command::new("tmux")
         .args(["set-option", "-t", &target, "mouse", "on"])
+        .output()
+        .ok();
+
+    // Hide tmux green status bar on switched-to session
+    std::process::Command::new("tmux")
+        .args(["set-option", "-t", &target, "status", "off"])
         .output()
         .ok();
 
