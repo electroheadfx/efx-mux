@@ -4,8 +4,7 @@
 import { useEffect } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import { signal } from '@preact/signals';
-import { activeProjectName, projects } from '../state-manager';
-import { toggleThemeMode } from '../theme/theme-manager';
+import { activeProjectName, projects, updateLayout } from '../state-manager';
 import { openProjectModal } from './project-modal';
 import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from './file-tree';
 import { colors, fonts } from '../tokens';
@@ -135,51 +134,6 @@ function AgentBadge({ name }: { name: string }) {
   );
 }
 
-function ThemeToggle({ value }: { value: boolean }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        borderRadius: 6,
-        border: `1px solid ${colors.bgSurface}`,
-      }}
-    >
-      <button
-        style={{
-          fontFamily: fonts.sans,
-          fontSize: 11,
-          fontWeight: value === true ? 500 : 400,
-          color: value === true ? '#FFFFFF' : colors.textDim,
-          backgroundColor: value === true ? colors.accent : 'transparent',
-          borderRadius: 6,
-          padding: '5px 12px',
-          border: 'none',
-          cursor: 'pointer',
-        }}
-        onClick={() => toggleThemeMode()}
-      >
-        Dark
-      </button>
-      <button
-        style={{
-          fontFamily: fonts.sans,
-          fontSize: 11,
-          fontWeight: value === false ? 500 : 400,
-          color: value === false ? '#FFFFFF' : colors.textDim,
-          backgroundColor: value === false ? colors.accent : 'transparent',
-          borderRadius: 6,
-          padding: '5px 12px',
-          border: 'none',
-          cursor: 'pointer',
-        }}
-        onClick={() => toggleThemeMode()}
-      >
-        Light
-      </button>
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -204,7 +158,6 @@ export function PreferencesPanel() {
 
   const name = activeProjectName.value;
   const activeProject = name ? projects.value.find(p => p.name === name) : null;
-  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
 
   return (
     <div
@@ -315,12 +268,6 @@ export function PreferencesPanel() {
             <AgentBadge name="Claude Code" />
           </SettingRow>
 
-          {/* Appearance */}
-          <SectionLabel label="APPEARANCE" />
-          <SettingRow label="Theme">
-            <ThemeToggle value={isDark} />
-          </SettingRow>
-
           {/* File Tree Controls */}
           <SectionLabel label="FILE TREE" />
           <SettingRow label="Font size">
@@ -331,6 +278,7 @@ export function PreferencesPanel() {
               value={fileTreeFontSize.value}
               onInput={(e) => {
                 fileTreeFontSize.value = parseInt((e.target as HTMLInputElement).value);
+                updateLayout({ 'file-tree-font-size': String(fileTreeFontSize.value) });
               }}
               style={{ width: 80, accentColor: colors.accent }}
             />
@@ -343,6 +291,7 @@ export function PreferencesPanel() {
               value={fileTreeLineHeight.value}
               onInput={(e) => {
                 fileTreeLineHeight.value = parseInt((e.target as HTMLInputElement).value);
+                updateLayout({ 'file-tree-line-height': String(fileTreeLineHeight.value) });
               }}
               style={{ width: 80, accentColor: colors.accent }}
             />
@@ -354,12 +303,13 @@ export function PreferencesPanel() {
                 value={fileTreeBgColor.value || colors.bgDeep}
                 onInput={(e) => {
                   fileTreeBgColor.value = (e.target as HTMLInputElement).value;
+                  updateLayout({ 'file-tree-bg-color': fileTreeBgColor.value });
                 }}
                 style={{ width: 28, height: 28, border: `1px solid ${colors.bgSurface}`, borderRadius: 4, padding: 0, cursor: 'pointer', backgroundColor: 'transparent' }}
               />
               {fileTreeBgColor.value && (
                 <button
-                  onClick={() => { fileTreeBgColor.value = ''; }}
+                  onClick={() => { fileTreeBgColor.value = ''; updateLayout({ 'file-tree-bg-color': '' }); }}
                   style={{
                     fontFamily: fonts.mono,
                     fontSize: 10,
