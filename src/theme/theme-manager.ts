@@ -12,6 +12,7 @@ import { listen } from '@tauri-apps/api/event';
 import type { Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
 
+
 // ---------------------------------------------------------------------------
 // Type definitions
 // ---------------------------------------------------------------------------
@@ -30,6 +31,10 @@ export interface ChromeTheme {
   danger?: string;
   font?: string;
   fontSize?: number;
+  fileTreeBg?: string;
+  fileTreeFont?: string;
+  fileTreeFontSize?: number;
+  fileTreeLineHeight?: number;
 }
 
 export interface ThemeData {
@@ -95,6 +100,10 @@ export function applyTheme(theme: ThemeData): void {
     if (theme.chrome.danger) style.setProperty('--color-danger', theme.chrome.danger);
     if (theme.chrome.font) style.setProperty('--font-family-sans', `'${theme.chrome.font}', system-ui, sans-serif`);
     if (theme.chrome.fontSize) style.setProperty('--font-size', `${theme.chrome.fontSize}px`);
+    // File tree: theme sets CSS custom properties only.
+    // Signal values (fontSize, lineHeight, bgColor) are owned by user preferences
+    // in state.json — theme must not overwrite them (they're restored in bootstrap).
+    if (theme.chrome.fileTreeFont) style.setProperty('--file-tree-font', theme.chrome.fileTreeFont);
   }
 
   if (theme.terminal) {

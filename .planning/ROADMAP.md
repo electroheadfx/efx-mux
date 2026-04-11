@@ -2,13 +2,13 @@
 
 ## Overview
 
-GSD MUX goes from zero to a fully functional native macOS terminal multiplexer in 9 phases. Phase 1 locks the Tauri scaffold and macOS entitlements (no going back). Phase 2 is the critical path -- the PTY-to-xterm.js pipeline with flow control that every later phase depends on. Phases 3-6 build out theming, persistence, project management, and right-panel views (3 and 6 are parallelizable after Phase 2). Phase 7 adds server pane and agent launchers. Phase 8 wires the keyboard system and polish once all panels exist. Phase 9 is the professional UI overhaul -- deeper dark palette, refined typography (Geist/Geist Mono), layered depth, and polished components matching the quality bar of tools like Warp and Cursor.
+GSD MUX goes from zero to a fully functional native macOS terminal multiplexer in 9 phases. Phase 1 locks the Tauri scaffold and macOS entitlements (no going back). Phase 2 is the critical path -- the PTY-to-xterm.js pipeline with flow control that every later phase depends on. Phases 3-6 build out theming, persistence, project management, and right-panel views (3 and 6 are parallelizable after Phase 2). Phase 7 adds server pane and agent launchers. Phase 8 wires the keyboard system and polish once all panels exist. Phase 9 is the professional UI overhaul -- deeper dark palette, refined typography (Geist/Geist Mono), layered depth, and polished components matching the quality bar of tools like Warp, Cursor, and Linear.
 
 ## Phases
 
 **Phase Numbering:**
 - Integer phases (1, 2, 3): Planned milestone work
-- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+- Decimal phases (2.1, 2.2): Urgent insertions (marked as INSERTED)
 
 Decimal phases appear between their surrounding integers in numeric order.
 
@@ -215,7 +215,8 @@ Phases execute in numeric order. Note: Phases 3 and 6 are parallelizable after P
 | 6.1 Migrate Arrow.js -> Preact | 6/6 | Complete | 2026-04-08 |
 | 7. Server Pane + Agent Support | 9/9 | Complete | 2026-04-09 |
 | 8. Keyboard + Polish | 8/8 | Complete | 2026-04-10 |
-| 9. Professional UI Overhaul | 0/5 | Not Started | — |
+| 9. Professional UI Overhaul | 6/6 | Complete | 2026-04-10 |
+| 10. Pixel-Perfect UI Rewrite | 0/10 | Planned | — |
 
 ### Phase 9: Professional UI Overhaul
 **Goal**: Transform the app from a functional but plain terminal wrapper into a professional-grade developer tool with refined visual depth, typography, and polish — matching the quality bar of tools like Warp, Cursor, and Linear
@@ -277,10 +278,36 @@ Plans:
 
 ### Phase 10: Pixel-Perfect UI Rewrite
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** Rewrite all UI components to match the reference design in `RESEARCH/theme/` pixel-for-pixel. The reference is a complete standalone Preact+Tailwind app extracted from Pencil design mockups, with a navy-blue color palette, precise typography, and component-level design specs. This phase replaces the Phase 9 visual layer entirely with the reference design while preserving all existing application logic (state signals, Tauri invoke, PTY management, event handlers).
+
+**Requirements**: UI-01, UI-02, UI-03, UI-04, UI-05, UI-06, UI-07, UI-08, SIDE-01, SIDE-02, PROJ-01, PANEL-02, PANEL-04, PANEL-05, AGENT-01
+
 **Depends on:** Phase 9
-**Plans:** 0 plans
+
+**Success Criteria** (what must be TRUE):
+  1. src/tokens.ts exports all color, font, spacing, radius tokens from reference navy-blue palette
+  2. @theme CSS vars in app.css updated to navy-blue palette (bgBase=#111927, bgElevated=#19243A, bgDeep=#0B1120, bgBorder=#243352, bgSurface=#324568)
+  3. All components use reference visual patterns with tokens.ts colors for opacity variants
+  4. Sidebar uses project items with status dots + accent left border, section labels in uppercase GeistMono
+  5. Agent header uses 28x28 gradient icon, bgElevated card, status pill with statusGreenBg/diffRedBg
+  6. Diff viewer uses GitHub-style header (status badge + filename + +/- stats) with diffGreenBg/diffRedBg line backgrounds
+  7. File tree uses inline SVG icons, 20px depth indentation, bgElevated selected row
+  8. Server pane strip/expanded toggle uses navy-blue palette throughout
+  9. Modals (Add Project, Preferences) use bgElevated card, 12px radius, bgSurface borders
+  10. Light mode uses harmonized white palette (#FFFFFF backgrounds, #D0D7DE borders)
+  11. Drag-resizable panels (sidebar, main, right) preserve all CSS class contracts with drag-manager.ts
+  12. Panel resize works correctly after all visual updates
+
+**Plans:** 10 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 10 to break down)
+- [x] 10-01-PLAN.md -- Foundation: src/tokens.ts + app.css @theme update with navy-blue palette
+- [x] 10-02-PLAN.md -- Leaf components: tab-bar, agent-header, crash-overlay rewrite
+- [x] 10-03-PLAN.md -- Content panels: diff-viewer, file-tree rewrite
+- [x] 10-04-PLAN.md -- GSD viewer: container + .gsd-content CSS update
+- [x] 10-05-PLAN.md -- Sidebar: full rewrite with reference visual + all existing logic
+- [x] 10-06-PLAN.md -- Container components: main-panel, right-panel rewrite + human verify
+- [x] 10-07-PLAN.md -- Server pane: strip/expanded states with navy-blue palette
+- [x] 10-08-PLAN.md -- Modals: project-modal, preferences-panel rewrite
+- [x] 10-09-PLAN.md -- TerminalTabBar + overlay styling (wizard, fuzzy-search, cheatsheet)
+- [x] 10-10-PLAN.md -- Light mode companion palette update

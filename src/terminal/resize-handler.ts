@@ -38,7 +38,7 @@ export function attachResizeHandler(
       // Debounced IPC to Rust (D-12: 150ms trailing)
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
-        invoke('resize_pty', { cols, rows, sessionName });
+        invoke('resize_pty', { cols, rows, sessionName }).catch(() => {});
       }, 150);
     });
   });

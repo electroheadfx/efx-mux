@@ -2,8 +2,10 @@
 // Renders inside the terminal tab container when a PTY session exits.
 // Normal exit (code 0): green dot + "Session ended"
 // Crash exit (non-zero): red dot + "Process crashed" + exit code
+// Visual rewrite: Phase 10 navy-blue palette
 
 import type { TerminalTab } from './terminal-tabs';
+import { colors, fonts } from '../tokens';
 
 interface CrashOverlayProps {
   tab: TerminalTab;
@@ -16,22 +18,75 @@ export function CrashOverlay({ tab, onRestart }: CrashOverlayProps) {
   const isNormalExit = tab.exitCode === 0;
 
   return (
-    <div class="absolute inset-0 bg-black/50 flex items-center justify-center z-20" role="alertdialog" aria-labelledby="crash-msg">
-      <div class="bg-bg-raised border border-border rounded-lg p-6 text-center max-w-[320px]">
+    <div
+      class="absolute flex items-center justify-center z-20"
+      style={{
+        inset: 0,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+      }}
+      role="alertdialog"
+      aria-labelledby="crash-msg"
+    >
+      <div
+        class="text-center"
+        style={{
+          backgroundColor: colors.bgElevated,
+          border: `1px solid ${colors.bgBorder}`,
+          borderRadius: 8,
+          padding: '24px',
+          maxWidth: 320,
+        }}
+      >
         {/* Status dot: green for normal exit, red for crash (D-08) */}
-        <div class={`w-2.5 h-2.5 rounded-full mx-auto mb-3 ${isNormalExit ? 'bg-[#859900]' : 'bg-[#dc322f]'}`} />
+        <div
+          style={{
+            width: 10,
+            height: 10,
+            borderRadius: '50%',
+            backgroundColor: isNormalExit ? colors.statusGreen : colors.diffRed,
+            margin: '0 auto 12px',
+          }}
+        />
         {/* Message: different copy for normal vs crash (D-08) */}
-        <p id="crash-msg" class="text-text-bright text-sm mb-1">
+        <p
+          id="crash-msg"
+          style={{
+            color: colors.textPrimary,
+            fontSize: 13,
+            fontFamily: fonts.sans,
+            fontWeight: 500,
+            marginBottom: 4,
+          }}
+        >
           {isNormalExit ? 'Session ended' : 'Process crashed'}
         </p>
         {!isNormalExit && (
-          <p class="text-text text-xs mb-4">Exit code {tab.exitCode}</p>
+          <p
+            style={{
+              color: colors.textMuted,
+              fontSize: 11,
+              fontFamily: fonts.mono,
+              marginBottom: 16,
+            }}
+          >
+            Terminal session ended (exit code {tab.exitCode})
+          </p>
         )}
-        {isNormalExit && <div class="mb-3" />}
+        {isNormalExit && <div style={{ height: 12 }} />}
         {/* Restart button (D-10) */}
         <button
           onClick={onRestart}
-          class="bg-accent text-white px-4 py-2 rounded-sm text-sm cursor-pointer hover:opacity-90 transition-opacity"
+          class="cursor-pointer transition-opacity"
+          style={{
+            backgroundColor: colors.accent,
+            color: '#ffffff',
+            padding: '8px 16px',
+            borderRadius: 4,
+            fontSize: 12,
+            fontFamily: fonts.sans,
+            fontWeight: 500,
+            border: 'none',
+          }}
           title="Restart terminal session"
         >
           Restart Session

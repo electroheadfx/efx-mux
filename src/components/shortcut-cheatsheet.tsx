@@ -3,6 +3,7 @@
 
 import { useEffect } from 'preact/hooks';
 import { signal } from '@preact/signals';
+import { colors, fonts } from '../tokens';
 
 // ---------------------------------------------------------------------------
 // Module-level state
@@ -74,31 +75,42 @@ export function ShortcutCheatsheet() {
 
   return (
     <div
-      class="fixed inset-0 bg-black/30 z-[100] flex items-center justify-center"
+      class="fixed inset-0 z-[100] flex items-center justify-center"
+      style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
       onClick={closeCheatsheet}
     >
       <div
-        class="w-[420px] max-h-[70vh] bg-bg-raised border border-border rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-y-auto"
+        class="w-[420px] max-h-[70vh] rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-y-auto"
+        style={{ backgroundColor: colors.bgElevated, border: `1px solid ${colors.bgBorder}` }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div class="px-6 py-4 border-b border-border">
-          <span class="text-text-bright text-base">Keyboard Shortcuts</span>
+        <div class="px-6 py-4" style={{ borderBottom: `1px solid ${colors.bgBorder}` }}>
+          <span class="text-base" style={{ color: colors.textPrimary }}>Keyboard Shortcuts</span>
         </div>
 
         {/* Shortcut sections */}
         {SHORTCUTS.map((section) => (
           <div key={section.section}>
-            <div class="px-6 py-2 text-[11px] uppercase tracking-widest text-text">
+            <div class="px-6 py-2 text-[11px] uppercase tracking-widest" style={{ color: colors.textMuted }}>
               {section.section}
             </div>
             {section.items.map((item) => (
               <div
                 key={item.key}
-                class="flex items-center justify-between px-6 py-2 border-b border-border/50"
+                class="flex items-center justify-between px-6 py-2"
+                style={{ borderBottom: `1px solid ${colors.bgBorder}` }}
               >
-                <span class="text-sm text-text-bright">{item.action}</span>
-                <span class="inline-flex items-center px-2 py-0.5 bg-accent/15 text-accent text-xs font-mono rounded">
+                <span class="text-sm" style={{ color: colors.textPrimary }}>{item.action}</span>
+                <span
+                  class="inline-flex items-center px-2 py-0.5 text-xs rounded"
+                  style={{
+                    backgroundColor: colors.bgDeep,
+                    border: `1px solid ${colors.bgBorder}`,
+                    color: colors.accent,
+                    fontFamily: fonts.mono,
+                  }}
+                >
                   {item.key}
                 </span>
               </div>

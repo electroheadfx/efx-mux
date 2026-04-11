@@ -28,17 +28,37 @@ pub struct ChromeTheme {
 
     #[serde(default = "default_chrome_font_size", rename = "fontSize")]
     pub font_size: u32,
+
+    #[serde(default = "default_chrome_file_tree_bg", rename = "fileTreeBg")]
+    pub file_tree_bg: String,
+
+    #[serde(default = "default_chrome_file_tree_font", rename = "fileTreeFont")]
+    pub file_tree_font: String,
+
+    #[serde(default = "default_chrome_file_tree_font_size", rename = "fileTreeFontSize")]
+    pub file_tree_font_size: u32,
+
+    #[serde(default = "default_chrome_file_tree_line_height", rename = "fileTreeLineHeight")]
+    pub file_tree_line_height: u32,
+
+    #[serde(default = "default_chrome_bg_terminal", rename = "bgTerminal")]
+    pub bg_terminal: String,
 }
 
 // Chrome defaults (Solarized Dark)
 fn default_chrome_bg() -> String { "#282d3a".into() }
-fn default_chrome_bg_raised() -> String { "#363b3d".into() }
+fn default_chrome_bg_raised() -> String { "#19243A".into() }
 fn default_chrome_border() -> String { "#3e454a".into() }
 fn default_chrome_text() -> String { "#8d999a".into() }
 fn default_chrome_text_bright() -> String { "#92a0a0".into() }
 fn default_chrome_accent() -> String { "#258ad1".into() }
 fn default_chrome_font() -> String { "FiraCode Light".into() }
 fn default_chrome_font_size() -> u32 { 14 }
+fn default_chrome_file_tree_bg() -> String { "#0B1120".into() }
+fn default_chrome_file_tree_font() -> String { "Geist".into() }
+fn default_chrome_file_tree_font_size() -> u32 { 13 }
+fn default_chrome_file_tree_line_height() -> u32 { 5 }
+fn default_chrome_bg_terminal() -> String { "#111927".into() }
 
 impl Default for ChromeTheme {
     fn default() -> Self {
@@ -51,6 +71,11 @@ impl Default for ChromeTheme {
             accent: default_chrome_accent(),
             font: default_chrome_font(),
             font_size: default_chrome_font_size(),
+            file_tree_bg: default_chrome_file_tree_bg(),
+            file_tree_font: default_chrome_file_tree_font(),
+            file_tree_font_size: default_chrome_file_tree_font_size(),
+            file_tree_line_height: default_chrome_file_tree_line_height(),
+            bg_terminal: default_chrome_bg_terminal(),
         }
     }
 }
@@ -196,10 +221,10 @@ pub fn config_dir() -> PathBuf {
         .ok()
         .filter(|h| !h.is_empty())
         .unwrap_or_else(|| {
-            eprintln!("[efxmux] WARNING: HOME not set; using /tmp/efxmux-fallback for config");
-            "/tmp/efxmux-fallback".to_string()
+            eprintln!("[efxmux] WARNING: HOME not set; using /tmp/efx-mux-fallback for config");
+            "/tmp/efx-mux-fallback".to_string()
         });
-    PathBuf::from(home).join(".config/efxmux")
+    PathBuf::from(home).join(".config/efx-mux")
 }
 
 pub fn theme_path() -> PathBuf {

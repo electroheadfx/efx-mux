@@ -2,22 +2,23 @@
 @import "@xterm/xterm/css/xterm.css";
 
 @theme {
-  --color-bg: #0D1117;
-  --color-bg-raised: #161B22;
-  --color-bg-terminal: #010409;
-  --color-border: #1B2028;
-  --color-border-interactive: #30363D;
-  --color-text: #8B949E;
-  --color-text-bright: #E6EDF3;
-  --color-accent: #258AD1;
+  --color-bg: #111927;           /* bgBase */
+  --color-bg-raised: #19243A;    /* bgElevated */
+  --color-bg-terminal: #111927;  /* bgDeep — harmonized with bgBase per user preference */
+  --color-border: #243352;       /* bgBorder */
+  --color-border-interactive: #324568; /* bgSurface */
+  --color-text: #8B949E;         /* textMuted */
+  --color-text-bright: #E6EDF3;  /* textPrimary */
+  --color-text-secondary: #C9D1D9; /* textSecondary (NEW — for GSD content subheadings) */
+  --color-text-muted: #556A85;   /* textDim */
+  --color-accent: #258AD1;       /* unchanged from Phase 9 */
   --color-success: #3FB950;
   --color-warning: #D29922;
   --color-danger: #F85149;
-  --color-text-muted: #484F58;
 
-  /* Light mode values */
+  /* Light mode values — harmonized per D-14 */
   --color-bg-light: #FFFFFF;
-  --color-bg-raised-light: #F6F8FA;
+  --color-bg-raised-light: #FFFFFF;
   --color-bg-terminal-light: #FFFFFF;
   --color-border-light: #D0D7DE;
   --color-border-interactive-light: #D0D7DE;
@@ -28,8 +29,8 @@
   --color-warning-light: #9A6700;
   --color-danger-light: #CF222E;
 
-  --font-family-sans: 'Geist', system-ui, sans-serif;
-  --font-family-mono: 'GeistMono', 'FiraCode', monospace;
+  --font-family-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+  --font-family-mono: 'GeistMono', 'FiraCode', 'SF Mono', 'Monaco', 'Menlo', monospace;
 }
 
 @font-face {
@@ -78,14 +79,14 @@
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 1.2px;
-  color: var(--color-text);
+  color: var(--color-text-muted);
 }
 
 /* Dynamic layout properties (set by JS drag-manager) */
 :root {
   --sidebar-w: 200px;
   --right-w: 25%;
-  --handle-size: 4px;
+  --handle-size: 1px;
   --handle-hit: 8px;
 }
 
@@ -169,6 +170,19 @@
   min-height: 0;
   overflow: hidden;
   background: var(--color-bg-terminal);
+  position: relative;
+}
+
+.terminal-area .xterm {
+  height: 100%;
+}
+
+.terminal-area .xterm-viewport {
+  background-color: var(--color-bg-terminal) !important;
+}
+
+.terminal-area .xterm-screen {
+  background-color: var(--color-bg-terminal);
 }
 
 .server-pane {
@@ -211,6 +225,7 @@
   color: var(--color-text);
   white-space: pre-wrap;
   word-break: break-all;
+  background: var(--color-bg-raised);
 }
 
 .server-btn {
@@ -252,13 +267,13 @@ html, body {
 /* ─── xterm.js scrollbar overrides (cannot be Tailwind-ized) ─── */
 .xterm-viewport::-webkit-scrollbar { width: 8px; }
 .xterm-viewport::-webkit-scrollbar-track { background: var(--color-bg); }
-.xterm-viewport::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 4px; }
+.xterm-viewport::-webkit-scrollbar-thumb { background: var(--color-border-interactive); border-radius: 4px; }
 .xterm-viewport::-webkit-scrollbar-thumb:hover { background: var(--color-text); }
 
 /* ─── Global custom scrollbars (match xterm style) ─── */
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 4px; }
+*::-webkit-scrollbar-thumb { background: var(--color-border-interactive); border-radius: 4px; }
 *::-webkit-scrollbar-thumb:hover { background: var(--color-text); }
 
 /* ─── Drag state overlay (applied by drag-manager) ─── */
@@ -269,18 +284,7 @@ html, body {
   user-select: none;
 }
 
-/* ─── GSD Viewer content styles ─── */
-.gsd-content h1, .gsd-content h2, .gsd-content h3 { color: var(--color-text-bright); margin: 16px 0 8px; font-family: var(--font-family-sans); }
-.gsd-content h1 { font-size: 20px; }
-.gsd-content h2 { font-size: 16px; }
-.gsd-content h3 { font-size: 14px; }
-.gsd-content .task-checkbox { margin-right: 8px; cursor: pointer; accent-color: var(--color-accent); }
-.gsd-content li { list-style: none; margin: 4px 0; }
-.gsd-content ul { padding-left: 16px; }
-.gsd-content p { margin: 8px 0; }
-.gsd-content code { background: var(--color-bg-raised); padding: 2px 4px; border-radius: 4px; font-size: 13px; font-family: var(--font-family-mono); }
-.gsd-content pre { background: var(--color-bg-raised); padding: 12px; border-radius: 2px; overflow-x: auto; }
-.gsd-content pre code { background: none; padding: 0; }
+/* ─── GSD Viewer uses .file-viewer-markdown (shared with file preview) ─── */
 
 /* ─── Diff Viewer color classes ─── */
 .diff-add { border-left: 3px solid var(--color-success); }
@@ -296,6 +300,7 @@ html, body {
   height: 100%;
   cursor: col-resize;
   background: var(--color-border);
+  background-clip: content-box;
   flex-shrink: 0;
   /* Widen hit target with negative margin + transparent padding trick */
   margin: 0 calc((var(--handle-hit) - var(--handle-size)) / -2);
@@ -307,6 +312,7 @@ html, body {
 .split-handle-v:hover,
 .split-handle-v.dragging {
   background: var(--color-accent);
+  background-clip: content-box;
 }
 
 /* ─── Horizontal split handle between right sub-panels ─── */
@@ -316,6 +322,7 @@ html, body {
   min-height: var(--handle-size);
   cursor: row-resize;
   background: var(--color-border);
+  background-clip: content-box;
   flex-shrink: 0;
   /* Widen vertical hit target */
   margin: calc((var(--handle-hit) - var(--handle-size)) / -2) 0;
@@ -327,9 +334,76 @@ html, body {
 .split-handle-h:hover,
 .split-handle-h.dragging {
   background: var(--color-accent);
+  background-clip: content-box;
+}
+
+/* ─── Project row hover actions ─── */
+.group:hover .project-row-actions {
+  opacity: 1 !important;
 }
 
 /* Agent icon gradient utility (D-17: replaces inline style={{ background: 'linear-gradient(180deg, #A855F7, #6366F1)' }}) */
 .agent-icon-gradient {
   background: linear-gradient(180deg, #A855F7, #6366F1);
 }
+
+/* ─── Syntax highlighting tokens (file viewer) ─── */
+.syn-kw { color: #c792ea; }           /* keywords: purple */
+.syn-str { color: #c3e88d; }          /* strings: green */
+.syn-cm { color: #546e7a; }           /* comments: dim gray */
+.syn-num { color: #f78c6c; }          /* numbers: orange */
+.syn-fn { color: #82aaff; }           /* functions: blue */
+.syn-op { color: #89ddff; }           /* operators: cyan */
+.syn-type { color: #ffcb6b; }         /* types/classes: yellow */
+
+/* ─── File viewer markdown rendering ─── */
+.file-viewer-markdown h1,
+.file-viewer-markdown h2,
+.file-viewer-markdown h3,
+.file-viewer-markdown h4 {
+  color: var(--color-text-bright);
+  margin: 20px 0 10px;
+  font-weight: 600;
+}
+.file-viewer-markdown h1 { font-size: 24px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px; }
+.file-viewer-markdown h2 { font-size: 20px; border-bottom: 1px solid var(--color-border); padding-bottom: 6px; }
+.file-viewer-markdown h3 { font-size: 16px; }
+.file-viewer-markdown h4 { font-size: 14px; }
+.file-viewer-markdown p { margin: 10px 0; line-height: 1.7; }
+.file-viewer-markdown a { color: var(--color-accent); text-decoration: underline; }
+.file-viewer-markdown code {
+  background: var(--color-bg-raised);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: var(--font-family-mono);
+}
+.file-viewer-markdown pre {
+  background: var(--color-bg-raised);
+  padding: 14px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 12px 0;
+}
+.file-viewer-markdown pre code { background: none; padding: 0; }
+.file-viewer-markdown ul, .file-viewer-markdown ol { padding-left: 24px; margin: 8px 0; }
+.file-viewer-markdown li { margin: 4px 0; line-height: 1.6; }
+.file-viewer-markdown blockquote {
+  border-left: 3px solid var(--color-accent);
+  padding: 4px 16px;
+  margin: 12px 0;
+  color: var(--color-text);
+  background: var(--color-bg-raised);
+  border-radius: 0 4px 4px 0;
+}
+.file-viewer-markdown hr { border: none; border-top: 1px solid var(--color-border); margin: 20px 0; }
+.file-viewer-markdown table { border-collapse: collapse; margin: 12px 0; width: 100%; }
+.file-viewer-markdown th, .file-viewer-markdown td {
+  border: 1px solid var(--color-border);
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 13px;
+}
+.file-viewer-markdown th { background: var(--color-bg-raised); font-weight: 600; color: var(--color-text-bright); }
+.file-viewer-markdown img { max-width: 100%; border-radius: 4px; }
+.file-viewer-markdown .task-checkbox { margin-right: 8px; cursor: pointer; accent-color: var(--color-accent); }

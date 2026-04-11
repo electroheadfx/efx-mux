@@ -1,12 +1,13 @@
 // preferences-panel.tsx -- Ctrl+, preferences panel overlay (UX-01)
-// Read-only display of current project settings with theme toggle and edit action.
-// Dismisses on Escape or click outside.
+// Restyled to navy-blue palette with reference PreferencesPanel pattern (Phase 10)
 
 import { useEffect } from 'preact/hooks';
+import type { ComponentChildren } from 'preact';
 import { signal } from '@preact/signals';
-import { activeProjectName, projects } from '../state-manager';
-import { toggleThemeMode } from '../theme/theme-manager';
+import { activeProjectName, projects, updateLayout } from '../state-manager';
 import { openProjectModal } from './project-modal';
+import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from './file-tree';
+import { colors, fonts } from '../tokens';
 
 // ---------------------------------------------------------------------------
 // Module-level state
@@ -20,6 +21,117 @@ export function togglePreferences() {
 
 export function closePreferences() {
   visible.value = false;
+}
+
+// ---------------------------------------------------------------------------
+// Visual primitives (matching reference PreferencesPanel)
+// ---------------------------------------------------------------------------
+
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <div style={{ padding: '16px 24px 4px 24px' }}>
+      <span
+        style={{
+          fontFamily: fonts.mono,
+          fontSize: 10,
+          color: colors.textDim,
+          letterSpacing: '1.5px',
+        }}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function SettingRow({
+  label,
+  children,
+  border = true,
+}: {
+  label: string;
+  children: ComponentChildren;
+  border?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '10px 24px',
+        borderBottom: border ? '1px solid #1B202880' : 'none',
+      }}
+    >
+      <span
+        style={{
+          fontFamily: fonts.sans,
+          fontSize: 13,
+          color: colors.textMuted,
+        }}
+      >
+        {label}
+      </span>
+      <div style={{ display: 'flex', alignItems: 'center' }}>{children}</div>
+    </div>
+  );
+}
+
+function KbdKey({ label }: { label: string }) {
+  return (
+    <span
+      style={{
+        fontFamily: fonts.mono,
+        fontSize: 10,
+        color: colors.textMuted,
+        backgroundColor: colors.bgBase,
+        border: `1px solid ${colors.bgSurface}`,
+        borderRadius: 4,
+        padding: '3px 8px',
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function AgentBadge({ name }: { name: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div
+        style={{
+          width: 16,
+          height: 16,
+          borderRadius: 4,
+          background: 'linear-gradient(180deg, #A855F7 0%, #6366F1 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        }}
+      >
+        <span
+          style={{
+            fontFamily: fonts.sans,
+            color: 'white',
+            fontSize: 7,
+          }}
+        >
+          {'\u25C6'}
+        </span>
+      </div>
+      <span
+        style={{
+          fontFamily: fonts.sans,
+          fontSize: 13,
+          fontWeight: 500,
+          color: colors.textPrimary,
+        }}
+      >
+        {name}
+      </span>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -46,125 +158,260 @@ export function PreferencesPanel() {
 
   const name = activeProjectName.value;
   const activeProject = name ? projects.value.find(p => p.name === name) : null;
-  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
 
   return (
     <div
-      class="fixed inset-0 bg-black/30 z-[100] flex items-center justify-center"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        zIndex: 100,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
       onClick={closePreferences}
     >
       <div
-        class="w-[500px] max-h-[70vh] bg-bg-raised border border-border-interactive rounded-xl shadow-2xl overflow-y-auto"
+        style={{
+          width: 520,
+          maxHeight: '70vh',
+          backgroundColor: colors.bgElevated,
+          border: `1px solid ${colors.bgSurface}`,
+          borderRadius: 12,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+          overflowY: 'auto',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div class="px-6 pt-5 pb-4 flex items-center justify-between border-b border-border">
-          <span class="text-base font-semibold text-text-bright font-sans">Preferences</span>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '20px 24px 16px 24px',
+            borderBottom: `1px solid ${colors.bgBorder}`,
+          }}
+        >
+          <span
+            style={{
+              fontFamily: fonts.sans,
+              fontSize: 16,
+              fontWeight: 600,
+              color: colors.textPrimary,
+            }}
+          >
+            Preferences
+          </span>
           <button
             onClick={closePreferences}
-            class="w-7 h-7 rounded-md border border-border-interactive flex items-center justify-center hover:bg-bg"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              border: `1px solid ${colors.bgSurface}`,
+              backgroundColor: 'transparent',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+            }}
             title="Close preferences"
-          ><span class="text-sm text-text">{'\u2715'}</span></button>
+          >
+            <span
+              style={{
+                fontFamily: fonts.sans,
+                color: colors.textMuted,
+                fontSize: 14,
+                lineHeight: 1,
+              }}
+            >
+              {'\u2715'}
+            </span>
+          </button>
         </div>
 
         {/* Body */}
-        <div class="pt-4">
+        <div style={{ padding: '16px 0' }}>
           {/* Current Project */}
-          <div>
-            <div class="px-6 py-2 pt-2 section-label">
-              Current Project
-            </div>
-            <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/50">
-              <span class="text-[13px] text-text font-sans">Name</span>
-              <span class="text-[13px] font-medium text-text-bright font-sans">{name ?? 'None'}</span>
-            </div>
-            <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/50">
-              <span class="text-[13px] text-text font-sans">Path</span>
-              <span class="text-[11px] font-mono text-text truncate max-w-[280px]" title={activeProject?.path ?? ''}>
-                {activeProject?.path ?? 'N/A'}
-              </span>
-            </div>
-            <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/50">
-              <span class="text-[13px] text-text font-sans">Agent</span>
-              <div class="flex items-center gap-1.5">
-                <div class="w-4 h-4 rounded flex items-center justify-center text-white text-[8px] agent-icon-gradient">&#x25C6;</div>
-                <span class="text-[13px] font-medium text-text-bright font-sans">Claude Code</span>
-              </div>
-            </div>
-          </div>
+          <SectionLabel label="CURRENT PROJECT" />
+          <SettingRow label="Name">
+            <span
+              style={{
+                fontFamily: fonts.sans,
+                fontSize: 13,
+                fontWeight: 500,
+                color: colors.textPrimary,
+              }}
+            >
+              {name ?? 'None'}
+            </span>
+          </SettingRow>
+          <SettingRow label="Path">
+            <span
+              style={{
+                fontFamily: fonts.mono,
+                fontSize: 11,
+                color: colors.textMuted,
+                maxWidth: 280,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+              title={activeProject?.path ?? ''}
+            >
+              {activeProject?.path ?? 'N/A'}
+            </span>
+          </SettingRow>
+          <SettingRow label="Agent">
+            <AgentBadge name="Claude Code" />
+          </SettingRow>
 
-          {/* Appearance */}
-          <div>
-            <div class="px-6 py-2 pt-4 section-label">
-              Appearance
-            </div>
-            <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/50">
-              <span class="text-[13px] text-text font-sans">Theme</span>
-              <div class="rounded-md border border-border-interactive flex">
+          {/* File Tree Controls */}
+          <SectionLabel label="FILE TREE" />
+          <SettingRow label="Font size">
+            <input
+              type="range"
+              min="10"
+              max="20"
+              value={fileTreeFontSize.value}
+              onInput={(e) => {
+                fileTreeFontSize.value = parseInt((e.target as HTMLInputElement).value);
+                updateLayout({ 'file-tree-font-size': String(fileTreeFontSize.value) });
+              }}
+              style={{ width: 80, accentColor: colors.accent }}
+            />
+          </SettingRow>
+          <SettingRow label="Line height">
+            <input
+              type="range"
+              min="2"
+              max="12"
+              value={fileTreeLineHeight.value}
+              onInput={(e) => {
+                fileTreeLineHeight.value = parseInt((e.target as HTMLInputElement).value);
+                updateLayout({ 'file-tree-line-height': String(fileTreeLineHeight.value) });
+              }}
+              style={{ width: 80, accentColor: colors.accent }}
+            />
+          </SettingRow>
+          <SettingRow label="BG color">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="color"
+                value={fileTreeBgColor.value || colors.bgDeep}
+                onInput={(e) => {
+                  fileTreeBgColor.value = (e.target as HTMLInputElement).value;
+                  updateLayout({ 'file-tree-bg-color': fileTreeBgColor.value });
+                }}
+                style={{ width: 28, height: 28, border: `1px solid ${colors.bgSurface}`, borderRadius: 4, padding: 0, cursor: 'pointer', backgroundColor: 'transparent' }}
+              />
+              {fileTreeBgColor.value && (
                 <button
-                  onClick={() => toggleThemeMode()}
-                  class={`rounded-md px-3 py-[5px] text-[11px] font-medium font-sans ${isDark ? 'bg-accent text-white' : 'text-text-muted'}`}
-                >Dark</button>
-                <button
-                  onClick={() => toggleThemeMode()}
-                  class={`rounded-md px-3 py-[5px] text-[11px] font-medium font-sans ${!isDark ? 'bg-accent text-white' : 'text-text-muted'}`}
-                >Light</button>
-              </div>
+                  onClick={() => { fileTreeBgColor.value = ''; updateLayout({ 'file-tree-bg-color': '' }); }}
+                  style={{
+                    fontFamily: fonts.mono,
+                    fontSize: 10,
+                    color: colors.textMuted,
+                    backgroundColor: 'transparent',
+                    border: `1px solid ${colors.bgSurface}`,
+                    borderRadius: 4,
+                    padding: '3px 8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Reset
+                </button>
+              )}
             </div>
-          </div>
+          </SettingRow>
 
           {/* Shortcuts */}
-          <div>
-            <div class="px-6 py-2 pt-4 section-label">
-              Shortcuts
+          <SectionLabel label="SHORTCUTS" />
+          <SettingRow label="Toggle sidebar">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <KbdKey label="Ctrl" />
+              <span
+                style={{
+                  fontFamily: fonts.mono,
+                  fontSize: 10,
+                  color: colors.textDim,
+                }}
+              >
+                +
+              </span>
+              <KbdKey label="B" />
             </div>
-            <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/50">
-              <span class="text-[13px] text-text font-sans">Toggle sidebar</span>
-              <div class="flex items-center gap-1">
-                <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">Ctrl</span>
-                <span class="text-[10px] font-mono text-text-muted">+</span>
-                <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">B</span>
-              </div>
+          </SettingRow>
+          <SettingRow label="Quick switch">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <KbdKey label="Ctrl" />
+              <span
+                style={{
+                  fontFamily: fonts.mono,
+                  fontSize: 10,
+                  color: colors.textDim,
+                }}
+              >
+                +
+              </span>
+              <KbdKey label="P" />
             </div>
-            <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/50">
-              <span class="text-[13px] text-text font-sans">Quick switch</span>
-              <div class="flex items-center gap-1">
-                <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">Ctrl</span>
-                <span class="text-[10px] font-mono text-text-muted">+</span>
-                <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">P</span>
-              </div>
+          </SettingRow>
+          <SettingRow label="New tab">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <KbdKey label="Ctrl" />
+              <span
+                style={{
+                  fontFamily: fonts.mono,
+                  fontSize: 10,
+                  color: colors.textDim,
+                }}
+              >
+                +
+              </span>
+              <KbdKey label="T" />
             </div>
-            <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/50">
-              <span class="text-[13px] text-text font-sans">New tab</span>
-              <div class="flex items-center gap-1">
-                <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">Ctrl</span>
-                <span class="text-[10px] font-mono text-text-muted">+</span>
-                <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">T</span>
-              </div>
+          </SettingRow>
+          <SettingRow label="Close tab">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <KbdKey label="\u2318" />
+              <span
+                style={{
+                  fontFamily: fonts.mono,
+                  fontSize: 10,
+                  color: colors.textDim,
+                }}
+              >
+                +
+              </span>
+              <KbdKey label="W" />
             </div>
-            <div class="flex items-center justify-between px-6 py-2.5 border-b border-border/50">
-              <span class="text-[13px] text-text font-sans">Close tab</span>
-              <div class="flex items-center gap-1">
-                <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">&#x2318;</span>
-                <span class="text-[10px] font-mono text-text-muted">+</span>
-                <span class="rounded bg-bg border border-border-interactive px-2 py-[3px] text-[10px] font-mono text-text">W</span>
-              </div>
-            </div>
-          </div>
+          </SettingRow>
 
           {/* Actions */}
-          <div>
-            <div class="px-6 py-2 pt-4 section-label">
-              Actions
-            </div>
-            <div class="px-6 py-3">
-              <button
-                onClick={() => { closePreferences(); openProjectModal({ project: activeProject ?? undefined }); }}
-                class="rounded-lg bg-accent px-5 py-2 text-[13px] font-semibold text-white font-sans hover:bg-accent/90 cursor-pointer transition-opacity"
-              >
-                Edit Project
-              </button>
-            </div>
+          <SectionLabel label="ACTIONS" />
+          <div style={{ padding: '12px 24px' }}>
+            <button
+              onClick={() => {
+                closePreferences();
+                openProjectModal({ project: activeProject ?? undefined });
+              }}
+              style={{
+                borderRadius: 8,
+                backgroundColor: colors.accent,
+                border: 'none',
+                padding: '8px 16px',
+                fontFamily: fonts.sans,
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'white',
+                cursor: 'pointer',
+              }}
+            >
+              Edit Project
+            </button>
           </div>
         </div>
       </div>
