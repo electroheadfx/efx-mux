@@ -154,6 +154,10 @@
  *   learnings copy                       Copy from current project's LEARNINGS.md
  *   learnings prune --older-than <dur>   Remove entries older than duration (e.g. 90d)
  *   learnings delete <id>                Delete a learning by ID
+ *
+ * GSD-2 Migration:
+ *   from-gsd2 [--path <dir>] [--force] [--dry-run]
+ *             Import a GSD-2 (.gsd/) project back to GSD v1 (.planning/) format
  */
 
 const fs = require('fs');
@@ -294,6 +298,17 @@ async function main() {
     args.splice(pickIdx, 2);
   }
 
+  // --default <value>: for config-get, return this value instead of erroring
+  // when the key is absent. Allows workflows to express optional config reads
+  // without defensive `2>/dev/null || true` boilerplate (#1893).
+  const defaultIdx = args.indexOf('--default');
+  let defaultValue = undefined;
+  if (defaultIdx !== -1) {
+    defaultValue = args[defaultIdx + 1];
+    if (defaultValue === undefined) defaultValue = '';
+    args.splice(defaultIdx, 2);
+  }
+
   const command = args[0];
 
   if (!command) {
@@ -346,7 +361,7 @@ async function main() {
       }
     };
     try {
-      await runCommand(command, args, cwd, raw);
+      await runCommand(command, args, cwd, raw, defaultValue);
       cleanup();
     } catch (e) {
       fs.writeSync = origWriteSync;
@@ -355,7 +370,27 @@ async function main() {
     return;
   }
 
-  await runCommand(command, args, cwd, raw);
+  // Intercept stdout to transparently resolve @file: references (#1891).
+  // core.cjs output() writes @file:<path> when JSON > 50KB. The --pick path
+  // already resolves this, but the normal path wrote @file: to stdout, forcing
+  // every workflow to have a bash-specific `if [[ "$INIT" == @file:* ]]` check
+  // that breaks on PowerShell and other non-bash shells.
+  const origWriteSync2 = fs.writeSync;
+  const outChunks = [];
+  fs.writeSync = function (fd, data, ...rest) {
+    if (fd === 1) { outChunks.push(String(data)); return; }
+    return origWriteSync2.call(fs, fd, data, ...rest);
+  };
+  try {
+    await runCommand(command, args, cwd, raw, defaultValue);
+  } finally {
+    fs.writeSync = origWriteSync2;
+  }
+  let captured = outChunks.join('');
+  if (captured.startsWith('@file:')) {
+    captured = fs.readFileSync(captured.slice(6), 'utf-8');
+  }
+  origWriteSync2.call(fs, 1, captured);
 }
 
 /**
@@ -381,7 +416,7 @@ function extractField(obj, fieldPath) {
   return current;
 }
 
-async function runCommand(command, args, cwd, raw) {
+async function runCommand(command, args, cwd, raw, defaultValue) {
   switch (command) {
     case 'state': {
       const subcommand = args[1];
@@ -589,7 +624,7 @@ async function runCommand(command, args, cwd, raw) {
     }
 
     case 'config-get': {
-      config.cmdConfigGet(cwd, args[1], raw);
+      config.cmdConfigGet(cwd, args[1], raw, defaultValue);
       break;
     }
 
@@ -1036,6 +1071,14 @@ async function runCommand(command, args, cwd, raw) {
       } else {
         error('Unknown learnings subcommand. Available: list, query, copy, prune, delete');
       }
+      break;
+    }
+
+    // ─── GSD-2 Reverse Migration ───────────────────────────────────────────
+
+    case 'from-gsd2': {
+      const gsd2Import = require('./lib/gsd2-import.cjs');
+      gsd2Import.cmdFromGsd2(args.slice(1), cwd, raw);
       break;
     }
 
