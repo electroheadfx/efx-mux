@@ -86,7 +86,7 @@
 :root {
   --sidebar-w: 200px;
   --right-w: 25%;
-  --handle-size: 4px;
+  --handle-size: 1px;
   --handle-hit: 8px;
 }
 
