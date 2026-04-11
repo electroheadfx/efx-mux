@@ -298,6 +298,7 @@ html, body {
   height: 100%;
   cursor: col-resize;
   background: var(--color-border);
+  background-clip: content-box;
   flex-shrink: 0;
   /* Widen hit target with negative margin + transparent padding trick */
   margin: 0 calc((var(--handle-hit) - var(--handle-size)) / -2);
@@ -309,6 +310,7 @@ html, body {
 .split-handle-v:hover,
 .split-handle-v.dragging {
   background: var(--color-accent);
+  background-clip: content-box;
 }
 
 /* ─── Horizontal split handle between right sub-panels ─── */
@@ -318,6 +320,7 @@ html, body {
   min-height: var(--handle-size);
   cursor: row-resize;
   background: var(--color-border);
+  background-clip: content-box;
   flex-shrink: 0;
   /* Widen vertical hit target */
   margin: calc((var(--handle-hit) - var(--handle-size)) / -2) 0;
@@ -329,6 +332,7 @@ html, body {
 .split-handle-h:hover,
 .split-handle-h.dragging {
   background: var(--color-accent);
+  background-clip: content-box;
 }
 
 /* ─── Project row hover actions ─── */
