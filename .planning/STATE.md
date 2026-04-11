@@ -112,9 +112,10 @@ None yet.
 | 260411-c1y | File tree: tighter line height default, add BG color control to preferences | 2026-04-11 | 4c83882 | [260411-c1y-add-smaller-line-height-in-filetree-list](./quick/260411-c1y-add-smaller-line-height-in-filetree-list/) |
 | 260411-cbq | Add edit button to sidebar project panes for project settings | 2026-04-11 | 39311ea | [260411-cbq-add-edit-button-to-sidebar-project-panes](./quick/260411-cbq-add-edit-button-to-sidebar-project-panes/) |
 | 260411-dsm | Make pane resize borders thin 1px | 2026-04-11 | 5435bc8 | [260411-dsm-make-pane-resize-borders-thin-1px](./quick/260411-dsm-make-pane-resize-borders-thin-1px/) |
+| 260411-dz7 | Remove non-functional light/dark theme toggle from preferences panel | 2026-04-11 | 91fff51 | [260411-dz7-remove-non-functional-light-dark-theme-t](./quick/260411-dz7-remove-non-functional-light-dark-theme-t/) |
 
 ## Session Continuity
 
-Last activity: 2026-04-11 - Completed quick task 260411-dsm: Make pane resize borders thin 1px
+Last activity: 2026-04-11 - Completed quick task 260411-dz7: Remove non-functional light/dark theme toggle from preferences panel
 Stopped at: Completed quick task 260410-x7o
 Resume file: None
