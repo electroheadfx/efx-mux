@@ -156,17 +156,18 @@ function ProjectRow({ project, index }: { project: ProjectEntry; index: number }
         </div>
       </div>
 
-      {/* Action buttons (edit + remove) */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
+      {/* Action buttons (edit + remove) — hidden until row hover */}
+      <div
+        class="project-row-actions"
+        style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto', opacity: 0, transition: 'opacity 0.15s' }}
+      >
         <span
           style={{
-            opacity: 0,
             cursor: 'pointer',
             flexShrink: 0,
             color: colors.textMuted,
-            transition: 'opacity 0.15s',
           }}
-          class="group-hover:opacity-100 hover:text-accent"
+          class="hover:text-accent"
           title="Edit project settings"
           onClick={(e) => {
             e.stopPropagation();
@@ -177,13 +178,11 @@ function ProjectRow({ project, index }: { project: ProjectEntry; index: number }
         </span>
         <span
           style={{
-            opacity: 0,
             cursor: 'pointer',
             flexShrink: 0,
             color: colors.textMuted,
-            transition: 'opacity 0.15s',
           }}
-          class="group-hover:opacity-100 hover:text-danger"
+          class="hover:text-danger"
           title="Remove project"
           onClick={(e) => {
             e.stopPropagation();

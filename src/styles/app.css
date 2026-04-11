@@ -331,6 +331,11 @@ html, body {
   background: var(--color-accent);
 }
 
+/* ─── Project row hover actions ─── */
+.group:hover .project-row-actions {
+  opacity: 1 !important;
+}
+
 /* Agent icon gradient utility (D-17: replaces inline style={{ background: 'linear-gradient(180deg, #A855F7, #6366F1)' }}) */
 .agent-icon-gradient {
   background: linear-gradient(180deg, #A855F7, #6366F1);
