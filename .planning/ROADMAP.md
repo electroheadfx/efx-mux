@@ -301,13 +301,13 @@ Plans:
 **Plans:** 10 plans
 
 Plans:
-- [ ] 10-01-PLAN.md -- Foundation: src/tokens.ts + app.css @theme update with navy-blue palette
-- [ ] 10-02-PLAN.md -- Leaf components: tab-bar, agent-header, crash-overlay rewrite
-- [ ] 10-03-PLAN.md -- Content panels: diff-viewer, file-tree rewrite
-- [ ] 10-04-PLAN.md -- GSD viewer: container + .gsd-content CSS update
-- [ ] 10-05-PLAN.md -- Sidebar: full rewrite with reference visual + all existing logic
-- [ ] 10-06-PLAN.md -- Container components: main-panel, right-panel rewrite + human verify
-- [ ] 10-07-PLAN.md -- Server pane: strip/expanded states with navy-blue palette
-- [ ] 10-08-PLAN.md -- Modals: project-modal, preferences-panel rewrite
-- [ ] 10-09-PLAN.md -- TerminalTabBar + overlay styling (wizard, fuzzy-search, cheatsheet)
-- [ ] 10-10-PLAN.md -- Light mode companion palette update
+- [x] 10-01-PLAN.md -- Foundation: src/tokens.ts + app.css @theme update with navy-blue palette
+- [x] 10-02-PLAN.md -- Leaf components: tab-bar, agent-header, crash-overlay rewrite
+- [x] 10-03-PLAN.md -- Content panels: diff-viewer, file-tree rewrite
+- [x] 10-04-PLAN.md -- GSD viewer: container + .gsd-content CSS update
+- [x] 10-05-PLAN.md -- Sidebar: full rewrite with reference visual + all existing logic
+- [x] 10-06-PLAN.md -- Container components: main-panel, right-panel rewrite + human verify
+- [x] 10-07-PLAN.md -- Server pane: strip/expanded states with navy-blue palette
+- [x] 10-08-PLAN.md -- Modals: project-modal, preferences-panel rewrite
+- [x] 10-09-PLAN.md -- TerminalTabBar + overlay styling (wizard, fuzzy-search, cheatsheet)
+- [x] 10-10-PLAN.md -- Light mode companion palette update

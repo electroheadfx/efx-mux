@@ -31,7 +31,7 @@ export function createTerminal(container: HTMLElement, options: TerminalOptions 
     fontSize: options.fontSize || 14,
     fontFamily: options.font ? `'${options.font}', monospace` : "'FiraCode Light', 'Fira Code', monospace",
     theme: options.theme || {
-      background: '#282d3a',
+      background: '#111927',
       foreground: '#92a0a0',
       cursor: '#258ad1',
       selectionBackground: '#3e454a',

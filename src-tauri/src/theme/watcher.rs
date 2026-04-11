@@ -7,7 +7,7 @@ use tauri::Emitter;
 use super::types::{config_dir, theme_path};
 use crate::state::state_path;
 
-/// Start a background thread that watches ~/.config/efxmux/ for theme.json changes.
+/// Start a background thread that watches ~/.config/efx-mux/ for theme.json changes.
 ///
 /// Watches the parent directory (not the file) because editors perform atomic saves
 /// via delete + rename, which would remove the watch on the file itself.

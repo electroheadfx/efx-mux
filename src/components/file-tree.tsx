@@ -18,7 +18,7 @@ export const fileTreeLineHeight = signal(2);
 export const fileTreeBgColor = signal('');
 
 // View mode signal
-const viewMode = signal<'flat' | 'tree'>('flat');
+const viewMode = signal<'flat' | 'tree'>('tree');
 
 // Local signals for component state
 interface FileEntry {
@@ -301,7 +301,12 @@ export function FileTree() {
 
     // Initial load
     const project = getActiveProject();
-    if (project && project.path) loadDir(project.path);
+    if (project && project.path) {
+      loadDir(project.path);
+      if (viewMode.value === 'tree') {
+        initTree();
+      }
+    }
 
     return () => {
       document.removeEventListener('project-changed', handleProjectChanged);

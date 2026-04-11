@@ -108,7 +108,7 @@ export function RightPanel() {
           activeTab={rightTopTab}
           onSwitch={(tab) => { rightTopTab.value = tab; }}
         />
-        <div class="right-top-content flex-1 min-h-0 overflow-hidden relative">
+        <div class="right-top-content flex-1 min-h-0 overflow-hidden relative p-1">
           <div style={{ height: '100%', display: rightTopTab.value === 'GSD' ? 'block' : 'none' }}>
             <GSDViewer />
           </div>

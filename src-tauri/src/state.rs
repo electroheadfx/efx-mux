@@ -60,6 +60,20 @@ pub struct LayoutState {
 
     #[serde(default = "default_server_pane_state", rename = "server-pane-state")]
     pub server_pane_state: String,
+
+    #[serde(default = "default_file_tree_font_size", rename = "file-tree-font-size")]
+    pub file_tree_font_size: String,
+
+    #[serde(default = "default_file_tree_line_height", rename = "file-tree-line-height")]
+    pub file_tree_line_height: String,
+
+    #[serde(default, rename = "file-tree-bg-color")]
+    pub file_tree_bg_color: String,
+
+    /// Extra layout fields from JS. Preserves round-trip
+    /// so the frontend can store arbitrary layout data without Rust schema changes.
+    #[serde(flatten)]
+    pub extra: std::collections::HashMap<String, serde_json::Value>,
 }
 
 impl Default for LayoutState {
@@ -71,6 +85,10 @@ impl Default for LayoutState {
             sidebar_collapsed: false,
             server_pane_height: default_server_pane_height(),
             server_pane_state: default_server_pane_state(),
+            file_tree_font_size: default_file_tree_font_size(),
+            file_tree_line_height: default_file_tree_line_height(),
+            file_tree_bg_color: String::new(),
+            extra: std::collections::HashMap::new(),
         }
     }
 }
@@ -198,6 +216,12 @@ fn default_server_pane_height() -> String {
 fn default_server_pane_state() -> String {
     "strip".into()
 }
+fn default_file_tree_font_size() -> String {
+    "13".into()
+}
+fn default_file_tree_line_height() -> String {
+    "2".into()
+}
 fn default_version() -> u32 {
     1
 }
@@ -272,7 +296,9 @@ pub fn load_state_sync() -> AppState {
 
 /// Save state to state.json. Called from spawn_blocking thread (per D-11, D-12)
 pub fn save_state_sync(state: &AppState) -> Result<(), String> {
-    ensure_config_dir();
+    // Create config dir if missing (don't rely on ensure_config_dir which swallows errors)
+    let dir = state_path().parent().unwrap().to_path_buf();
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create config dir: {}", e))?;
     let path = state_path();
     let tmp_path = path.with_extension("json.tmp");
     let json = serde_json::to_string_pretty(state).map_err(|e| e.to_string())?;

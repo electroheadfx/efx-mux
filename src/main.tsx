@@ -21,13 +21,14 @@ import { FirstRunWizard, openWizard } from './components/first-run-wizard';
 import { PreferencesPanel, togglePreferences } from './components/preferences-panel';
 import { initDragManager } from './drag-manager';
 import { initTheme, registerTerminal, toggleThemeMode } from './theme/theme-manager';
-import { createNewTab, closeActiveTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs } from './components/terminal-tabs';
+import { createNewTab, closeActiveTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs, saveProjectTabs, hasProjectTabs, restoreProjectTabs } from './components/terminal-tabs';
 import {
   loadAppState, initBeforeUnload, sidebarCollapsed, updateLayout, updateSession,
   getProjects, getActiveProject, projects, activeProjectName
 } from './state-manager';
 import { openProjectModal } from './components/project-modal';
 import { serverPaneState, saveCurrentProjectState, restoreProjectState } from './components/server-pane';
+import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from './components/file-tree';
 import { detectAgent } from './server/server-bridge';
 
 /**
@@ -77,6 +78,10 @@ async function bootstrap() {
     const { layout } = appState;
     if (layout['sidebar-w']) document.documentElement.style.setProperty('--sidebar-w', String(layout['sidebar-w']));
     if (layout['right-w']) document.documentElement.style.setProperty('--right-w', String(layout['right-w']));
+    // Restore file tree preferences (always present as typed fields in Rust LayoutState)
+    fileTreeFontSize.value = parseInt(String(layout['file-tree-font-size'])) || 13;
+    fileTreeLineHeight.value = parseInt(String(layout['file-tree-line-height'])) || 2;
+    fileTreeBgColor.value = String(layout['file-tree-bg-color'] ?? '');
   }
 
   // Wire beforeunload
@@ -227,11 +232,15 @@ async function bootstrap() {
       }
     }
 
-    // Try to restore tabs from persisted state (UAT gap -- tab persistence)
+    // Try to restore tabs from persisted state (per-project key first, then legacy flat key)
     let tabsRestored = false;
-    if (appState?.session?.['terminal-tabs']) {
+    const perProjectTabKey = activeName ? `terminal-tabs:${activeName}` : null;
+    const tabDataRaw = (perProjectTabKey && appState?.session?.[perProjectTabKey])
+      || appState?.session?.['terminal-tabs']
+      || null;
+    if (tabDataRaw) {
       try {
-        const parsedData = JSON.parse(appState.session['terminal-tabs']);
+        const parsedData = JSON.parse(tabDataRaw);
         if (parsedData?.tabs?.length > 0) {
           tabsRestored = await restoreTabs(parsedData, activeProject?.path, agentBinary ?? undefined);
         }
@@ -303,11 +312,12 @@ async function initProjects() {
   }
 }
 
-// Save server pane state BEFORE activeProjectName changes (fixes per-project isolation)
+// Save server pane state and terminal tabs BEFORE activeProjectName changes (fixes per-project isolation)
 document.addEventListener('project-pre-switch', (e: Event) => {
   const { oldName } = (e as CustomEvent).detail;
   if (oldName) {
     saveCurrentProjectState(oldName);
+    saveProjectTabs(oldName);
   }
 });
 
@@ -322,8 +332,8 @@ document.addEventListener('project-changed', async (e: Event) => {
     if (project?.path) {
       await invoke('set_project_path', { path: project.path });
 
-      // Clear all main panel tabs and create fresh tab for new project
-      clearAllTabs();
+      // Clear all main panel tabs (PTY clients disconnect but tmux sessions stay alive)
+      await clearAllTabs();
 
       const newMainSession = projectSessionName(newProjectName);
       mainPtyKey = newMainSession;
@@ -339,11 +349,18 @@ document.addEventListener('project-changed', async (e: Event) => {
         }
       }
 
-      // Create first tab for new project
-      const themeOptions = {
-        theme: undefined, // Will use current theme from getTheme() inside initFirstTab
-      };
-      await initFirstTab(themeOptions, newMainSession, project.path, agentBinary ?? undefined);
+      // Try restoring cached tabs from a previous visit to this project.
+      // spawn_terminal in pty.rs clears tmux history before re-attach to prevent
+      // stale screen content from appearing as extra newlines.
+      const restored = await restoreProjectTabs(newProjectName, project.path, agentBinary ?? undefined);
+
+      if (!restored) {
+        // First visit to this project (no cached tabs) -- create fresh first tab
+        const themeOptions = {
+          theme: undefined, // Will use current theme from getTheme() inside initFirstTab
+        };
+        await initFirstTab(themeOptions, newMainSession, project.path, agentBinary ?? undefined);
+      }
 
       // Switch right panel bash terminal (silent via Rust)
       const newRightSession = projectSessionName(newProjectName, 'right');

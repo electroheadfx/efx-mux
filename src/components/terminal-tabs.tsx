@@ -4,6 +4,7 @@
 // display:none/block preserves xterm.js scrollback + WebGL context.
 
 import { signal } from '@preact/signals';
+import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
@@ -11,7 +12,7 @@ import { createTerminal, type TerminalOptions } from '../terminal/terminal-manag
 import { connectPty } from '../terminal/pty-bridge';
 import { attachResizeHandler } from '../terminal/resize-handler';
 import { registerTerminal, getTheme } from '../theme/theme-manager';
-import { updateSession, activeProjectName, projects } from '../state-manager';
+import { updateSession, activeProjectName, projects, getCurrentState } from '../state-manager';
 import { detectAgent } from '../server/server-bridge';
 import { colors, fonts } from '../tokens';
 
@@ -39,6 +40,13 @@ export interface TerminalTab {
 export const terminalTabs = signal<TerminalTab[]>([]);
 export const activeTabId = signal<string>('');
 let tabCounter = 0;
+
+/**
+ * In-memory cache of tab metadata per project name.
+ * Used to restore tabs when switching back to a previously visited project.
+ * Key: project name, Value: array of { sessionName, label } for each tab.
+ */
+const projectTabCache = new Map<string, Array<{ sessionName: string; label: string }>>();
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -137,7 +145,7 @@ export async function createNewTab(): Promise<TerminalTab | null> {
     ptyConnected = true;
   } catch (err) {
     console.error('[efxmux] Failed to connect PTY for tab:', err);
-    terminal.writeln(`\r\n\x1b[33mFailed to connect PTY: ${err}\x1b[0m`);
+    terminal.writeln(`\x1b[33mFailed to connect PTY: ${err}\x1b[0m`);
   }
 
   // Attach resize handler
@@ -174,6 +182,8 @@ export async function closeActiveTab(): Promise<void> {
   if (idx === -1) return;
 
   const tab = tabs[idx];
+  // Destroy PTY session in Rust before disposing JS-side resources
+  try { await invoke('destroy_pty_session', { sessionName: tab.sessionName }); } catch {}
   disposeTab(tab);
 
   const remaining = tabs.filter(t => t.id !== currentId);
@@ -207,6 +217,7 @@ export async function closeTab(tabId: string): Promise<void> {
   }
 
   const tab = tabs[idx];
+  try { await invoke('destroy_pty_session', { sessionName: tab.sessionName }); } catch {}
   disposeTab(tab);
   terminalTabs.value = tabs.filter(t => t.id !== tabId);
   persistTabState();
@@ -285,8 +296,8 @@ export async function initFirstTab(
     ptyConnected = true;
   } catch (err) {
     console.error('[efxmux] Failed to connect PTY:', err);
-    terminal.writeln('\r\n\x1b[33mWarning: Could not attach to tmux session "' + sessionName + '":\x1b[0m ' + err);
-    terminal.writeln('\r\n\x1b[33mIf tmux is not installed, run: brew install tmux\x1b[0m');
+    terminal.writeln('\x1b[33mWarning: Could not attach to tmux session "' + sessionName + '":\x1b[0m ' + err);
+    terminal.writeln('\x1b[33mIf tmux is not installed, run: brew install tmux\x1b[0m');
   }
 
   // Attach resize handler
@@ -349,11 +360,18 @@ function disposeTab(tab: TerminalTab): void {
 // ---------------------------------------------------------------------------
 
 function persistTabState(): void {
+  const activeName = activeProjectName.value;
   const tabs = terminalTabs.value.map(t => ({
     sessionName: t.sessionName,
     label: t.label,
   }));
-  updateSession({ 'terminal-tabs': JSON.stringify({ tabs, activeTabId: activeTabId.value }) });
+  const data = JSON.stringify({ tabs, activeTabId: activeTabId.value });
+  // Save under per-project key (and legacy flat key for backward compat)
+  const patch: Record<string, string> = { 'terminal-tabs': data };
+  if (activeName) {
+    patch[`terminal-tabs:${activeName}`] = data;
+  }
+  updateSession(patch);
 }
 
 // ---------------------------------------------------------------------------
@@ -393,7 +411,7 @@ export async function restartTabSession(tabId: string): Promise<void> {
     tab.ptyConnected = true;
   } catch (err) {
     console.error('[efxmux] Failed to restart PTY:', err);
-    terminal.writeln(`\r\n\x1b[33mFailed to restart: ${err}\x1b[0m`);
+    terminal.writeln(`\x1b[33mFailed to restart: ${err}\x1b[0m`);
     tab.ptyConnected = false;
   }
 
@@ -416,8 +434,103 @@ export async function restartTabSession(tabId: string): Promise<void> {
 // Clear all tabs (for project switch)
 // ---------------------------------------------------------------------------
 
-export function clearAllTabs(): void {
+/**
+ * Save current tabs to the per-project cache before clearing.
+ * Call this with the OLD project name before switching away.
+ */
+export function saveProjectTabs(projectName: string): void {
+  const tabs = terminalTabs.value;
+  if (tabs.length > 0) {
+    const tabMeta = tabs.map(t => ({
+      sessionName: t.sessionName,
+      label: t.label,
+    }));
+    projectTabCache.set(projectName, tabMeta);
+    // Persist to disk so tabs survive app restart
+    updateSession({
+      [`terminal-tabs:${projectName}`]: JSON.stringify({ tabs: tabMeta, activeTabId: activeTabId.value }),
+    });
+  }
+}
+
+/**
+ * Check if cached tabs exist for a project (in-memory or persisted on disk).
+ */
+export function hasProjectTabs(projectName: string): boolean {
+  const cached = projectTabCache.get(projectName);
+  if (cached && cached.length > 0) return true;
+  // Also check persisted state on disk
+  const state = getCurrentState();
+  const persisted = state?.session?.[`terminal-tabs:${projectName}`];
+  if (persisted) {
+    try {
+      const parsed = JSON.parse(persisted);
+      return parsed?.tabs?.length > 0;
+    } catch { return false; }
+  }
+  return false;
+}
+
+/**
+ * Restore tabs from the per-project cache (in-memory first, then disk).
+ * Re-attaches to existing tmux sessions (whose history was cleared by
+ * spawn_terminal in pty.rs to prevent stale content dump).
+ * Returns true if tabs were restored, false if no cache exists.
+ */
+export async function restoreProjectTabs(
+  projectName: string,
+  projectPath?: string,
+  agentBinary?: string,
+): Promise<boolean> {
+  let tabData: Array<{ sessionName: string; label: string }> | null = null;
+
+  // Try in-memory cache first (from same-session project switch)
+  const cached = projectTabCache.get(projectName);
+  if (cached && cached.length > 0) {
+    tabData = cached;
+  }
+
+  // Fall back to persisted state on disk (survives app restart)
+  if (!tabData) {
+    const state = getCurrentState();
+    const persisted = state?.session?.[`terminal-tabs:${projectName}`];
+    if (persisted) {
+      try {
+        const parsed = JSON.parse(persisted);
+        if (parsed?.tabs?.length > 0) {
+          tabData = parsed.tabs;
+        }
+      } catch { /* ignore parse errors */ }
+    }
+  }
+
+  if (!tabData || tabData.length === 0) return false;
+
+  const restored = await restoreTabs(
+    { tabs: tabData, activeTabId: '' },
+    projectPath,
+    agentBinary,
+  );
+
+  if (restored) {
+    // Clear the in-memory cache entry since tabs are now live again
+    projectTabCache.delete(projectName);
+  }
+
+  return restored;
+}
+
+export async function clearAllTabs(): Promise<void> {
+  // Destroy PTY sessions in Rust so old PTY clients disconnect.
+  // The tmux sessions are kept alive (not killed) so tabs can be restored
+  // when switching back to this project. Stale screen content is cleared
+  // by spawn_terminal before re-attaching.
   for (const tab of terminalTabs.value) {
+    try {
+      await invoke('destroy_pty_session', { sessionName: tab.sessionName });
+    } catch {
+      // Session may already be gone -- safe to ignore
+    }
     disposeTab(tab);
   }
   terminalTabs.value = [];
@@ -472,7 +585,7 @@ export async function restoreTabs(
       ptyConnected = true;
     } catch (err) {
       console.error('[efxmux] Failed to restore PTY for tab:', saved.sessionName, err);
-      terminal.writeln(`\r\n\x1b[33mFailed to restore session "${saved.sessionName}": ${err}\x1b[0m`);
+      terminal.writeln(`\x1b[33mFailed to restore session "${saved.sessionName}": ${err}\x1b[0m`);
     }
 
     // Attach resize handler

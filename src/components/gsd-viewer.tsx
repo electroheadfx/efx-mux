@@ -10,6 +10,7 @@ import { listen } from '@tauri-apps/api/event';
 import { marked } from 'marked';
 import { activeProjectName, projects } from '../state-manager';
 import type { ProjectEntry } from '../state-manager';
+import { colors } from '../tokens';
 
 /**
  * Build a map of checkbox index -> line number (0-indexed).
@@ -83,7 +84,7 @@ export function GSDViewer() {
         const rendered = marked.parse(content) as string;
         const withLines = injectLineNumbers(rendered, lineMap);
         if (contentRef.current) {
-          contentRef.current.innerHTML = `<div class="gsd-content">${withLines}</div>`;
+          contentRef.current.innerHTML = withLines;
         }
       } catch (err) {
         console.warn('[efxmux] Failed to load GSD file:', err);
@@ -142,12 +143,13 @@ export function GSDViewer() {
 
   return (
     <div
-      class="h-full overflow-y-auto bg-bg-terminal p-5 flex flex-col gap-4"
+      class="h-full overflow-y-auto bg-bg-terminal p-1 flex flex-col"
       onClick={handleClick}
     >
       <div
         ref={contentRef}
-        class="text-text text-sm leading-relaxed flex-1"
+        class="file-viewer-markdown flex-1 m-0 overflow-auto text-[14px] leading-relaxed"
+        style={{ fontFamily: 'Geist, system-ui, sans-serif', color: colors.textMuted, padding: '6px' }}
       >
         <div class="text-text text-[13px]">Loading GSD...</div>
       </div>

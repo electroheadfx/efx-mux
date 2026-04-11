@@ -11,7 +11,7 @@ mod theme;
 use std::collections::HashMap;
 use tauri::Manager;
 use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
-use terminal::pty::{ack_bytes, check_tmux, cleanup_dead_sessions, get_agent_version, get_pty_sessions, resize_pty, spawn_terminal, write_pty, PtyManager};
+use terminal::pty::{ack_bytes, check_tmux, cleanup_dead_sessions, destroy_pty_session, get_agent_version, get_pty_sessions, resize_pty, spawn_terminal, write_pty, PtyManager};
 use theme::iterm2::import_iterm2_theme;
 use server::{detect_agent, kill_all_servers, restart_server, start_server, stop_server, ServerProcesses};
 use state::{get_config_dir, load_state, save_state, ManagedAppState};
@@ -53,7 +53,7 @@ pub fn run() {
                 .build()?;
             app.set_menu(menu)?;
 
-            // Ensure ~/.config/efxmux/ exists before anything reads it
+            // Ensure ~/.config/efx-mux/ exists before anything reads it
             state::ensure_config_dir();
             theme::types::ensure_config_dir();
 
@@ -87,6 +87,7 @@ pub fn run() {
             resize_pty,
             ack_bytes,
             get_pty_sessions,
+            destroy_pty_session,
             cleanup_dead_sessions,
 
             // Theme

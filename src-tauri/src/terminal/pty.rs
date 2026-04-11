@@ -66,6 +66,26 @@ pub async fn spawn_terminal(
         return Err("Invalid session name: must contain at least one alphanumeric character".to_string());
     }
 
+    // If the tmux session already exists (e.g., switching back to a project),
+    // clear its screen and scrollback history BEFORE re-attaching a new PTY client.
+    // This prevents tmux from dumping stale screen content to the new client,
+    // which xterm.js would render as extra blank lines (the original newlines bug).
+    let session_exists = std::process::Command::new("tmux")
+        .args(["has-session", "-t", &sanitized])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    if session_exists {
+        // Clear the visible pane content (like Ctrl+L)
+        let _ = std::process::Command::new("tmux")
+            .args(["send-keys", "-t", &sanitized, "C-l"])
+            .output();
+        // Clear the scrollback history buffer
+        let _ = std::process::Command::new("tmux")
+            .args(["clear-history", "-t", &sanitized])
+            .output();
+    }
+
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(PtySize {
@@ -409,6 +429,25 @@ pub fn switch_tmux_session(
             .output()
             .map_err(|e| e.to_string())?;
     }
+
+    Ok(())
+}
+
+/// Destroy a PTY session: remove from PtyManager and drop all handles.
+/// The read thread will exit when the master PTY fd is closed.
+/// The tmux session is kept alive so tabs can be restored on project switch-back.
+/// Stale screen content is handled by clearing history before re-attach in spawn_terminal.
+#[tauri::command]
+pub fn destroy_pty_session(session_name: String, manager: tauri::State<'_, PtyManager>) -> Result<(), String> {
+    let sanitized: String = session_name
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
+    let mut map = manager.0.lock().map_err(|e| e.to_string())?;
+    // Remove drops the PtyState which closes the master PTY fd.
+    // The read thread will get EOF and exit. The tmux client will detach.
+    // The tmux session stays alive for re-attach on project switch-back.
+    map.remove(&sanitized);
 
     Ok(())
 }
