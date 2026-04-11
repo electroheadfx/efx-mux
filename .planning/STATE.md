@@ -114,9 +114,10 @@ None yet.
 | 260411-dsm | Make pane resize borders thin 1px | 2026-04-11 | 5435bc8 | [260411-dsm-make-pane-resize-borders-thin-1px](./quick/260411-dsm-make-pane-resize-borders-thin-1px/) |
 | 260411-dz7 | Remove non-functional light/dark theme toggle from preferences panel | 2026-04-11 | 91fff51 | [260411-dz7-remove-non-functional-light-dark-theme-t](./quick/260411-dz7-remove-non-functional-light-dark-theme-t/) |
 | 260411-e3e | Add real tree mode to file tree pane with collapsible folders and indentation | 2026-04-11 | 5c7f26a | [260411-e3e-add-real-tree-mode-to-file-tree-pane-wit](./quick/260411-e3e-add-real-tree-mode-to-file-tree-pane-wit/) |
+| 260411-fkk | Remove bottom padding under TUI and hide tmux green bar | 2026-04-11 | 081e8f7 | [260411-fkk-remove-bottom-padding-under-tui-and-hide](./quick/260411-fkk-remove-bottom-padding-under-tui-and-hide/) |
 
 ## Session Continuity
 
-Last activity: 2026-04-11 - Completed quick task 260411-e3e: Add real tree mode to file tree pane
-Stopped at: Completed quick task 260411-e3e
+Last activity: 2026-04-11 - Completed quick task 260411-fkk: Remove bottom padding under TUI and hide tmux green bar
+Stopped at: Completed quick task 260411-fkk
 Resume file: None
