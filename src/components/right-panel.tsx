@@ -1,7 +1,6 @@
 // right-panel.tsx -- Right panel with tabbed views and Bash Terminal
 // D-11: Tab bars for right-top (GSD/Diff/File Tree) and right-bottom (Bash)
 // D-12: Bash terminal lazy-connects via connectPty on first tab selection
-// Migrated from Arrow.js to Preact TSX (Phase 6.1)
 // Phase 10: Navy-blue palette rewrite (Plan 06)
 
 import { useEffect, useRef } from 'preact/hooks';

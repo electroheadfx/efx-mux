@@ -1,6 +1,5 @@
 // diff-viewer.tsx -- GitHub-style git diff viewer (D-04, D-05, D-11)
 // Listens for open-diff CustomEvent from sidebar and renders per-file diffs.
-// Migrated from Arrow.js to Preact TSX (Phase 6.1)
 // Restyled to GitHub-style with file headers, line numbers, colored accents (Phase 9)
 // Rewritten with tokens.ts colors (Phase 10)
 

@@ -1,10 +1,5 @@
 // main-panel.tsx -- Main panel with terminal-area + file viewer overlay + server-pane
 // Phase 2: terminal-area is empty -- xterm.js mounts via querySelector (D-08)
-// Phase 6 gap closure: file viewer overlay for read-only file display (PANEL-06)
-// Phase 7: Server pane component with 3-state collapse
-// Migrated from Arrow.js to Preact TSX (Phase 6.1)
-// Phase 10: Navy-blue palette rewrite (Plan 06)
-// Debug fix: scroll, syntax highlighting, markdown rendering for file viewer
 
 import { signal } from '@preact/signals';
 import { useEffect } from 'preact/hooks';

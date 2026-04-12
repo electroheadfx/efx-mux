@@ -1,5 +1,4 @@
 // project-modal.tsx -- Add Project modal with form, directory browser, validation
-// Migrated from Arrow.js to Preact TSX (Phase 6.1)
 // Restyled to navy-blue palette with reference AddProjectModal pattern (Phase 10)
 
 import { useEffect, useRef } from 'preact/hooks';

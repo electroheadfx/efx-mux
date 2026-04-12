@@ -1,5 +1,4 @@
 // sidebar.tsx -- Project sidebar with projects, git status, git files, collapsed mode
-// Migrated from Arrow.js to Preact TSX (Phase 6.1)
 // Restyled with Lucide icons, status dots, git badges (Phase 9)
 // Visual rewrite to reference Sidebar pattern (Phase 10)
 

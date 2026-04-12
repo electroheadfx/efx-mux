@@ -1,5 +1,4 @@
 // tab-bar.tsx -- Reusable tab bar component for right panel views (D-11, PANEL-01)
-// Migrated from Arrow.js to Preact TSX (Phase 6.1)
 // Visual rewrite: Phase 10 pill-style pattern (RightPanel TabButton reference)
 
 import type { Signal } from '@preact/signals';

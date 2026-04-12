@@ -1,5 +1,4 @@
 // fuzzy-search.tsx -- Ctrl+P fuzzy project search overlay
-// Migrated from Arrow.js to Preact TSX (Phase 6.1)
 
 import { useEffect, useRef } from 'preact/hooks';
 import { signal } from '@preact/signals';

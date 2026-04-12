@@ -2,7 +2,6 @@
 // D-01: Checkbox write-back via write_checkbox Rust command
 // D-02: marked.js renders markdown with task checkboxes
 // D-03: Auto-refresh on md-file-changed Tauri event
-// Migrated from Arrow.js to Preact TSX (Phase 6.1)
 
 import { useRef, useEffect } from 'preact/hooks';
 import { invoke } from '@tauri-apps/api/core';

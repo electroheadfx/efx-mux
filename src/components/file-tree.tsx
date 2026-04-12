@@ -1,7 +1,6 @@
 // file-tree.tsx -- Keyboard-navigable file tree with inline SVG icons (D-07, D-08, D-12, D-13, PANEL-05, PANEL-06)
 // Loads directory contents via list_directory Rust command.
 // Dispatches file-opened CustomEvent for main.js to handle.
-// Migrated from Arrow.js to Preact TSX (Phase 6.1)
 // Rewritten with inline SVG icons and tokens.ts colors (Phase 10)
 // Added tree mode with collapsible folders and parent nav button (quick-260411-e3e)
 
