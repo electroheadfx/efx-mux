@@ -1,71 +1,56 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.2.0
-milestone_name: Testing & Consolidation
-status: executing
-stopped_at: Phase 14 execute - 2 incomplete plans discovered (wave 1)
-last_updated: "2026-04-12T10:53:55.458Z"
+milestone: v0.3.0
+milestone_name: TBD
+status: planning
+stopped_at: v0.2.0 milestone complete (shipped 2026-04-12)
+last_updated: "2026-04-12"
 last_activity: 2026-04-12
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 8
-  completed_plans: 8
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-12)
+See: .planning/PROJECT.md (updated 2026-04-12 after v0.2.0 milestone)
 
 **Core value:** A single native macOS window that co-locates AI agent terminals alongside live GSD progress, git diff, and file tree -- all persisted across restarts via tmux.
-**Current focus:** Phase 14 — consolidation
+**Current focus:** Planning v0.3.0
 
 ## Current Position
 
-Phase: 14
-Plan: Not started
-Status: Executing Phase 14
-Last activity: 2026-04-12
-
-Progress: [░░░░░░░░░░] 0%
+Milestone: v0.2.0 shipped (2026-04-12)
+Next: `/gsd-new-milestone` to define v0.3.0 scope
 
 ## Performance Metrics
 
-**Velocity:**
-
-- Total plans completed: 8
-- Average duration: --
-- Total execution time: 0 hours
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 11 | 2 | - | - |
-| 12 | 2 | - | - |
-| 13 | 2 | - | - |
-| 14 | 2 | - | - |
+**v0.2.0 velocity:**
+- 4 phases, 8 plans completed in 1 day
+- 119 tests (89 TS + 30 component + 19 Rust)
 
 ## Accumulated Context
 
 ### Decisions
 
-- v0.2.0: Tests before consolidation (test suite protects refactoring)
-- v0.2.0: TS tests before Rust tests (more surface area, higher regression risk)
+- v0.2.0: Test infrastructure first (Phase 11 prerequisite for 12 and 13)
+- v0.2.0: Sync inner functions for Rust testability of async Tauri commands
+- v0.1.0: Arrow.js → Preact migration (Phase 6.1)
+- v0.1.0: tmux session backend for persistence
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
-None yet.
+None.
 
 ## Session Continuity
 
-Last activity: 2026-04-12
-Stopped at: Phase 14 execute - 2 incomplete plans discovered (wave 1)
-Resume file: .planning/phases/14-consolidation
+v0.2.0 milestone shipped. Ready for v0.3.0 planning.
