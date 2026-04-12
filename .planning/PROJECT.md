@@ -37,6 +37,7 @@ Laurent (the developer) and other developers who use Claude Code / OpenCode as t
 - ✓ First-run wizard -- v0.1.0
 - ✓ PTY crash recovery with restart option -- v0.1.0
 - ✓ Navy-blue pixel-perfect UI matching Pencil mockups -- v0.1.0
+- ✓ Vitest test infrastructure with Tauri IPC + xterm.js mocks, coverage reporting -- v0.2.0 Phase 11
 
 ### Active
 
@@ -123,4 +124,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-12 after v0.2.0 milestone start*
+*Last updated: 2026-04-12 after Phase 11 completion*
