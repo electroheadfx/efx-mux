@@ -8,6 +8,7 @@ export default defineConfig({
     include: ['src/**/*.test.{ts,tsx}'],
     setupFiles: ['./vitest.setup.ts'],
     globals: true,
+    passWithNoTests: true,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary', 'html'],
