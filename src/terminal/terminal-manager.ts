@@ -114,7 +114,7 @@ export function createTerminal(container: HTMLElement, options: TerminalOptions 
     } catch (e: unknown) {
       // WebGL2 not available -- DOM renderer is the default, nothing to do (D-07)
       const msg = e instanceof Error ? e.message : String(e);
-      console.warn('[efx-mux] WebGL not available, using DOM renderer:', msg);
+      console.warn('[efxmux] WebGL not available, using DOM renderer:', msg);
     }
   }
   tryWebGL();
