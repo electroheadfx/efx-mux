@@ -40,7 +40,15 @@ Laurent (the developer) and other developers who use Claude Code / OpenCode as t
 
 ### Active
 
-(None -- planning next milestone)
+#### Current Milestone: v0.2.0 Testing & Consolidation
+
+**Goal:** Add Vitest unit tests for sensible parts of the codebase and consolidate the project after rapid MVP development.
+
+**Target features:**
+- Unit tests (Vitest) for critical TypeScript modules
+- Rust-side tests for Tauri commands where sensible
+- Project consolidation — dead code removal, type tightening, tech debt cleanup
+- Test infrastructure setup (config, utilities, CI-ready scripts)
 
 ### Out of Scope
 
@@ -115,4 +123,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-11 after v0.1.0 milestone*
+*Last updated: 2026-04-12 after v0.2.0 milestone start*
