@@ -5,18 +5,38 @@ import { mockIPC } from '@tauri-apps/api/mocks';
 import { ServerPane, serverPaneState, serverStatus, resetServerPane } from './server-pane';
 import { projects, activeProjectName } from '../state-manager';
 
-describe('ServerPane', () => {
-  beforeEach(() => {
-    // Reset module signals
-    resetServerPane();
-    serverPaneState.value = 'strip';
-    serverStatus.value = 'stopped';
-    projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'claude' }];
-    activeProjectName.value = 'testproj';
+// Shared refs for event listener mock — module-level so vi.mock captures them
+let listenHandler: any;
+const unlistenFn = vi.fn();
 
-    // Stub global listen to prevent useEffect listener registration from failing
-    vi.stubGlobal('listen', vi.fn().mockResolvedValue(vi.fn()));
-  });
+beforeEach(() => {
+  // Reset module signals
+  resetServerPane();
+  serverPaneState.value = 'strip';
+  serverStatus.value = 'stopped';
+  projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'claude' }];
+  activeProjectName.value = 'testproj';
+
+  // Reset mock state
+  vi.restoreAllMocks();
+  listenHandler = undefined;
+  unlistenFn.mockClear();
+});
+
+// Use vi.mock to intercept module-level listen import from server-bridge.ts
+vi.mock('@tauri-apps/api/event', async () => {
+  const actual = await vi.importActual('@tauri-apps/api/event');
+  return {
+    ...actual,
+    listen: vi.fn().mockImplementation((event: string, handler: any) => {
+      listenHandler = handler;
+      return Promise.resolve(unlistenFn);
+    }),
+  };
+});
+
+describe('ServerPane', () => {
+
 
   it('renders toolbar with Start button', async () => {
     render(<ServerPane />);
