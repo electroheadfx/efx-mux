@@ -25,8 +25,8 @@
 </details>
 
 - [x] **Phase 11: Test Infrastructure** - Vitest config, mocks, coverage tooling, and CI-ready scripts (completed 2026-04-12)
-- [ ] **Phase 12: TypeScript Tests** - Unit tests for critical TS modules and Preact components
-- [ ] **Phase 13: Rust Tests** - Unit tests for Tauri command logic, serde, git2, and file ops
+- [x] **Phase 12: TypeScript Tests** - Unit tests for critical TS modules and Preact components (completed 2026-04-12)
+- [x] **Phase 13: Rust Tests** - Unit tests for Tauri command logic, serde, git2, and file ops (completed 2026-04-12)
 - [ ] **Phase 14: Consolidation** - Dead code removal, type tightening, dependency audit
 
 ## Phase Details
@@ -55,10 +55,10 @@ Plans:
   3. State manager and theme manager correctly serialize, load, and react to Tauri IPC responses (mock-driven tests pass)
   4. Key Preact components render expected DOM structure given props (component render tests pass)
   5. All TypeScript tests pass in CI-ready `pnpm test` with no manual intervention
-**Plans:** 2/2 plans
+**Plans:** 2/2 plans complete
 Plans:
-- [ ] 12-01-PLAN.md -- Module unit tests (ansi-html, tokens, state-manager, theme-manager, server-bridge)
-- [ ] 12-02-PLAN.md -- Component render tests (sidebar, server-pane, gsd-viewer, file-tree)
+- [x] 12-01-PLAN.md -- Module unit tests (ansi-html, tokens, state-manager, theme-manager, server-bridge)
+- [x] 12-02-PLAN.md -- Component render tests (sidebar, server-pane, gsd-viewer, file-tree)
 
 ### Phase 13: Rust Tests
 **Goal**: Critical Rust modules have unit test coverage that catches regressions in state serialization, git operations, file safety, and command logic
@@ -69,7 +69,10 @@ Plans:
   2. git_status operations return correct status for staged, modified, and untracked files (using temp git repos)
   3. `is_safe_path()` rejects path traversal attacks and accepts valid project-relative paths
   4. Extracted AppState methods produce correct results independent of Tauri command wrappers
-**Plans**: TBD
+**Plans:** 2/2 plans complete
+Plans:
+- [x] 13-01-PLAN.md -- State serde round-trips and AppState command tests (RSTEST-01, RSTEST-04)
+- [x] 13-02-PLAN.md -- Git status and file_ops tests with temp git repos (RSTEST-02, RSTEST-03)
 
 ### Phase 14: Consolidation
 **Goal**: Codebase is clean, type-safe, and dependency-minimal -- with the test suite from Phases 12-13 confirming nothing breaks
@@ -102,6 +105,6 @@ Phases execute in order: 11 -> 12 -> 13 -> 14
 | 9. Professional UI Overhaul | v0.1.0 | 6/6 | Complete | 2026-04-10 |
 | 10. Pixel-Perfect UI Rewrite | v0.1.0 | 10/10 | Complete | 2026-04-11 |
 | 11. Test Infrastructure | v0.2.0 | 2/2 | Complete    | 2026-04-12 |
-| 12. TypeScript Tests | v0.2.0 | 0/TBD | Not started | - |
-| 13. Rust Tests | v0.2.0 | 0/TBD | Not started | - |
+| 12. TypeScript Tests | v0.2.0 | 2/2 | Complete    | 2026-04-12 |
+| 13. Rust Tests | v0.2.0 | 2/2 | Complete    | 2026-04-12 |
 | 14. Consolidation | v0.2.0 | 0/TBD | Not started | - |
