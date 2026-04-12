@@ -80,7 +80,7 @@ export function GSDViewer() {
       try {
         const content = await invoke<string>('read_file_content', { path });
         const lineMap = buildLineMap(content);
-        const rendered = marked.parse(content) as string;
+        const rendered = marked.parse(content, { async: false }) as string;
         const withLines = injectLineNumbers(rendered, lineMap);
         if (contentRef.current) {
           contentRef.current.innerHTML = withLines;
