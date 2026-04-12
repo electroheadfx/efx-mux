@@ -351,3 +351,109 @@ pub async fn save_state(
 pub fn get_config_dir() -> String {
     get_config_dir_path()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn app_state_roundtrip() {
+        let state = AppState::default();
+        let json = serde_json::to_string(&state).unwrap();
+        let restored: AppState = serde_json::from_str(&json).unwrap();
+        assert_eq!(state.version, restored.version);
+        assert_eq!(state.layout.sidebar_w, restored.layout.sidebar_w);
+        assert_eq!(state.theme.mode, restored.theme.mode);
+    }
+
+    #[test]
+    fn layout_state_roundtrip() {
+        let layout = LayoutState {
+            sidebar_w: "250px".into(),
+            right_w: "30%".into(),
+            right_h_pct: "60".into(),
+            sidebar_collapsed: true,
+            server_pane_height: "300px".into(),
+            server_pane_state: "full".into(),
+            file_tree_font_size: "14".into(),
+            file_tree_line_height: "1.5".into(),
+            file_tree_bg_color: "#1a1a2e".into(),
+            extra: std::collections::HashMap::new(),
+        };
+        let json = serde_json::to_string(&layout).unwrap();
+        let restored: LayoutState = serde_json::from_str(&json).unwrap();
+        assert_eq!(layout.sidebar_w, restored.sidebar_w);
+        assert_eq!(layout.sidebar_collapsed, restored.sidebar_collapsed);
+    }
+
+    #[test]
+    fn theme_state_roundtrip() {
+        let theme = ThemeState { mode: "light".into() };
+        let json = serde_json::to_string(&theme).unwrap();
+        let restored: ThemeState = serde_json::from_str(&json).unwrap();
+        assert_eq!(theme.mode, restored.mode);
+    }
+
+    #[test]
+    fn session_state_roundtrip() {
+        let session = SessionState {
+            main_tmux_session: "my-session".into(),
+            right_tmux_session: "my-session-right".into(),
+            extra: std::collections::HashMap::new(),
+        };
+        let json = serde_json::to_string(&session).unwrap();
+        let restored: SessionState = serde_json::from_str(&json).unwrap();
+        assert_eq!(session.main_tmux_session, restored.main_tmux_session);
+    }
+
+    #[test]
+    fn project_state_roundtrip() {
+        let project = ProjectState {
+            active: Some("/path/to/project".into()),
+            projects: vec![ProjectEntry {
+                path: "/path/to/project".into(),
+                name: "My Project".into(),
+                agent: "claude".into(),
+                gsd_file: Some("PLAN.md".into()),
+                server_cmd: Some("npm run dev".into()),
+                server_url: None,
+            }],
+        };
+        let json = serde_json::to_string(&project).unwrap();
+        let restored: ProjectState = serde_json::from_str(&json).unwrap();
+        assert_eq!(project.active, restored.active);
+        assert_eq!(project.projects.len(), restored.projects.len());
+    }
+
+    #[test]
+    fn project_entry_roundtrip() {
+        let entry = ProjectEntry {
+            path: "/path/to/project".into(),
+            name: "My Project".into(),
+            agent: "claude".into(),
+            gsd_file: Some("PLAN.md".into()),
+            server_cmd: Some("npm run dev".into()),
+            server_url: None,
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        let restored: ProjectEntry = serde_json::from_str(&json).unwrap();
+        assert_eq!(entry.name, restored.name);
+    }
+
+    #[test]
+    fn panels_state_roundtrip() {
+        let panels = PanelsState {
+            right_top_tab: "GSD".into(),
+            right_bottom_tab: "Files".into(),
+        };
+        let json = serde_json::to_string(&panels).unwrap();
+        let restored: PanelsState = serde_json::from_str(&json).unwrap();
+        assert_eq!(panels.right_top_tab, restored.right_top_tab);
+    }
+
+    #[test]
+    fn app_state_default_has_version_1() {
+        let state = AppState::default();
+        assert_eq!(state.version, 1);
+    }
+}
