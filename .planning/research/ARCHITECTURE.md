@@ -1,858 +1,512 @@
-# Architecture Research — GSD⚡MUX
+# Architecture Research: Testing & Consolidation
 
-**Researched:** 2026-04-06
-**Confidence:** MEDIUM-HIGH (verified against Tauri 2 docs, xterm.js docs, portable-pty docs, community patterns)
+**Domain:** Unit testing integration for Tauri 2 + Preact + xterm.js desktop app
+**Researched:** 2026-04-12
+**Confidence:** HIGH
 
----
+## System Overview
 
-## PTY → xterm.js Data Flow
-
-### Recommended Pattern: Tauri Channel (not Events)
-
-**Decision:** Use Tauri 2 `Channel<T>` for PTY stdout streaming, NOT `emit`/Events.
-
-The Tauri docs are explicit: the event system evaluates JavaScript under the hood and serializes to JSON strings — not suited for high-throughput binary-ish data. Channels are designed for ordered streaming (they're used internally for download progress and child process output). The event system is for lifecycle notifications.
-
-**Confidence:** HIGH — from official Tauri 2 docs at v2.tauri.app/develop/calling-frontend/
-
-### The Core Pattern
-
-Each xterm.js instance passes a `Channel` object down into a Tauri command when it "connects" to a session. The Rust backend holds the channel endpoint and pushes PTY bytes through it. The channel is scoped to the invocation — no global event namespace, no session_id routing required at the event layer.
-
-**Rust side:**
-
-```rust
-use tauri::ipc::Channel;
-use serde::Serialize;
-
-#[derive(Clone, Serialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
-enum PtyEvent {
-    Data { bytes: Vec<u8> },
-    Exit { code: i32 },
-}
-
-#[tauri::command]
-async fn session_attach(
-    session_id: String,
-    on_data: Channel<PtyEvent>,
-    state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
-    let sessions = state.sessions.lock().unwrap();
-    let session = sessions.get(&session_id).ok_or("session not found")?;
-    let reader = session.pty_master.try_clone_reader()?;
-
-    // Spawn a dedicated blocking reader thread — do NOT use tokio::spawn here.
-    // portable-pty reader is blocking (std::io::Read), not async.
-    // tokio::task::spawn_blocking keeps it off the async executor.
-    tokio::task::spawn_blocking(move || {
-        let mut buf = [0u8; 4096];
-        let mut reader = reader;
-        loop {
-            match reader.read(&mut buf) {
-                Ok(0) => {
-                    let _ = on_data.send(PtyEvent::Exit { code: 0 });
-                    break;
-                }
-                Ok(n) => {
-                    let _ = on_data.send(PtyEvent::Data {
-                        bytes: buf[..n].to_vec(),
-                    });
-                }
-                Err(_) => break,
-            }
-        }
-    });
-
-    Ok(())
-}
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     TEST INFRASTRUCTURE                         │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────────────────┐ │
+│  │  Vitest     │  │  jsdom env   │  │  @tauri-apps/api/mocks │ │
+│  │  (runner)   │  │  (DOM shim)  │  │  (IPC mock layer)      │ │
+│  └──────┬──────┘  └──────┬───────┘  └────────────┬───────────┘ │
+│         │               │                       │              │
+├─────────┴───────────────┴───────────────────────┴──────────────┤
+│                    FRONTEND (TypeScript)                        │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌────────────┐  ┌─────────────┐  ┌─────────────┐             │
+│  │ Pure logic │  │ Tauri bridge│  │  Components  │             │
+│  │ (testable) │  │ (mock IPC)  │  │  (optional)  │             │
+│  └────────────┘  └─────────────┘  └─────────────┘             │
+│   ansi-html.ts    state-manager    sidebar.tsx                  │
+│   tokens.ts       server-bridge    file-tree.tsx                │
+│   color256()      theme-manager    gsd-viewer.tsx               │
+├─────────────────────────────────────────────────────────────────┤
+│                    BACKEND (Rust)                               │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌────────────┐  ┌─────────────┐  ┌─────────────┐             │
+│  │ Pure fns   │  │ State mgmt  │  │ System I/O   │             │
+│  │ (unit test)│  │ (#[cfg(test)]│  │ (skip)       │             │
+│  └────────────┘  └─────────────┘  └─────────────┘             │
+│   is_safe_path    state serde      pty, tmux                   │
+│   color256        project CRUD     git2 ops                    │
+│   GitStatus       AppState         file watcher                │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-**JavaScript side (xterm.js consumer):**
+### Component Responsibilities
 
-```javascript
-import { invoke, Channel } from '@tauri-apps/api/core';
+| Component | Responsibility | Test Strategy |
+|-----------|----------------|---------------|
+| `ansi-html.ts` | ANSI escape -> HTML conversion | Pure function, direct unit tests |
+| `tokens.ts` | Design token constants | Contract/property tests |
+| `state-manager.ts` | App state bridge to Rust | Mock `invoke`, test signal updates |
+| `server-bridge.ts` | Server command wrappers | Mock `invoke` + `listen`, verify args |
+| `theme-manager.ts` | Theme application + hot-reload | Mock `invoke`/`listen`, test CSS var logic |
+| `terminal-manager.ts` | xterm.js lifecycle | Skip -- WebGL/DOM heavy, untestable in jsdom |
+| `drag-manager.ts` | Split handle drag | Skip -- DOM manipulation, low test value |
+| `state.rs` | State serialization/persistence | `#[cfg(test)]` with tempdir |
+| `project.rs` | Project CRUD operations | Extract pure methods, test directly |
+| `git_status.rs` | Git status via git2 | Integration tests with temp git repos |
+| `file_ops.rs` | File operations + path validation | `is_safe_path` pure tests; tempdir for I/O |
 
-async function attachTerminal(sessionId, term) {
-  const channel = new Channel();
-  channel.onmessage = (event) => {
-    if (event.type === 'data') {
-      // event.bytes is a Uint8Array
-      term.write(new Uint8Array(event.bytes));
-    } else if (event.type === 'exit') {
-      term.write('\r\n[Process exited]\r\n');
-    }
-  };
-  await invoke('session_attach', { sessionId, onData: channel });
-}
+## Recommended Test File Structure
+
+```
+src/
+├── server/
+│   ├── ansi-html.ts
+│   ├── ansi-html.test.ts          # NEW: Pure function tests
+│   ├── server-bridge.ts
+│   └── server-bridge.test.ts      # NEW: Mock invoke/listen
+├── terminal/
+│   ├── terminal-manager.ts        # SKIP: WebGL/DOM heavy
+│   ├── pty-bridge.ts              # SKIP: Heavy Tauri IPC + binary streams
+│   └── resize-handler.ts          # SKIP: DOM measurement
+├── theme/
+│   ├── theme-manager.ts
+│   └── theme-manager.test.ts      # NEW: Mock invoke, test CSS var logic
+├── components/                    # DEFER: component tests are low priority
+├── state-manager.ts
+├── state-manager.test.ts          # NEW: Mock invoke, test signal logic
+├── tokens.ts
+├── tokens.test.ts                 # NEW: Token contract assertions
+├── drag-manager.ts                # SKIP: Pure DOM manipulation
+├── __test__/
+│   └── setup.ts                   # NEW: Global test setup (mocks, crypto)
+└── ...
+
+src-tauri/src/
+├── state.rs                       # MODIFY: add #[cfg(test)] mod tests
+├── project.rs                     # MODIFY: extract pure fns + add tests
+├── git_status.rs                  # MODIFY: add #[cfg(test)] mod tests
+├── file_ops.rs                    # MODIFY: add #[cfg(test)] mod tests
+├── server.rs                      # SKIP: process spawning, system calls
+├── terminal/
+│   ├── pty.rs                     # SKIP: PTY + tmux system calls
+│   └── mod.rs
+└── theme/
+    ├── iterm2.rs                  # SKIP: plist parsing, low priority
+    ├── types.rs                   # MODIFY: add serde tests
+    └── watcher.rs                 # SKIP: notify/filesystem
 ```
 
-### Flow Control (Critical for fast processes)
+### Structure Rationale
 
-xterm.js write buffer is 50MB hard cap. Fast PTY output (e.g., `cat largefile`) can overwhelm it. Use the watermark pattern:
+- **Co-located test files** (`*.test.ts` next to source): Vitest config already uses `src/**/*.test.{ts,tsx}`. Co-location keeps tests discoverable and imports simple.
+- **Shared setup in `__test__/setup.ts`**: Tauri mock initialization (`mockIPC`, `clearMocks`, crypto polyfill) goes here, referenced from vitest.config.ts `setupFiles`.
+- **Rust tests inline** (`#[cfg(test)] mod tests`): Standard Rust convention. No separate test directory needed for unit tests.
+- **Explicit skip list**: terminal-manager, drag-manager, pty-bridge, resize-handler all depend heavily on DOM/WebGL/system calls. Testing them provides minimal value vs. effort.
 
-```javascript
-const HIGH = 100_000;  // bytes
-const LOW  = 10_000;
+## Architectural Patterns
 
-let buffered = 0;
-let paused = false;
+### Pattern 1: Tauri IPC Mocking with `@tauri-apps/api/mocks`
 
-channel.onmessage = (event) => {
-  if (event.type !== 'data') return;
-  const chunk = new Uint8Array(event.bytes);
-  buffered += chunk.length;
+**What:** Use Tauri's built-in `mockIPC` to intercept `invoke()` calls in tests. This replaces the Rust backend with a JS handler that returns canned responses.
+**When to use:** Any test that imports a module calling `invoke()` from `@tauri-apps/api/core`.
+**Trade-offs:** Realistic IPC simulation (+), but mock handlers must be kept in sync with Rust command signatures manually (-). No type checking between mock and real backend.
 
-  if (buffered > HIGH && !paused) {
-    paused = true;
-    invoke('session_pause', { sessionId });  // signal Rust to stop reading
-  }
+**Example:**
+```typescript
+// state-manager.test.ts
+import { beforeEach, afterEach, describe, it, expect } from 'vitest';
+import { mockIPC, clearMocks } from '@tauri-apps/api/mocks';
 
-  term.write(chunk, () => {
-    buffered -= chunk.length;
-    if (paused && buffered < LOW) {
-      paused = false;
-      invoke('session_resume', { sessionId });
+beforeEach(() => {
+  mockIPC((cmd, args) => {
+    if (cmd === 'load_state') {
+      return {
+        version: 1,
+        layout: { 'sidebar-w': '200px', 'right-w': '25%',
+                  'right-h-pct': '50', 'sidebar-collapsed': false },
+        theme: { mode: 'dark' },
+        session: { 'main-tmux-session': 'efx-mux',
+                   'right-tmux-session': 'efx-mux-right' },
+        project: { active: null, projects: [] },
+        panels: { 'right-top-tab': 'File Tree', 'right-bottom-tab': 'git' },
+      };
     }
+    if (cmd === 'save_state') return undefined;
+    if (cmd === 'get_projects') return [];
+    if (cmd === 'get_active_project') return null;
   });
-};
+});
+
+afterEach(() => {
+  clearMocks();
+});
 ```
 
-The Rust side needs a `paused: Arc<AtomicBool>` flag checked in the reader loop. This prevents the 50MB buffer overflow when Claude Code dumps large diffs.
+### Pattern 2: Tauri Event Mocking for `listen()`
 
-### Why Not Events?
+**What:** When `mockIPC` is called with `{ shouldMockEvents: true }`, the `listen()` and `emit()` functions from `@tauri-apps/api/event` are also intercepted. This lets tests simulate Tauri backend events like `theme-changed` or `server-output`.
+**When to use:** Testing `server-bridge.ts` (listens for `server-output`, `server-stopped`) and `theme-manager.ts` (listens for `theme-changed`).
+**Trade-offs:** Enables event-driven test scenarios (+), but the event mock API has had reported bugs (GitHub issue #14281) (-). Keep event tests simple.
 
-- Events are broadcast (global namespace) — requires session_id routing logic in every listener
-- JSON serialization overhead on every byte chunk
-- No ordering guarantees under concurrent load
-- Tauri docs explicitly call out events as not suitable for large data
+**Example:**
+```typescript
+import { mockIPC, clearMocks } from '@tauri-apps/api/mocks';
+import { emit } from '@tauri-apps/api/event';
 
----
+beforeEach(() => {
+  mockIPC(() => {}, { shouldMockEvents: true });
+});
 
-## tmux Session Management from Rust
+it('receives server output events', async () => {
+  const outputs: string[] = [];
+  const unlisten = await listenServerOutput((_proj, text) => {
+    outputs.push(text);
+  });
+  await emit('server-output', { project: 'test', text: 'Started on :3000' });
+  expect(outputs).toContain('Started on :3000');
+  unlisten();
+});
+```
 
-### Recommended Pattern: CLI subprocess (not Rust crates)
+### Pattern 3: Pure Function Extraction for Testability
 
-**Decision:** Use `std::process::Command` to invoke tmux CLI directly. Do NOT use `tmux_interface` crate.
+**What:** Extract logic that doesn't depend on Tauri IPC, DOM, or system calls into pure functions. Test those directly without mocks.
+**When to use:** Whenever a module mixes pure logic with side effects. `ansi-html.ts` is the ideal example -- `ansiToHtml()` and `extractServerUrl()` are pure functions.
+**Trade-offs:** Best test value per effort (+). May require refactoring coupled code (-).
 
-Research found that the `tmux_interface` crate is self-described as "experimental/unstable" with versions below 1.0 for development only. A Rust article from a tmux-native agent supervisor explicitly states: "There are Rust crates for tmux interaction. I tried them. They were incomplete, unmaintained, or abstracted away the things I needed most."
+**Example (already testable, no changes needed):**
+```typescript
+// ansi-html.test.ts
+import { ansiToHtml, extractServerUrl } from './ansi-html';
 
-tmux CLI commands complete in 1-5ms. CLI subprocess overhead is negligible at session management frequency (launch, attach, detach — not called in hot loops).
+it('converts basic ANSI red to HTML span', () => {
+  const result = ansiToHtml('\x1b[31mError\x1b[0m');
+  expect(result).toContain('color:#dc322f');
+  expect(result).toContain('Error');
+});
 
-**Confidence:** MEDIUM — verified against tmux_interface crate docs and DEV community article; CLI approach confirmed as recommended pattern.
+it('HTML-escapes before ANSI processing (XSS prevention)', () => {
+  const result = ansiToHtml('<script>alert("xss")</script>');
+  expect(result).toContain('&lt;script&gt;');
+  expect(result).not.toContain('<script>');
+});
 
-### Key tmux Operations
+it('extracts localhost URL from server output', () => {
+  expect(extractServerUrl('Listening on http://localhost:3000'))
+    .toBe('http://localhost:3000');
+  expect(extractServerUrl('No URL here')).toBeNull();
+});
+```
 
+### Pattern 4: Rust Unit Tests with `#[cfg(test)]`
+
+**What:** Standard Rust inline test modules. For state/project logic, create an `AppState` in-memory and test mutations. For file operations, use `tempfile` crate for isolated filesystem tests.
+**When to use:** Any Rust function that has testable logic separable from Tauri's runtime.
+**Trade-offs:** Fast, reliable, no external deps (+). Cannot test `#[tauri::command]` wrappers directly since they need Tauri's State extractor (-). Test the inner functions instead.
+
+**Example:**
 ```rust
-use std::process::Command;
+// In state.rs
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-pub struct TmuxSession {
-    pub name: String,
-    pub socket_path: Option<String>,  // for named socket isolation
+    #[test]
+    fn default_state_has_version_1() {
+        let state = AppState::default();
+        assert_eq!(state.version, 1);
+    }
+
+    #[test]
+    fn state_roundtrip_serde() {
+        let state = AppState::default();
+        let json = serde_json::to_string(&state).unwrap();
+        let deserialized: AppState = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.version, state.version);
+        assert_eq!(deserialized.layout.sidebar_w, "200px");
+    }
+
+    #[test]
+    fn corrupt_json_falls_back_to_default() {
+        let result: Result<AppState, _> = serde_json::from_str("not json");
+        assert!(result.is_err());
+        // load_state_sync handles this by returning AppState::default()
+    }
 }
+```
 
-impl TmuxSession {
-    /// Create new detached session with specific command
-    pub fn create(name: &str, cmd: &str, cwd: &str) -> Result<(), String> {
-        let status = Command::new("tmux")
-            .args(["new-session", "-d", "-s", name, "-c", cwd, cmd])
-            .status()
-            .map_err(|e| e.to_string())?;
-        if !status.success() {
-            return Err(format!("tmux new-session failed"));
+### Pattern 5: Extract Methods from Tauri Command Wrappers
+
+**What:** The `project.rs` CRUD functions use `tauri::State<ManagedAppState>` which requires the Tauri runtime. To test the business logic, extract pure methods onto `AppState`.
+**When to use:** `project.rs` add/remove/switch/update logic.
+**Trade-offs:** Tests actual business logic (+). Requires minor refactoring (-).
+
+**Recommended refactor:**
+```rust
+// project.rs - extract testable inner functions
+impl AppState {
+    pub fn add_project(&mut self, entry: ProjectEntry) -> Result<(), String> {
+        if self.project.projects.iter().any(|p| p.name == entry.name) {
+            return Err(format!("Project '{}' already exists", entry.name));
         }
+        self.project.projects.push(entry);
         Ok(())
     }
 
-    /// Check if a named session exists
-    pub fn exists(name: &str) -> bool {
-        Command::new("tmux")
-            .args(["has-session", "-t", name])
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
-    }
-
-    /// Detach all clients from session (keeps process alive)
-    pub fn detach_clients(name: &str) -> Result<(), String> {
-        Command::new("tmux")
-            .args(["detach-client", "-s", name])
-            .status()
-            .map_err(|e| e.to_string())?;
-        Ok(())
-    }
-
-    /// Kill session and its processes
-    pub fn kill(name: &str) -> Result<(), String> {
-        Command::new("tmux")
-            .args(["kill-session", "-t", name])
-            .status()
-            .map_err(|e| e.to_string())?;
-        Ok(())
-    }
-
-    /// List active sessions (for state validation on reopen)
-    pub fn list_sessions() -> Vec<String> {
-        let output = Command::new("tmux")
-            .args(["list-sessions", "-F", "#{session_name}"])
-            .output()
-            .unwrap_or_default();
-        String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .map(String::from)
-            .collect()
-    }
-}
-```
-
-### The Architecture: tmux + PTY Attachment
-
-The critical insight is that GSD⚡MUX does NOT attach the Tauri process itself as a tmux client. Instead:
-
-1. tmux sessions run independently — `tmux new-session -d -s gsd-main -c /project claude`
-2. GSD⚡MUX attaches to the tmux session's PTY via `portable-pty` by attaching to the session's master PTY file descriptor
-3. OR (simpler): spawn `tmux attach-session -t gsd-main` inside a `portable-pty` PTY that GSD⚡MUX controls
-
-**Option A — Direct PTY attach (recommended):**
-
-Spawn `tmux attach-session -t SESSION_NAME` in a `portable-pty` PtyPair. The master side gives you the raw terminal stream including the full tmux rendering (status bar, panes). This is what iTerm2 / WezTerm do. xterm.js renders the complete tmux output faithfully.
-
-```rust
-use portable_pty::{CommandBuilder, native_pty_system, PtySize};
-
-pub fn attach_to_tmux_session(
-    name: &str,
-    cols: u16,
-    rows: u16,
-) -> Result<(Box<dyn MasterPty>, Box<dyn Child>), Box<dyn std::error::Error>> {
-    let pty_system = native_pty_system();
-    let pair = pty_system.openpty(PtySize {
-        rows,
-        cols,
-        pixel_width: 0,
-        pixel_height: 0,
-    })?;
-
-    let mut cmd = CommandBuilder::new("tmux");
-    cmd.args(["attach-session", "-t", name]);
-
-    let child = pair.slave.spawn_command(cmd)?;
-    Ok((pair.master, child))
-}
-```
-
-**Option B — tmux new-session with direct process (recommended for simple panels):**
-
-For the server pane or bash panel, skip tmux entirely and spawn the process directly in portable-pty. Only the main Claude Code / OpenCode session needs tmux persistence.
-
-### Session Naming Convention
-
-Use a stable naming scheme so reattach is deterministic:
-
-```
-gsd-{project_id}-main     # primary agent terminal
-gsd-{project_id}-server   # dev server pane
-gsd-{project_id}-bash     # auxiliary bash panel
-```
-
-Project ID derived from SHA-8 of absolute path, e.g. `gsd-a3f2c1b4-main`.
-
-### Socket Isolation (optional but useful)
-
-For multi-project isolation, each project can use a private tmux socket:
-
-```
-tmux -S /tmp/gsd-{project_id}.sock new-session -d -s main
-```
-
-This prevents `tmux kill-server` from nuking all GSD sessions. Keep a map of `project_id → socket_path` in state.json.
-
----
-
-## Multi-Terminal Architecture
-
-### Managing N Concurrent PTY Streams
-
-GSD⚡MUX has up to 4-5 simultaneous terminal streams:
-- Main panel: Claude Code / OpenCode session (always tmux-backed)
-- Server pane: dev server (may be direct PTY, no tmux needed)
-- Right panel bash: ad-hoc terminal
-- Any additional tabs
-
-**State map in Rust (AppState):**
-
-```rust
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use portable_pty::MasterPty;
-
-pub struct SessionState {
-    pub master: Box<dyn MasterPty + Send>,
-    pub tmux_name: Option<String>,  // None for direct PTY sessions
-    pub paused: Arc<std::sync::atomic::AtomicBool>,
-}
-
-pub struct AppState {
-    pub sessions: Mutex<HashMap<String, SessionState>>,
-}
-```
-
-Each session has its own `MasterPty` and its own `Channel` endpoint (provided by the frontend at attach time). Sessions are fully isolated — one session's reader thread crashing does not affect others.
-
-**Reader thread per session:**
-
-One `tokio::task::spawn_blocking` per active session. These are independent — they don't share threads or channels. The Tokio blocking thread pool handles them efficiently (default pool size = available CPUs * 2).
-
-```rust
-// In AppState, one per active session:
-let sessions: HashMap<String, SessionHandle> = HashMap::new();
-
-struct SessionHandle {
-    pty_master: Box<dyn MasterPty + Send>,
-    writer: Box<dyn Write + Send>,  // for stdin
-    tmux_name: Option<String>,
-    reader_task: tokio::task::JoinHandle<()>,
-}
-```
-
-**WebGL context budget:**
-
-Browsers cap WebGL contexts at ~8-16 (Chrome: 16, Firefox: 8). With 4-5 xterm.js instances using WebGL addon, this is fine. But if users add more tabs, context loss can occur silently. Implement WebGL context loss detection with canvas2d fallback:
-
-```javascript
-function createTerminal(container) {
-  const term = new Terminal({ /* options */ });
-  term.open(container);
-
-  // Try WebGL first, fall back to canvas
-  try {
-    const webgl = new WebglAddon();
-    webgl.onContextLoss(() => {
-      webgl.dispose();
-      term.loadAddon(new CanvasAddon());
-    });
-    term.loadAddon(webgl);
-  } catch (e) {
-    term.loadAddon(new CanvasAddon());
-  }
-  return term;
-}
-```
-
-**Stdin (xterm.js → Rust):**
-
-```javascript
-term.onData((data) => {
-  invoke('session_write', {
-    sessionId,
-    data: Array.from(new TextEncoder().encode(data))
-  });
-});
-```
-
-Rust handler writes bytes directly to `session.writer` (the PTY slave write end):
-
-```rust
-#[tauri::command]
-fn session_write(
-    session_id: String,
-    data: Vec<u8>,
-    state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
-    let mut sessions = state.sessions.lock().unwrap();
-    let session = sessions.get_mut(&session_id).ok_or("not found")?;
-    session.writer.write_all(&data).map_err(|e| e.to_string())
-}
-```
-
----
-
-## Terminal Resize Flow
-
-### xterm.js FitAddon → Rust → PTY
-
-The correct flow has three steps that must happen in the right order:
-
-1. **Container resize detected** (ResizeObserver watching the panel div)
-2. **FitAddon.fit()** called → calculates new cols/rows based on font metrics → calls `term.resize(cols, rows)`
-3. **Frontend invokes `session_resize`** with the new dimensions → Rust resizes the PTY master
-
-```javascript
-// In terminal.js component
-const fitAddon = new FitAddon();
-term.loadAddon(fitAddon);
-
-const observer = new ResizeObserver(() => {
-  // Debounce to avoid resize storms during drag
-  clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => {
-    fitAddon.fit();
-    const { cols, rows } = term;
-    invoke('session_resize', { sessionId, cols, rows });
-  }, 50);
-});
-observer.observe(containerElement);
-```
-
-**Rust side:**
-
-```rust
-#[tauri::command]
-fn session_resize(
-    session_id: String,
-    cols: u16,
-    rows: u16,
-    state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
-    let sessions = state.sessions.lock().unwrap();
-    let session = sessions.get(&session_id).ok_or("not found")?;
-    session.pty_master
-        .resize(portable_pty::PtySize {
-            rows,
-            cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|e| e.to_string())
-}
-```
-
-`portable_pty::MasterPty::resize()` sends SIGWINCH to the process group. This is the correct OS-level mechanism — the child process (tmux / Claude Code) then reads the new size via `ioctl(TIOCGWINSZ)`.
-
-### Known tmux Resize Quirk
-
-When attaching to an existing tmux session that has clients with different sizes, tmux defaults to the smallest client's dimensions. Solution: always call `session_resize` immediately after `session_attach`, before any rendering happens. Also pass `-x` and `-y` flags to `tmux attach-session` to force dimensions:
-
-```rust
-cmd.args(["attach-session", "-t", name, "-x", &cols.to_string(), "-y", &rows.to_string()]);
-```
-
-### Debounce is Required
-
-FitAddon recalculates on every pixel change. Drag-resizing a split handle fires ResizeObserver continuously. Without debouncing, you get hundreds of `session_resize` invocations per second. 50ms debounce is the standard pattern — fast enough to feel responsive, slow enough not to flood Rust with syscalls.
-
----
-
-## Arrow.js Component Structure
-
-### No-Bundler Pattern for GSD⚡MUX
-
-Arrow.js 2.x works with a direct CDN import. No bundler required. The official recommended import:
-
-```javascript
-import { reactive, html, watch } from 'https://esm.sh/@arrow-js/core';
-```
-
-For production, vendor the file locally to avoid CDN dependency:
-
-```
-src/vendor/arrow-core.js  (downloaded from esm.sh/@arrow-js/core)
-```
-
-**Confidence:** HIGH — from arrow-js.com official docs.
-
-### Component Pattern for Resizable Layout
-
-Arrow.js does not use `customElements.define` (not native Web Components). It uses a factory function pattern — `component()` wraps a function that returns an `html` template. Components mount once and reactively update via `reactive()` state.
-
-**Layout component example:**
-
-```javascript
-// src/components/layout.js
-import { reactive, html, component } from '../vendor/arrow-core.js';
-
-export const appLayout = component((props) => {
-  const layout = reactive({
-    sidebarCollapsed: false,
-    mainRatio: 0.5,     // sidebar | main+right
-    rightRatio: 0.5,    // right-top | right-bottom
-    serverPaneRatio: 0, // 0 = collapsed
-  });
-
-  function toggleSidebar() {
-    layout.sidebarCollapsed = !layout.sidebarCollapsed;
-  }
-
-  return html`
-    <div class="app-shell ${() => layout.sidebarCollapsed ? 'sidebar-collapsed' : ''}">
-      <div class="sidebar">
-        ${props.sidebar}
-      </div>
-      <div class="main-panel" style="${() => `flex: ${layout.mainRatio}`}">
-        ${props.mainTerminal}
-      </div>
-      <div class="right-panels" style="${() => `flex: ${1 - layout.mainRatio}`}">
-        ${props.rightTop}
-        ${props.rightBottom}
-      </div>
-    </div>
-  `;
-});
-```
-
-**State flows down, events flow up — Arrow.js enforces this naturally** because `reactive()` objects passed as props are observed lazily inside the component.
-
-### Resizable Split Handle Pattern
-
-```javascript
-// src/components/split-handle.js
-import { html, component } from '../vendor/arrow-core.js';
-
-export const SplitHandle = component(({ axis, onResize }) => {
-  let dragging = false;
-  let startPos = 0;
-
-  function onMousedown(e) {
-    dragging = true;
-    startPos = axis === 'horizontal' ? e.clientX : e.clientY;
-    document.addEventListener('mousemove', onMousemove);
-    document.addEventListener('mouseup', onMouseup);
-    e.preventDefault();
-  }
-
-  function onMousemove(e) {
-    if (!dragging) return;
-    const pos = axis === 'horizontal' ? e.clientX : e.clientY;
-    onResize(pos - startPos);
-    startPos = pos;
-  }
-
-  function onMouseup() {
-    dragging = false;
-    document.removeEventListener('mousemove', onMousemove);
-    document.removeEventListener('mouseup', onMouseup);
-    invoke('state_save'); // persist split ratios after drag ends
-  }
-
-  return html`
-    <div
-      class="split-handle split-handle--${axis}"
-      @mousedown="${onMousedown}"
-    ></div>
-  `;
-});
-```
-
-### Terminal Component (xterm.js wrapper)
-
-Arrow.js `html` templates are not the right place to initialize xterm.js. xterm.js needs a real DOM node. Use `component()` with an `onMount`-equivalent pattern via a `ref` callback:
-
-```javascript
-// src/components/terminal.js
-import { html, component, reactive } from '../vendor/arrow-core.js';
-
-export const TerminalPanel = component(({ sessionId }) => {
-  const state = reactive({ connected: false, title: 'Terminal' });
-  let term = null;
-
-  // Arrow.js ref pattern: use a custom element or direct DOM ref
-  function mountTerminal(el) {
-    if (!el || term) return;
-    term = new Terminal({
-      fontFamily: 'FiraCode, monospace',
-      fontSize: 14,
-      fontWeight: '300',
-      theme: window.__gsdTheme,  // set by theme.js on load
-    });
-    const fitAddon = new FitAddon();
-    term.loadAddon(fitAddon);
-    term.open(el);
-    fitAddon.fit();
-    attachTerminal(sessionId, term).then(() => {
-      state.connected = true;
-    });
-  }
-
-  return html`
-    <div class="terminal-panel">
-      <div class="terminal-title">${() => state.title}</div>
-      <div
-        class="terminal-container"
-        ref="${mountTerminal}"
-      ></div>
-    </div>
-  `;
-});
-```
-
-Note: Arrow.js `ref` attribute calls the function with the DOM element when it mounts. Verify this works in the version you pin — the framework is being actively developed. Alternative: use a custom element wrapper (`<gsd-terminal>`) with standard `connectedCallback`.
-
-### Import Map (No Bundler)
-
-Use an import map in `index.html` to alias module names:
-
-```html
-<script type="importmap">
-{
-  "imports": {
-    "@arrow-js/core": "/vendor/arrow-core.js",
-    "@tauri-apps/api/core": "/vendor/tauri-api.js",
-    "xterm": "/vendor/xterm.js",
-    "@xterm/addon-fit": "/vendor/xterm-addon-fit.js",
-    "@xterm/addon-webgl": "/vendor/xterm-addon-webgl.js"
-  }
-}
-</script>
-<script type="module" src="/app.js"></script>
-```
-
-This lets you write `import { html } from '@arrow-js/core'` in every component file without a bundler.
-
----
-
-## State Serialization
-
-### serde Pattern for App State
-
-The state schema from the spec maps cleanly to serde. Key decisions:
-
-1. Use `#[serde(rename_all = "camelCase")]` everywhere — state.json will be read by JS too
-2. Use `#[serde(default)]` on all fields — forward-compatible with schema migrations
-3. Use `Option<T>` for anything that may be absent after migration
-4. Keep `version: u32` and implement a migration function
-
-```rust
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase", default)]
-pub struct AppState {
-    pub version: u32,
-    pub window: WindowState,
-    pub sidebar: SidebarState,
-    pub splits: SplitState,
-    pub panels: PanelState,
-    pub sessions: Vec<SessionConfig>,
-    pub projects: Vec<ProjectConfig>,
-    pub active_project: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase", default)]
-pub struct WindowState {
-    pub x: f64,
-    pub y: f64,
-    pub width: f64,
-    pub height: f64,
-}
-
-#[derive(Debug, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase", default)]
-pub struct SplitState {
-    pub main: f64,           // sidebar | main+right ratio
-    pub right: f64,          // right-top | right-bottom ratio
-    pub server_pane: f64,    // 0.0 = collapsed
-}
-
-#[derive(Debug, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase", default)]
-pub struct SessionConfig {
-    pub id: String,
-    pub tmux_name: String,
-    pub cmd: String,
-    pub cwd: String,
-    pub project_id: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase", tag = "agentType")]
-pub enum AgentConfig {
-    ClaudeCode { cmd_override: Option<String> },
-    OpenCode { cmd_override: Option<String> },
-    Custom { cmd: String },
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct ProjectConfig {
-    pub id: String,           // SHA-8 of path
-    pub name: String,
-    pub path: String,
-    pub agent: AgentConfig,
-    pub gsd_file: String,    // default: "PLAN.md"
-    pub server_cmd: Option<String>,
-    pub tmux_socket: Option<String>,
-}
-```
-
-**Migration pattern:**
-
-```rust
-const CURRENT_VERSION: u32 = 1;
-
-pub fn load_state(path: &Path) -> AppState {
-    let raw = std::fs::read_to_string(path).unwrap_or_default();
-    let mut state: AppState = serde_json::from_str(&raw).unwrap_or_default();
-    state = migrate(state);
-    state
-}
-
-fn migrate(mut state: AppState) -> AppState {
-    if state.version < 1 {
-        // v0 → v1: add project id field
-        for project in &mut state.projects {
-            if project.id.is_empty() {
-                project.id = sha8_of_path(&project.path);
-            }
+    pub fn remove_project(&mut self, name: &str) {
+        self.project.projects.retain(|p| p.name != name);
+        if self.project.active.as_deref() == Some(name) {
+            self.project.active = None;
         }
-        state.version = 1;
     }
-    state
+
+    pub fn switch_project(&mut self, name: &str) -> Result<(), String> {
+        if !self.project.projects.iter().any(|p| p.name == name) {
+            return Err(format!("Project '{}' not found", name));
+        }
+        self.project.active = Some(name.to_string());
+        Ok(())
+    }
 }
+
+// #[tauri::command] wrappers become thin delegation:
+// lock mutex -> call method -> save
 ```
 
-**State file location:**
+## Data Flow
 
-```rust
-fn state_path() -> PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("~/.config"))
-        .join("gsd-mux")
-        .join("state.json")
-}
+### Test Execution Flow (Frontend)
+
+```
+pnpm test (vitest run)
+    ↓
+vitest.config.ts (jsdom env, preact plugin, setupFiles)
+    ↓
+__test__/setup.ts (crypto polyfill, optional global mockIPC)
+    ↓
+*.test.ts files discovered (src/**/*.test.{ts,tsx})
+    ↓
+beforeEach: mockIPC() intercepts invoke/listen
+    ↓
+Test body: import module -> call function -> assert
+    ↓
+afterEach: clearMocks()
 ```
 
-Use the `dirs` crate (already a tauri transitive dependency) for `~/.config/gsd-mux/`.
+### Test Execution Flow (Backend)
 
-### Enum Tagging for Panel Tab Types
-
-Panels can show different views. Use internally-tagged enums — they serialize cleanly to JSON and are human-readable in state.json:
-
-```rust
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(tag = "type", rename_all = "camelCase")]
-pub enum PanelTab {
-    Terminal { session_id: String },
-    GsdViewer { file_path: String },
-    DiffViewer { repo_path: String, file: Option<String> },
-    FileTree { root_path: String },
-}
+```
+cargo test (from src-tauri/)
+    ↓
+#[cfg(test)] mod tests in each .rs file
+    ↓
+#[test] fn test_name() runs in isolation
+    ↓
+Pure function tests: no setup needed
+    ↓
+I/O tests: tempfile crate for isolated dirs
 ```
 
-Serializes to:
-```json
-{ "type": "gsdViewer", "filePath": "/projects/foo/PLAN.md" }
-{ "type": "terminal", "sessionId": "gsd-a3f2c1b4-main" }
+### Key Data Flows to Test
+
+1. **State load/save cycle:** `loadAppState()` calls `invoke('load_state')` -> returns `AppState` -> signals updated. Test: mock invoke returns valid state, verify signals have correct values.
+2. **ANSI rendering pipeline:** Raw ANSI string -> `ansiToHtml()` -> styled HTML string. Test: known ANSI inputs produce expected HTML output (XSS safety, color accuracy, 256-color, truecolor, edge cases).
+3. **Project CRUD:** `addProject()` -> `invoke('add_project')` -> reload state -> update `projects` signal. Test: mock invoke sequence, verify signal state after operation.
+4. **Server event flow:** `listenServerOutput()` -> Tauri event `server-output` -> callback with (project, text). Test: mock events, verify callback receives correct payload.
+5. **Rust state serde:** `AppState` serialize -> deserialize roundtrip. Test: default values preserved, unknown fields ignored, corrupt input falls back to defaults.
+6. **Path safety:** `is_safe_path()` rejects traversal. Test: `..` components rejected, valid paths accepted.
+
+## Integration Points
+
+### New Components (to create)
+
+| Component | Type | Purpose |
+|-----------|------|---------|
+| `src/__test__/setup.ts` | New file | Global test setup: crypto polyfill, Tauri mock init |
+| `src/server/ansi-html.test.ts` | New file | Pure function tests for ANSI->HTML |
+| `src/state-manager.test.ts` | New file | State lifecycle with mocked IPC |
+| `src/server/server-bridge.test.ts` | New file | Server bridge with mocked IPC + events |
+| `src/theme/theme-manager.test.ts` | New file | Theme logic with mocked IPC |
+| `src/tokens.test.ts` | New file | Design token contract assertions |
+
+### Modified Components
+
+| Component | Change |
+|-----------|--------|
+| `vitest.config.ts` | Add `setupFiles: ['src/__test__/setup.ts']` |
+| `src-tauri/src/state.rs` | Add `#[cfg(test)] mod tests` (serde roundtrip, defaults) |
+| `src-tauri/src/project.rs` | Extract `impl AppState` methods + add `#[cfg(test)] mod tests` |
+| `src-tauri/src/git_status.rs` | Add `#[cfg(test)] mod tests` (temp git repo) |
+| `src-tauri/src/file_ops.rs` | Add `#[cfg(test)] mod tests` (`is_safe_path`, checkbox) |
+| `src-tauri/src/theme/types.rs` | Add `#[cfg(test)] mod tests` (theme serde) |
+| `src-tauri/Cargo.toml` | Add `[dev-dependencies] tempfile = "3"` |
+| `package.json` | Add `"test:rust": "cd src-tauri && cargo test"`, `"test:all": "vitest run && cd src-tauri && cargo test"` |
+
+### External Dependencies for Testing
+
+| Dependency | Type | Purpose | Already Installed? |
+|------------|------|---------|-------------------|
+| `vitest` | devDependency | Test runner | YES (4.1.3) |
+| `jsdom` | devDependency | DOM environment | YES (29.0.2) |
+| `@tauri-apps/api` | dependency | `mocks` submodule for IPC mocking | YES (2.10.1) |
+| `tempfile` | Rust dev-dependency | Temp directories for Rust I/O tests | NO -- add to Cargo.toml |
+
+### Internal Boundaries
+
+| Boundary | Communication | Test Approach |
+|----------|---------------|---------------|
+| TS modules <-> Tauri IPC | `invoke()` from `@tauri-apps/api/core` | `mockIPC()` intercepts all commands |
+| TS modules <-> Tauri events | `listen()` from `@tauri-apps/api/event` | `mockIPC({ shouldMockEvents: true })` |
+| Rust commands <-> Rust pure fns | Direct function calls | Test pure fns directly, skip command wrappers |
+| Components <-> Signals | `@preact/signals` reactivity | Test signal values after operations |
+| Components <-> DOM | Preact render + CSS | Defer -- component tests are Phase 2 territory |
+
+## Anti-Patterns
+
+### Anti-Pattern 1: Testing Tauri Command Wrappers Directly in Rust
+
+**What people do:** Try to instantiate `tauri::State<ManagedAppState>` in test code to call `#[tauri::command]` functions.
+**Why it's wrong:** `tauri::State` requires the full Tauri runtime. Booting an entire Tauri app in tests is slow, fragile, and defeats the purpose of unit tests.
+**Do this instead:** Test the inner logic (pure functions, struct methods). The `#[tauri::command]` wrapper is thin delegation -- if the inner logic is correct and the wrapper is trivial, the wrapper needs no test.
+
+### Anti-Pattern 2: Manual Module Mocking Instead of mockIPC
+
+**What people do:** Use `vi.mock('@tauri-apps/api/core')` to stub `invoke` with `vi.fn()`.
+**Why it's wrong:** `vi.mock` replaces the entire module. Tauri's `mockIPC` is specifically designed to simulate IPC and handles internal details (request ID, response format). Manual mocking misses edge cases and breaks when Tauri updates internals.
+**Do this instead:** Always use `import { mockIPC, clearMocks } from '@tauri-apps/api/mocks'`.
+
+### Anti-Pattern 3: Testing xterm.js/WebGL in jsdom
+
+**What people do:** Try to create `Terminal` instances and test rendering in jsdom.
+**Why it's wrong:** jsdom has no rendering engine, no WebGL context, no canvas. xterm.js will fail to initialize or produce meaningless results.
+**Do this instead:** Skip terminal-manager tests entirely. Terminal integration is validated by manual testing. If automated terminal testing is needed, that's E2E territory, not unit tests.
+
+### Anti-Pattern 4: Tautological Constant Tests
+
+**What people do:** Write `expect(colors.accent).toBe('#258AD1')` -- just repeating the source code.
+**Why it's wrong:** These tests break when you intentionally change the value, not when something goes wrong. Pure maintenance cost.
+**Do this instead:** Test token *properties* -- all color values are valid 7-char hex strings, all font sizes are positive numbers, no duplicate color keys. This validates the contract, not the values.
+
+### Anti-Pattern 5: Over-Mocking State Manager
+
+**What people do:** Mock every function in state-manager.ts when testing components that use it.
+**Why it's wrong:** The state manager is the backbone of the app. Over-mocking hides real integration bugs.
+**Do this instead:** Mock only the Tauri IPC layer (`mockIPC`). Let state-manager.ts run its real logic against the mock IPC. This tests the actual signal update flow.
+
+## Consolidation Opportunities
+
+### Refactor 1: Extract Pure Functions from `project.rs`
+
+Move project CRUD logic from `#[tauri::command]` closures into `impl AppState` methods. The command wrappers become 3-line functions: lock mutex, call method, save. The methods are trivially testable.
+
+### Refactor 2: Centralize Tauri Mock Setup
+
+Create `src/__test__/setup.ts` with:
+- `globalThis.crypto` polyfill (jsdom lacks WebCrypto, required by Tauri mocks)
+- Shared `mockIPC` handler with all known command responses (optional -- per-test setup may be cleaner)
+- `clearMocks()` in global `afterEach`
+
+Reference in `vitest.config.ts` via `setupFiles: ['src/__test__/setup.ts']`.
+
+### Refactor 3: Dead Code Audit
+
+After rapid MVP development (9,517 LOC in 6 days), dead code is expected. Candidates:
+- Unused exports in `state-manager.ts` (e.g., `updateSession` -- check for callers)
+- Vestigial event listeners from pre-Preact architecture
+- Unused Rust functions or types from iterative development
+- Arrow.js references in comments (already replaced by Preact in Phase 6.1)
+
+### Refactor 4: Type Tightening
+
+- `AppState.layout` is `Record<string, string | boolean>` on the TS side but a strongly-typed struct in Rust. Align TS types to match Rust struct fields.
+- `ProjectEntry.agent` is `string` but should be a union type: `'claude-code' | 'opencode' | string`.
+- `ThemeData.terminal` is `Record<string, string>` but xterm.js has a specific `ITheme` interface.
+
+## Build Order for Testing Phases
+
+Based on dependencies and value-per-effort:
+
+### Phase 1: Infrastructure + Pure Functions (no mocking needed)
+1. Update `vitest.config.ts` with `setupFiles`
+2. Create `src/__test__/setup.ts` with crypto polyfill
+3. Write `ansi-html.test.ts` -- highest value, pure functions, zero mocks
+4. Write `tokens.test.ts` -- contract tests for token API surface
+5. Add `tempfile = "3"` to Rust `[dev-dependencies]`
+6. Add `#[cfg(test)]` to `state.rs` -- serde roundtrip, defaults
+7. Add `#[cfg(test)]` to `file_ops.rs` -- `is_safe_path` pure tests
+
+**Rationale:** Establishes infrastructure and proves the test pipeline works. Pure function tests build confidence without mock complexity.
+
+### Phase 2: Tauri IPC Mocking Layer
+1. Write `state-manager.test.ts` -- load/save cycle, signal updates
+2. Write `server-bridge.test.ts` -- invoke arg verification, event listening
+3. Write `theme-manager.test.ts` -- theme application, mode toggle
+
+**Rationale:** Adds the IPC mock layer. These tests validate the bridge between frontend and backend.
+
+### Phase 3: Rust Logic Tests + Refactoring
+1. Extract `impl AppState` methods in `project.rs`
+2. Add `#[cfg(test)]` to `project.rs` -- CRUD operations
+3. Add `#[cfg(test)]` to `git_status.rs` -- temp repo integration tests
+4. Add `#[cfg(test)]` to `file_ops.rs` -- directory listing, checkbox write-back
+5. Add `#[cfg(test)]` to `theme/types.rs` -- theme serde
+
+**Rationale:** Rust tests run independently (`cargo test`). Extracting methods from command wrappers improves testability and code quality simultaneously.
+
+### Phase 4: Consolidation
+1. Dead code audit + removal
+2. Type tightening (TS types match Rust structs)
+3. CI script: `pnpm test && cd src-tauri && cargo test`
+4. Verify `pnpm run build` still works after all changes
+
+**Rationale:** Consolidation after testing ensures tests catch regressions in the cleanup.
+
+## Vitest Configuration (Final)
+
+```typescript
+// vitest.config.ts
+import { defineConfig } from 'vitest/config';
+import preact from '@preact/preset-vite';
+
+export default defineConfig({
+  plugins: [preact()],
+  test: {
+    environment: 'jsdom',
+    include: ['src/**/*.test.{ts,tsx}'],
+    setupFiles: ['src/__test__/setup.ts'],
+    globals: false, // explicit imports preferred for clarity
+  },
+});
 ```
+
+## Test Setup File
+
+```typescript
+// src/__test__/setup.ts
+import { afterEach } from 'vitest';
+import { randomFillSync } from 'crypto';
+
+// jsdom lacks WebCrypto, required by @tauri-apps/api/mocks
+Object.defineProperty(globalThis, 'crypto', {
+  value: {
+    getRandomValues: (buffer: Buffer) => randomFillSync(buffer),
+  },
+});
+
+// Auto-cleanup mocks after each test
+afterEach(async () => {
+  const { clearMocks } = await import('@tauri-apps/api/mocks');
+  clearMocks();
+});
+```
+
+## Sources
+
+- [Tauri v2 Mock APIs documentation](https://v2.tauri.app/develop/tests/mocking/) -- HIGH confidence
+- [Tauri mocks namespace API reference](https://v2.tauri.app/reference/javascript/api/namespacemocks/) -- HIGH confidence
+- [Tauri event mock bug report #14281](https://github.com/tauri-apps/tauri/issues/14281) -- event mocking has known edge cases
+- Vitest 4.x config: existing `vitest.config.ts` in project, already configured for jsdom + Preact
+- Rust `#[cfg(test)]` pattern: standard Rust convention
 
 ---
-
-## Build Order Implications
-
-The components have hard dependencies that dictate phase ordering. Attempting to build them out of order creates unresolvable blockers.
-
-```
-Phase 1: Scaffold
-  - Tauri 2 project structure
-  - Arrow.js import map setup (vendor files, no CDN dependency)
-  - 3-zone CSS layout with placeholder divs
-  - Split handle dragging (CSS flex + ResizeObserver)
-  - Sidebar collapse/expand
-  PREREQUISITE FOR: everything
-
-Phase 2: Terminal Integration  [HARDEST PHASE — most unknowns]
-  - portable-pty integration in Rust
-  - AppState with sessions HashMap (Mutex<HashMap>)
-  - session_create / session_attach / session_write / session_resize commands
-  - Channel-based PTY streaming (not Events)
-  - xterm.js vendor + import map
-  - TerminalPanel Arrow.js component (ref mount pattern)
-  - FitAddon + ResizeObserver + debounced resize
-  - Flow control (HIGH/LOW watermarks)
-  - WebGL addon with canvas fallback
-  REQUIRES: Phase 1
-
-Phase 3: Terminal Theming
-  - theme.json schema + serde loading
-  - notify watcher on theme.json
-  - xterm.js theme object construction
-  - Hot reload: emit theme-change event → all terminals re-apply
-  REQUIRES: Phase 2 (terminals must exist to theme)
-
-Phase 4: Session Persistence
-  - Full AppState serde schema
-  - state_save / state_load Tauri commands
-  - on_window_close event → save state → detach tmux sessions
-  - on_startup → load state → session_attach for each saved session
-  - Migration function (version field)
-  REQUIRES: Phase 2 (session model must be defined)
-
-Phase 5: Project System & Sidebar
-  - ProjectConfig serde model
-  - Project switching: tmux session swap + panel refresh
-  - Sidebar Arrow.js component (projects list, sessions list)
-  - git2 integration for git changes sidebar section
-  REQUIRES: Phase 4 (state must persist project list)
-
-Phase 6: Right Panel Views
-  - GSD Markdown viewer (marked.js + checkbox write-back)
-  - notify watcher on PLAN.md
-  - Diff viewer (git2 diff output → syntax highlight)
-  - File tree (fs_tree command + keyboard nav)
-  - Right panel tab system (reuses tab bar component from Phase 2)
-  REQUIRES: Phase 1 layout, Phase 5 project paths
-
-Phase 7: Server Pane & Agent Support
-  - Server pane as collapsable split inside main panel
-  - Direct PTY spawn (no tmux) for dev server
-  - action buttons: Restart / Stop / Open in Browser
-  - Agent binary detection (which claude, which opencode)
-  REQUIRES: Phase 2 (PTY infrastructure), Phase 5 (project config)
-
-Phase 8: Polish
-  - Global keyboard shortcut capture (Tauri global shortcut + focus routing)
-  - Error recovery for crashed terminals
-  - Lazy render (IntersectionObserver on offscreen panels)
-  - Debounced file watcher events
-  REQUIRES: all prior phases
-```
-
-**Critical path:** Phase 2 (Terminal Integration) is the highest-risk phase. All PTY mechanics, Channel streaming, and the Tauri IPC pattern must be proven here. If Channel throughput is insufficient for terminal data rates, the entire data flow architecture changes. Plan for a spike/prototype at Phase 2 start.
-
-**Parallelizable after Phase 2:** Phases 3 and 5 have no dependency on each other. Phase 6 views (GSD viewer, diff viewer, file tree) are independent of terminal work and could be built as a standalone prototype.
-
----
-
-## Architecture Diagram
-
-```
-Frontend (Webview)                    Rust Backend
-─────────────────                    ─────────────
-Arrow.js components
-  TerminalPanel                       AppState
-    xterm.js instance     ←Channel─   └─sessions: HashMap<id, SessionHandle>
-    FitAddon                               └─ pty_master: MasterPty
-    term.onData(data)                          reader_task (spawn_blocking)
-       └─invoke('session_write')  ──►         writer: Box<dyn Write>
-                                              tmux_name: Option<String>
-  SidebarPanel
-    project list          ←Event──    git2 watcher (notify crate)
-    git changes           ←Event──    fs::notify on .git/
-
-  GsdViewer              ←Event──    notify watcher on PLAN.md
-    marked.js render
-    checkbox click         ──►invoke('fs_write')
-
-  SplitHandle
-    ResizeObserver         ──►invoke('session_resize') ──► pty.resize()
-    drag end               ──►invoke('state_save')
-
-tmux (external process)
-  sessions: gsd-{id}-main
-            gsd-{id}-server
-            gsd-{id}-bash
-     ↑
-     attached via: spawn 'tmux attach-session -t name' in portable-pty
-```
-
----
-
-## Open Questions & Risks
-
-| Question | Risk | Mitigation |
-|----------|------|------------|
-| Does Tauri 2 `Channel<Vec<u8>>` binary payload work or does it base64 encode? | HIGH — affects latency | Test in Phase 2 spike; may need to keep bytes as `Vec<u8>` in serde |
-| Arrow.js `ref` attribute behavior — is it stable in current version? | MEDIUM | Verify against pinned version; fallback is custom element wrapper |
-| portable-pty `try_clone_reader()` thread safety with Tauri's AppState Mutex | MEDIUM | Ensure reader is extracted before locking; store JoinHandle not reader |
-| tmux version on user machines — macOS ships old tmux (2.9 via Xcode) | LOW | Check version on startup; document minimum (3.0+); homebrew tmux recommended |
-| WebGL context exhaustion beyond 4-5 terminals | LOW for MVP | Canvas fallback handles it; document as known limitation |
+*Architecture research for: Efxmux testing & consolidation*
+*Researched: 2026-04-12*

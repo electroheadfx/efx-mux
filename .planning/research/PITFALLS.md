@@ -1,112 +1,107 @@
-# Domain Pitfalls: GSD⚡MUX
+# Pitfalls Research: Testing & Consolidation (v0.2.0)
 
-**Domain:** Tauri 2 desktop app — xterm.js terminals + tmux sessions + Arrow.js
-**Researched:** 2026-04-06
-**Stack:** Tauri 2 (Rust) + Arrow.js + xterm.js 5.x + tmux + portable-pty
+**Domain:** Adding Vitest unit tests and consolidation refactors to existing Tauri 2 + Preact + xterm.js 6.0 + Tailwind 4 app (9,517 LOC, shipped as MVP in 6 days)
+**Researched:** 2026-04-12
+**Confidence:** HIGH (verified against Tauri v2 docs, Vitest docs, Preact signals discussions, xterm.js issues)
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites, crashes, or permanent data loss.
+---
+
+### Pitfall 1: Tauri Channel Cannot Be Mocked -- PTY Bridge Is Untestable with mockIPC
+
+**What goes wrong:**
+The `pty-bridge.ts` module uses `Channel<number[]>` from `@tauri-apps/api/core` for PTY output streaming. Tauri's `mockIPC` utility does NOT support Channel mocking. The open feature request (tauri-apps/tauri#13753) confirms: "Will keep this open since channels are not supported yet." Any test that imports `pty-bridge.ts` and calls `connectPty()` will throw `TypeError: Cannot read properties of undefined (reading 'transformCallback')` because `Channel` constructor requires Tauri runtime internals that jsdom cannot provide.
+
+**Why it happens:**
+`Channel` is a Tauri-internal streaming primitive that registers a callback ID with the native runtime via `window.__TAURI_INTERNALS__.transformCallback`. In jsdom, `__TAURI_INTERNALS__` is partially mocked by `mockIPC` but the `transformCallback` method is not included. This is a known gap in Tauri's test infrastructure.
+
+**How to avoid:**
+- Do NOT attempt to unit test `pty-bridge.ts` directly. It is a thin integration glue layer (57 LOC) that wires Channel + invoke + xterm.js -- every dependency is external. Unit testing it would require mocking Channel, Terminal, and invoke simultaneously, producing a test that asserts nothing real.
+- Instead, test the logic AROUND the bridge: test `terminal-manager.ts` session lifecycle logic with invoke mocked, test `resize-handler.ts` debounce math as pure functions.
+- If Channel mocking becomes available later (watch tauri-apps/tauri#13753), revisit.
+- For integration testing of the full PTY path, use Tauri's Rust-side `#[cfg(test)]` tests or future WebDriver-based E2E tests -- not Vitest unit tests.
+
+**Warning signs:**
+- `TypeError: Cannot read properties of undefined (reading 'transformCallback')` in test output
+- Tests importing anything from `@tauri-apps/api/core` that touches `Channel`
+
+**Phase to address:**
+Test infrastructure setup (Phase 1 of milestone). Establish the boundary: "Channel-dependent modules are integration-tested, not unit-tested."
 
 ---
 
-### Pitfall 1: xterm.js Write Buffer Overflow with Fast Producers
+### Pitfall 2: Signal State Leaks Between Tests -- Global Signals Poison Test Isolation
 
-**What goes wrong:** Claude Code generates dense streaming output (tool results, file diffs, search output). xterm.js `write()` is non-blocking and buffers all incoming data. At high throughput the internal write buffer exceeds its hardcoded 50MB limit — data is silently discarded. The terminal appears to "freeze" or output stops mid-stream with no error.
+**What goes wrong:**
+The codebase uses 34 `signal()` calls across 9 files, with top-level module-scoped signals in `state-manager.ts` (`projects`, `activeProjectName`, `sidebarCollapsed`, `rightTopTab`, `rightBottomTab`) and in component files (`file-tree.tsx` has 6 signals, `project-modal.tsx` has 7). These are module-level singletons. When Vitest runs multiple tests in the same file, signal values from Test A persist into Test B. Worse, Vitest reuses modules across test files by default (module caching), so signal pollution can cross file boundaries.
 
-**Why it happens:** The PTY stdout pipe produces data at speeds up to several GB/s in burst. xterm.js processes writes on each event loop tick targeting < 16ms per frame, giving a practical throughput ceiling of 5–35 MB/s. No IPC-level backpressure exists between the Tauri Rust event emitter and the JS write queue.
+**Why it happens:**
+Vitest's default behavior caches ESM modules between tests in the same worker thread. `signal()` creates a stateful object at module-evaluation time. Unlike React state which resets on unmount, Preact signals at module scope persist for the lifetime of the module cache. The Preact signals team explicitly calls this out: "Modifying signal values directly affects all tests in a file" (preactjs/signals#522).
 
-**Consequences:** Lost terminal output, frozen terminal, user can't tell if Claude Code is still running. In extreme cases the Tauri webview process OOMs.
-
-**Prevention:**
-- Implement a watermark-based flow control loop on the Rust side: track bytes-in-flight, pause PTY reads when > 400KB is buffered, resume when the xterm.js `write()` callback fires (xterm.js exposes a callback parameter on `write(data, callback)`).
-- HIGH watermark: 400KB. LOW watermark: 100KB. Do not pause/resume per chunk — batch at threshold crossings only.
-- Emit a Tauri event to the frontend with each chunk; the frontend calls `write(chunk, () => emit_ack())` to signal readiness. Rust side reads the ack before sending the next batch.
-- Official xterm.js flow control guide: https://xtermjs.org/docs/guides/flowcontrol/
+**How to avoid:**
+- Create a `src/test/setup.ts` that resets all exported signals to their default values in a global `beforeEach`. Import it via `vitest.config.ts` `setupFiles`.
+- For `state-manager.ts` specifically: add an exported `resetStateForTesting()` function that sets all signals back to defaults and clears `currentState`. Call it in `beforeEach`.
+- Do NOT rely on `vi.resetModules()` as a blanket fix -- it forces re-evaluation of all imports, breaks Preact's internal signal graph, and causes `effect()` / `computed()` to lose their subscriptions.
+- For component-level signals (inside `.tsx` files): prefer testing via rendered output (Preact Testing Library) rather than directly reading signal values. The signal is an implementation detail; the DOM output is the contract.
 
 **Warning signs:**
-- Terminal goes silent mid-output during long Claude Code sessions
-- Tauri GPU process memory climbing continuously (xterm.js buffering)
-- `write` queue depth observable via xterm.js internals growing without bound
+- Tests pass individually but fail when run together (`vitest run` vs `vitest run src/foo.test.ts`)
+- Test order affects outcomes (reorder test files, different failures)
+- Signal values in test assertions don't match what the test set
 
-**Phase:** Phase 2 (Terminal Integration) — must be solved before any real workload testing.
+**Phase to address:**
+Test infrastructure setup (Phase 1). The `setup.ts` with signal reset must exist before any test is written.
 
 ---
 
-### Pitfall 2: macOS App Sandbox Blocks PTY Spawning (App Store / Notarization Path)
+### Pitfall 3: Consolidation Refactors Break Working Features -- No Safety Net Regression
 
-**What goes wrong:** If the app is ever sandboxed (Mac App Store distribution or hardened runtime with `com.apple.security.app-sandbox`), `forkpty()` / `posix_openpt()` calls fail. The child process inherits the sandbox and cannot set its process group on the TTY. zsh prints `can't set tty pgrp: operation not permitted`, then every command inside the shell fails.
+**What goes wrong:**
+The project shipped in 6 days. Code paths were validated manually, not with tests. Consolidation refactors (dead code removal, type tightening, module reorganization) silently break edge cases that were only verified by hand during development. Example: extracting a shared utility from `sidebar.tsx` and `project-modal.tsx` could break the `project-pre-switch` custom event dispatch order in `switchProject()`, which is a race-condition-sensitive code path. There are no tests to catch this.
 
-**Why it happens:** Apple explicitly states there are no entitlements to allow launching a PTY process outside the sandbox. Sandbox rules propagate to all child processes spawned via fork/exec.
+**Why it happens:**
+MVP codebases have implicit contracts -- behaviors that work because of incidental coupling, not explicit design. When consolidating, developers assume they understand the full dependency graph, but rapid development creates hidden dependencies: event listener registration order, signal subscription timing, CSS class names used in JS querySelector calls, Rust command parameter naming that must match `invoke()` calls exactly.
 
-**Consequences:** The entire PTY/tmux session mechanism is non-functional if the sandbox entitlement is present. No workaround without distributing a separate non-sandboxed helper daemon.
-
-**Prevention:**
-- Do NOT add `com.apple.security.app-sandbox` to the entitlements file. GSD⚡MUX must be distributed outside the Mac App Store (direct download, Homebrew, or Tauri's built-in updater).
-- The required Tauri entitlements are `com.apple.security.cs.allow-jit`, `com.apple.security.cs.allow-unsigned-executable-memory`, and `com.apple.security.cs.allow-dyld-environment-variables`. These are for WKWebView JIT and are sandboxing-neutral.
-- Document explicitly in the project: App Store distribution is out of scope permanently.
-- Notarization without sandbox is valid and sufficient for Gatekeeper.
+**How to avoid:**
+- Write tests BEFORE consolidating. The milestone order must be: (1) set up test infra, (2) write tests for critical paths, (3) THEN consolidate. Never consolidate first.
+- Prioritize testing the modules you plan to refactor. If you plan to consolidate `state-manager.ts`, test `loadAppState`, `saveAppState`, and `switchProject` first.
+- For each consolidation change, run the app manually and verify the specific feature. Keep a checklist of manual verification steps for features that cannot be unit tested (terminal rendering, drag resize, theme switching).
+- Use TypeScript's type system as a safety net: tighten types (replace `Record<string, any>` with specific interfaces) BEFORE moving code. The compiler catches mismatches that tests would miss.
 
 **Warning signs:**
-- Adding `com.apple.security.app-sandbox: true` to entitlements.plist
-- Any App Store submission requirement showing up in Tauri CI configuration
+- "I'll just quickly rename this..." followed by a broken feature discovered days later
+- Consolidation PR touches > 5 files without corresponding test changes
+- Custom events (`project-changed`, `project-pre-switch`) stop firing in the correct order
 
-**Phase:** Phase 1 (Scaffold) — decide and document before writing a line of Rust. Lock the entitlements file early.
+**Phase to address:**
+This is a milestone-level ordering constraint. Tests first (Phases 1-2), consolidation after (Phase 3+).
 
 ---
 
-### Pitfall 3: WebGL Context Exhaustion with Multiple xterm.js Instances
+### Pitfall 4: xterm.js Terminal Cannot Be Instantiated in jsdom
 
-**What goes wrong:** Browsers (WKWebView included) enforce a hard limit on active WebGL contexts per page — typically 8–16. GSD⚡MUX plans up to 4 terminal panels (main, server pane, two right-panel bash terminals). With each running `addon-webgl`, context exhaustion is a real risk, especially if terminals are created and destroyed during tab switching without proper disposal. Lost contexts produce a black/blank terminal with no error message.
+**What goes wrong:**
+`new Terminal()` from `@xterm/xterm` requires DOM APIs that jsdom does not fully implement: `document.createElement('canvas')` returns a stub without `getContext('2d')` or `getContext('webgl2')`, `window.matchMedia` is undefined, `ResizeObserver` is undefined, and `requestAnimationFrame` behaves differently. Tests that import any module which transitively imports `Terminal` will fail at module evaluation time or at instantiation time with cryptic errors like `Cannot read properties of null (reading 'getContext')`.
 
-**Why it happens:** Each `WebglAddon` instance creates a dedicated WebGL2 rendering context. WKWebView enforces the same limits as Safari. When the limit is hit the browser silently loses older contexts.
+**Why it happens:**
+xterm.js 6.0 removed the canvas addon and defaults to DOM rendering with WebGL as the GPU path. Even the DOM renderer measures character dimensions using canvas 2d context during initialization. jsdom does not provide a real rendering engine.
 
-**Consequences:** Terminal panels render as black rectangles. No JavaScript error is thrown. Very hard to debug.
-
-**Prevention:**
-- Use `try/catch` when loading `WebglAddon`. On failure, fall back to `@xterm/addon-canvas` (2D canvas, no WebGL limit, 80% of WebGL performance). Pattern:
-  ```js
-  try {
-    const webgl = new WebglAddon();
-    webgl.onContextLoss(() => { webgl.dispose(); loadCanvasFallback(term); });
-    term.loadAddon(webgl);
-  } catch (e) {
-    term.loadAddon(new CanvasAddon());
-  }
-  ```
-- Call `addon.dispose()` then `terminal.dispose()` in the correct order whenever a terminal tab is closed.
-- Keep simultaneous active terminals to a minimum. The server pane and right-panel bash terminals can default to `addon-canvas` since performance is less critical there.
-- Subscribe to `webglcontextlost` event to detect and recover from mid-session context loss.
+**How to avoid:**
+- Mock `@xterm/xterm` at the module level in tests that need it: `vi.mock('@xterm/xterm', () => ({ Terminal: vi.fn(() => ({ write: vi.fn(), onData: vi.fn(() => ({ dispose: vi.fn() })), onResize: vi.fn(() => ({ dispose: vi.fn() })), dispose: vi.fn(), cols: 80, rows: 24, loadAddon: vi.fn(), open: vi.fn() })) }))`.
+- Better: structure code so that business logic modules do NOT import `Terminal` directly. The current architecture already does this well -- `pty-bridge.ts` takes a `Terminal` parameter rather than creating one. Test callers can pass a mock object.
+- For `terminal-manager.ts`: if it creates `Terminal` instances, mock the import. If it only manages session metadata, it may not need the mock at all.
+- Do NOT attempt to use `@vitest/browser` mode just to get real DOM for xterm.js unit tests. The complexity is not justified for the test value gained.
 
 **Warning signs:**
-- Black terminal panel after opening 4+ terminals
-- No render errors in console but terminal appears frozen
+- `ReferenceError: ResizeObserver is not defined`
+- `TypeError: Cannot read properties of null (reading 'getContext')`
+- Tests hanging during Terminal instantiation (jsdom canvas polyfill deadlock)
 
-**Phase:** Phase 2 (Terminal Integration) — build the fallback path from the start, not as a retrofit.
-
----
-
-### Pitfall 4: Tauri IPC JSON Serialization Overhead for Binary PTY Data
-
-**What goes wrong:** PTY stdout bytes are binary. Tauri's event system serializes all payloads as JSON by default. Binary PTY output JSON-encoded as a base64 string or escaped byte array adds 33–100% overhead and a synchronous serialization cost on the Rust side for every chunk. At Claude Code throughput this can consume 200ms+ per 3MB, making the terminal visually laggy even at low backpressure levels.
-
-**Why it happens:** Tauri 2.0's event system is documented as "JSON payloads only." The `emit()` call in Rust serializes via `serde_json` before crossing the IPC bridge. The JS event listener deserializes it again.
-
-**Consequences:** Perceived input lag and jerky rendering even when xterm.js buffer is healthy. Rust main thread blocked on serialization during burst output.
-
-**Prevention:**
-- Use Tauri 2's Raw IPC / binary channel for PTY output (`tauri::ipc::Channel` with raw bytes). Tauri 2.0 stable added Raw Requests that skip JSON for large data transfer.
-- Alternatively, batch small chunks (< 4KB) into a single 16ms-tick event on the Rust side using a channel with a 16ms flush timer, reducing IPC call overhead.
-- Use the Tauri `Channel` type (introduced in Tauri 2.0) specifically designed for streaming large data from Rust to frontend, which supports binary payloads directly.
-- Reference: https://v2.tauri.app/concept/inter-process-communication/
-
-**Warning signs:**
-- Terminal renders in visible "blocks" rather than smooth streaming
-- CPU spike on Rust side during fast output despite low memory pressure
-
-**Phase:** Phase 2 (Terminal Integration) — architecture decision, not fixable late without rewriting IPC layer.
+**Phase to address:**
+Test infrastructure setup (Phase 1). Establish xterm.js mocking pattern in a shared test utility.
 
 ---
 
@@ -114,230 +109,203 @@ Mistakes that cause rewrites, crashes, or permanent data loss.
 
 ---
 
-### Pitfall 5: tmux Session Race Condition on Attach
+### Pitfall 5: mockIPC Handler Must Match Exact Rust Command Signatures
 
-**What goes wrong:** The Rust backend calls `tmux attach-session -t <name>` immediately after `tmux new-session` or immediately on app launch before checking if tmux's server is ready. The attach call races against the tmux server startup, producing `no server running on /tmp/tmux-*/default` or the session pane content is empty because the shell hasn't initialized yet.
+**What goes wrong:**
+`mockIPC` receives `(cmd, args)` where `cmd` is the Rust `#[tauri::command]` function name and `args` is the deserialized argument object. If the mock handler returns a value with a different shape than the Rust command, the test passes but tests a lie. Example: the Rust `load_state` command returns `AppState` with `version: i32` but the mock returns `version: "1"` (string). The code under test works in the mock but would fail against real Rust.
 
-**Why it happens:** `tmux new-session` returns before the shell inside the pane has sourced `.zshrc` / `.bashrc`. Sending `session_write` before the shell prompt is ready causes keystrokes to be lost or applied to the wrong state. This is a known and actively-reported issue even in Claude Code's own agent infrastructure (GitHub issue #23513, February 2026).
+**Why it happens:**
+There is no type-checking bridge between Rust command return types and TypeScript mock return types. The mock handler is `(cmd: string, args: Record<string, unknown>) => any` -- completely untyped. Developers copy-paste mock data from console logs or guess at the shape.
 
-**Consequences:** First-launch sessions appear broken. After app restart, reattached sessions may have out-of-order input. Developers burning sessions on state corruption spend hours debugging.
-
-**Prevention:**
-- After `tmux new-session`, poll with `tmux list-panes -t <session>` until the pane exists before sending writes. A 50ms poll with 2s timeout is sufficient.
-- Prefer passing the command directly to `new-session` via `-d -s <name> <cmd>` rather than sending it via `send-keys` after creation. This eliminates the shell-init race entirely for the primary agent command.
-- On app reopen, before reattaching, verify the session actually exists with `tmux has-session -t <name>` (exit code 0 = exists). If it doesn't, mark the session as dead in state and recreate.
-- For the write channel: buffer early writes locally in Rust and flush only after a `pane_ready` probe succeeds.
-
-**Warning signs:**
-- First keystroke after launch goes missing
-- `tmux has-session` returns non-zero after app reopen for a session that should have survived
-
-**Phase:** Phase 2 (Terminal Integration) for initial session creation; Phase 4 (Session Persistence) for the reopen/reattach path.
-
----
-
-### Pitfall 6: xterm.js FitAddon Dimensions Race on Panel Resize
-
-**What goes wrong:** `fitAddon.fit()` is called before the terminal's container `<div>` has been laid out in the DOM (e.g., immediately after panel creation or after a split resize). It calculates zero columns and zero rows and calls `session_resize(0, 0)` on the PTY, which can crash `portable-pty` or corrupt the PTY geometry. Subsequent attempts to `fit()` may produce incorrect values (Issue #4841, #4338).
-
-**Why it happens:** Arrow.js components render synchronously but CSS flex layout is calculated asynchronously. The container may have zero dimensions at the moment `fit()` is called if it runs before the browser's next layout pass.
-
-**Consequences:** PTY dimension is 0×0. Commands that check `stty size` return garbage. TUI apps (vim, htop) corrupt their layout inside tmux.
-
-**Prevention:**
-- Always call `fitAddon.fit()` inside a `requestAnimationFrame()` callback or inside a `ResizeObserver` on the terminal container, never synchronously after component mount.
-- Validate dimensions before calling `session_resize`: if `cols <= 0 || rows <= 0` skip the resize. Add an assertion in the Rust command handler.
-- Debounce `ResizeObserver` callbacks by 50ms to avoid sending resize events for every frame of a drag operation.
+**How to avoid:**
+- Create typed mock factories in `src/test/mocks/tauri-commands.ts` that return correctly-typed objects matching the TypeScript interfaces: `function mockLoadState(overrides?: Partial<AppState>): AppState { return { version: 1, layout: {}, theme: { mode: 'dark' }, ... , ...overrides }; }`.
+- Use the same TypeScript interfaces (`AppState`, `ProjectEntry`, `GitData`) for mock return values that the production code uses. If the interface changes, mock factories break at compile time.
+- List all 25 `invoke()` calls and their expected return types. Create mock factories for the ones being tested.
 
 **Warning signs:**
-- Terminal appears with 0 width/height after creation
-- vim/htop layout broken immediately after opening
-- `stty size` returns `0 0`
+- Tests pass but the app breaks after a Rust command signature change
+- Mock data has `any` type or is cast with `as unknown as AppState`
+- Mock handler uses a giant `if/else` chain without type annotations
 
-**Phase:** Phase 2 (Terminal Integration).
+**Phase to address:**
+Test infrastructure setup (Phase 1). Mock factories are reusable across all test files.
 
 ---
 
-### Pitfall 7: Keyboard Shortcut Swallowing — Ctrl+C in xterm.js vs Tauri Global Shortcuts
+### Pitfall 6: jsdom Missing WebCrypto -- Silent Test Failures
 
-**What goes wrong:** Tauri's global shortcut system and the WKWebView keyboard event pipeline conflict. Ctrl+C inside xterm.js must send `\x03` (SIGINT) to the PTY process — but if an app-level `Ctrl+C` handler is registered, Tauri may intercept it before xterm.js sees the keydown event. Conversely, Command+C on macOS is the system copy shortcut, but inside xterm.js with text selected it should copy terminal content — WKWebView may route this to the system clipboard handler instead.
+**What goes wrong:**
+Tauri's `mockIPC` internally uses `window.crypto.getRandomValues()` to generate unique callback IDs. jsdom does not implement `WebCrypto`. Without polyfilling it, `mockIPC()` throws `TypeError: window.crypto.getRandomValues is not a function` or silently generates undefined IDs that cause invoke promises to never resolve (tests hang with timeout).
 
-**Why it happens:** Tauri 2 has a `global-shortcut` plugin and also a window-level menu accelerator system. On macOS, the webview keyboard event dispatch order is: native menu accelerator → WKWebView JavaScript → xterm.js handler. Known Tauri issue: Command+C/V don't work in child webviews until parent window has focus (Issue #8676, 2024).
+**Why it happens:**
+The Tauri mocking docs show the fix but many developers skip the setup code. In Node.js 19+, `globalThis.crypto` exists but jsdom overrides `window.crypto` with `undefined`.
 
-**Consequences:** Ctrl+C fails to interrupt Claude Code processes. Command+C copies nothing. Ctrl+D fails to send EOF to the shell.
-
-**Prevention:**
-- Do NOT register app-level Tauri global shortcuts that overlap with terminal control sequences: Ctrl+C, Ctrl+D, Ctrl+Z, Ctrl+L, Ctrl+R, Ctrl+A, Ctrl+E.
-- The project's chosen shortcuts (Ctrl+B, Ctrl+1/2/3, Ctrl+`, Ctrl+T, Ctrl+W, Ctrl+P, Ctrl+Q) are safe because they are Tauri window-level shortcuts, not global OS-level shortcuts.
-- Use `attachCustomKeyboardEventHandler` on each xterm.js instance to intercept keydown events and call `preventDefault()` for modifier keys that should stay in the terminal.
-- For Ctrl+C: xterm.js handles it natively (sends `\x03`) — do not intercept or duplicate this in the app layer.
-- When a terminal panel has focus, disable all non-essential Tauri menu accelerators that could shadow terminal sequences.
+**How to avoid:**
+- Add to `src/test/setup.ts`:
+  ```typescript
+  import { randomFillSync } from 'node:crypto';
+  Object.defineProperty(window, 'crypto', {
+    value: { getRandomValues: (buf: Buffer) => randomFillSync(buf) },
+  });
+  ```
+- This MUST run before any `mockIPC` call, so it belongs in the Vitest `setupFiles`, not in individual test files.
+- Reference the official Tauri testing guide: https://v2.tauri.app/develop/tests/mocking/
 
 **Warning signs:**
-- Claude Code process can't be interrupted with Ctrl+C
-- Shell doesn't respond to Ctrl+D (EOF)
-- Copy from terminal doesn't work on first attempt
+- Tests hang indefinitely (invoke promise never resolves)
+- `TypeError: window.crypto.getRandomValues is not a function`
+- `mockIPC` callback IDs are `undefined`
 
-**Phase:** Phase 8 (Polish) for full keyboard system — but the no-conflict rule must be established in Phase 2 when the shortcut list is defined.
+**Phase to address:**
+Test infrastructure setup (Phase 1). One-time setup, never revisited.
 
 ---
 
-### Pitfall 8: Arrow.js Component Cleanup — xterm.js Terminal Not Disposed on Unmount
+### Pitfall 7: Dead Code Removal Deletes Code That Is Actually Used via Dynamic Paths
 
-**What goes wrong:** When a terminal tab is closed or a panel's content changes, the Arrow.js component unmounts. If the xterm.js `Terminal` instance is not explicitly `dispose()`d before the DOM node is removed, the WebGL addon retains its GPU context, the PTY event listeners leak (each `listen()` call in Tauri JS API accumulates), and the write callback queue continues to fire against a detached DOM node. With multiple tab switches, GPU process memory climbs by ~17MB per orphaned terminal (observed in VS Code, PR #279579, 2025).
+**What goes wrong:**
+During consolidation, static analysis (grep, TypeScript unused-export warnings) identifies "dead" functions or exports. But the codebase uses dynamic patterns: `document.dispatchEvent(new CustomEvent('project-changed'))` is consumed by `document.addEventListener('project-changed', ...)` in a different file. Tauri `invoke('command_name')` calls match Rust functions by string, not by import. Removing a Rust command that appears "unused" in Rust (because it's only called from JS via string) breaks the app.
 
-**Why it happens:** Arrow.js exposes `onCleanup()` for teardown logic, but it must be called explicitly. The pattern is not automatically enforced. Developers often `dispose()` the `WebglAddon` but forget to `dispose()` the `Terminal` instance itself, or forget to call `unlisten()` on the Tauri event listener.
+**Why it happens:**
+String-based coupling (custom events, invoke command names, CSS class selectors used in JS) is invisible to static analysis. MVP codebases use more string-based coupling because it's faster to write.
 
-**Consequences:** GPU memory leak accumulating per closed tab. Tauri event queue fills with orphaned listeners. App slows down after extended use.
-
-**Prevention:**
-- In the terminal component's `onCleanup()` block, always execute in this order:
-  1. `unlisten()` the Tauri stdout event listener (the function returned by `await listen(...)`)
-  2. `addon.dispose()` for each loaded addon (webgl or canvas, fit, web-links, search)
-  3. `terminal.dispose()`
-- Store all unlisten functions in the component's closure and call them all in cleanup.
-- Arrow.js watchers created inside the component auto-stop on unmount — but Tauri `listen()` does NOT auto-stop. It must be manually unlisten'd.
+**How to avoid:**
+- Before removing any code, grep for the function/event/class name as a string literal across BOTH `src/` and `src-tauri/src/`. The invoke command names in Rust (`#[tauri::command]`) must match the JS `invoke('name')` calls.
+- Maintain a list of all custom events: `project-changed`, `project-pre-switch`, and any others. These are cross-module contracts.
+- Use TypeScript's `noUnusedLocals` and `noUnusedParameters` only for detecting WITHIN-MODULE dead code. Cross-module dead code requires manual verification.
+- When in doubt, comment out (don't delete) and run the app. Convert to deletion after manual verification.
 
 **Warning signs:**
-- Tauri GPU helper process memory growing across tab switches
-- Console warnings about event listeners on disposed terminals
-- Error: "Cannot write to a disposed terminal"
+- Removing an export that has 0 TypeScript import references but is used via `invoke()` or `CustomEvent`
+- Grep for the function name returns 0 hits but the function is a Tauri command handler
+- App features break after "safe" dead code removal
 
-**Phase:** Phase 2 (Terminal Integration) — establish the pattern with the first terminal component. It must be part of the component template.
+**Phase to address:**
+Consolidation phase (Phase 3+). Must happen after tests are written for the features being touched.
 
 ---
 
-### Pitfall 9: tmux Not Installed — No User-Friendly Error
+### Pitfall 8: Vitest Config Conflicts with Vite Config -- Duplicate Plugin Issues
 
-**What goes wrong:** The app launches, the Rust backend runs `tmux new-session ...`, the process exits with "command not found", and the frontend receives a generic Tauri IPC error. The user sees a blank terminal panel with no explanation. On macOS, tmux is not installed by default — it requires Homebrew. Intel Macs and fresh macOS installs are particularly likely to be missing it.
+**What goes wrong:**
+The project has separate `vite.config.ts` and `vitest.config.ts`. Both load the `preact()` plugin. If Vitest picks up `vite.config.ts` (its default behavior when no `vitest.config.ts` exists) AND also loads `vitest.config.ts`, the Preact plugin runs twice, causing JSX transform conflicts: components render twice, hooks fire in wrong order, or Preact's internal component recycling breaks.
 
-**Why it happens:** `std::process::Command::new("tmux")` returns `Err(Os { code: 2, kind: NotFound })` which maps to a generic IPC error unless specifically handled.
+**Why it happens:**
+Vitest is built on Vite and will merge configs. The current `vitest.config.ts` correctly uses `defineConfig` from `vitest/config` and includes `preact()` plugin -- but if someone adds `test` config to `vite.config.ts` as well (a common refactor during consolidation), both configs load.
 
-**Consequences:** App appears broken on first launch for a significant portion of users. The only fix is exiting to the terminal and installing tmux separately.
-
-**Prevention:**
-- On startup, before any session creation, probe for tmux: `which tmux` or `tmux -V`. If it fails, emit a Tauri event to the frontend with `{ error: "tmux_not_found", install_hint: "brew install tmux" }`.
-- Display a first-run onboarding modal that checks tmux presence and guides installation. Include a "Check again" button that re-runs the probe without restarting the app.
-- Also check tmux version: GSD⚡MUX requires tmux >= 2.4 for proper pane control. Versions before 2.4 lack some `-P` flags. Display version mismatch as a warning, not a blocker.
-- Detect PATH issues: on macOS, apps launched from Launchpad may not have Homebrew in PATH. Resolve tmux by checking `/usr/local/bin/tmux`, `/opt/homebrew/bin/tmux`, and `~/.nix-profile/bin/tmux` as fallbacks.
+**How to avoid:**
+- Keep test configuration exclusively in `vitest.config.ts`. Never add a `test` key to `vite.config.ts`.
+- The existing separation is correct. Add a comment at the top of each file: `// Test config is in vitest.config.ts -- do not add test{} here` in `vite.config.ts`.
+- Verify by running `vitest --reporter=verbose` and checking that only one instance of the Preact plugin loads.
 
 **Warning signs:**
-- First launch shows empty terminal with no error message
-- Rust logs show `Os { code: 2, kind: NotFound }`
+- Components render but with doubled effects
+- `preact` module resolved from two different paths
+- JSX transform produces `h()` calls instead of `_jsx()` or vice versa
 
-**Phase:** Phase 2 (Terminal Integration) and Phase 4 (Session Persistence) — detection in Phase 2, full onboarding wizard in Phase 8.
+**Phase to address:**
+Test infrastructure setup (Phase 1). Verify once, protect with comments.
 
 ---
 
-### Pitfall 10: Stale tmux Session IDs in Persisted State
+### Pitfall 9: Type Tightening Breaks Rust-JS Contract Silently
 
-**What goes wrong:** The app saves `sessions[].tmuxName = "gsd-mux-myproject"` in `state.json`. Between closes, the user manually kills the tmux session, renames it, or runs `tmux kill-server`. On reopen, the Rust backend calls `tmux attach-session -t gsd-mux-myproject`, gets a non-zero exit code, and the frontend receives an attach failure. If not handled, the terminal panel is left in a permanently broken state.
+**What goes wrong:**
+During consolidation, you tighten TypeScript types: replace `Record<string, string | boolean>` in `AppState.layout` with a specific interface like `{ 'sidebar-w': string; 'right-w': string; ... }`. The TypeScript compiles fine. But the Rust `state.rs` serializes with `serde_json` using the original loose structure. If the Rust side includes a field the TypeScript interface doesn't expect (e.g., a new field added during debugging), `invoke<AppState>('load_state')` silently drops the unknown field (Tauri deserializes on the JS side permissively). Conversely, if TypeScript sends a stricter type to Rust, serde may reject it.
 
-**Why it happens:** tmux session lifetime is decoupled from the app. The user may run any tmux commands outside the app.
+**Why it happens:**
+The Tauri IPC boundary is untyped at the protocol level. TypeScript types and Rust structs are maintained independently. There is no codegen or schema validation bridging them.
 
-**Consequences:** App appears to load but all terminal panels are broken. User cannot access existing projects. State is corrupted until manually deleted.
-
-**Prevention:**
-- On every app open, for each saved session: run `tmux has-session -t <name>` before attempting attach. If it fails, mark the session as `{ status: "dead" }` and render a "Session Lost — Relaunch?" UI instead of a blank terminal.
-- "Relaunch" creates a new tmux session with the same name, re-runs the last command (stored in state), and resumes.
-- Implement `state.json` schema versioning (`"version": 1`) from day one so migration logic can be added without breaking existing state files.
-- Add a "Reset all sessions" escape hatch accessible from the UI for complete state wipe.
+**How to avoid:**
+- When tightening TypeScript types, simultaneously review the corresponding Rust struct in `src-tauri/src/state.rs`. They must stay in sync.
+- Add a test that round-trips: `mockIPC` returns a value from a mock factory, the code processes it, and the test asserts the expected shape. This catches deserialization mismatches at test time.
+- Consider adding a `src/types/tauri-commands.ts` file that is the single source of truth for all invoke return types. Both mock factories and production code import from it.
 
 **Warning signs:**
-- Terminal panel blank after reopen
-- Rust logs: `tmux attach-session` exit code 1
+- Fields silently missing from loaded state after type tightening
+- Rust `serde` deserialization errors in Tauri logs after JS-side type changes
+- State appears to load correctly but specific fields are `undefined`
 
-**Phase:** Phase 4 (Session Persistence) — this is the primary edge case that phase is designed to handle.
-
----
-
-## Minor Pitfalls
+**Phase to address:**
+Consolidation phase (Phase 3+). Type tightening is a consolidation activity that must be cross-checked against Rust.
 
 ---
 
-### Pitfall 11: Arrow.js ESM Import Fails on file:// Protocol
+## Technical Debt Patterns
 
-**What goes wrong:** Arrow.js imported via a bare CDN URL (e.g., `from 'https://esm.sh/@arrow-js/core'`) works in development but may be blocked in Tauri's WKWebView under a strict Content Security Policy. Conversely, relative imports work locally but break if Tauri serves assets via `tauri://localhost` (the default custom protocol) rather than `file://`. Multi-file ESM imports (e.g., `import './components/sidebar.js'`) can fail with CORS errors when loaded via the `tauri://` custom protocol if CSP is not correctly configured.
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| `any` casts in invoke calls | Fast shipping | Silent type mismatches at IPC boundary | Never -- replace with typed mock factories during v0.2.0 |
+| Module-level signal singletons | Simple global state | Test isolation hell, can't run parallel test suites | Acceptable for app state; problematic for component-local state |
+| No test for PTY/Channel code | Avoids mock complexity | PTY regressions only caught manually | Acceptable -- integration-test this via E2E in future milestone |
+| Manual DOM event contracts | No extra deps | Invisible coupling, breaks on rename | Acceptable for v0.2.0; consider typed event bus in v0.3.0 |
 
-**Prevention:**
-- Use import maps in `index.html` to alias `@arrow-js/core` to a locally vendored file in `src/lib/`. This eliminates CDN dependency and avoids CSP issues entirely.
-- Set `"devUrl"` in `tauri.conf.json` to use a local Vite dev server during development (`http://localhost:1420`) and bundled assets for production. The http:// origin in dev avoids `tauri://` CSP issues during iteration.
-- Ensure `tauri.conf.json` CSP includes `script-src 'self' 'unsafe-inline'` if using template literals with inline scripts in Arrow.js.
+## Integration Gotchas
 
-**Phase:** Phase 1 (Scaffold) — resolve import strategy before writing any components.
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| Tauri `mockIPC` | Forgetting WebCrypto polyfill | Add `randomFillSync` polyfill in `setupFiles` before any mock usage |
+| Tauri `mockIPC` + Channel | Trying to mock Channel-based streaming | Don't. Test logic around the bridge, not the bridge itself |
+| Tauri event system | Using `mockIPC({ shouldMockEvents: true })` without understanding scope | Event mocks only work for `plugin:event` prefixed events; custom events via `document.dispatchEvent` are not covered |
+| Preact Testing Library | Importing from `@testing-library/react` by habit | Must use `@testing-library/preact` -- different package, subtly different API |
+| Preact signals in tests | Reading `.value` directly after state change | Use `waitFor()` or `act()` -- signal updates may batch asynchronously when connected to effects |
+| xterm.js in jsdom | Importing Terminal in test file scope | Mock at module level with `vi.mock()` or restructure code to accept Terminal as parameter |
 
----
+## Performance Traps
 
-### Pitfall 12: Session Naming Conflicts
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| Running all tests with jsdom environment | Slow test suite (jsdom startup ~200ms per file) | Use `// @vitest-environment node` comment for pure logic tests that don't need DOM | > 50 test files |
+| Not using Vitest's `--pool=threads` | Sequential test execution | Keep default thread pool; avoid `--pool=forks` unless signal isolation requires it | > 20 test files |
+| Testing rendered xterm.js output | Tests that wait for WebGL frames never resolve | Mock xterm.js entirely; test business logic not rendering | Any test involving Terminal instantiation |
 
-**What goes wrong:** Two projects named "My App" both get tmux session name `gsd-mux-my-app`. On project switch, `tmux attach-session -t gsd-mux-my-app` attaches to the wrong session.
+## "Looks Done But Isn't" Checklist
 
-**Prevention:**
-- Derive session names from a stable UUID or hash of the project path, not the display name. Store display name separately. Session name format: `gsd-mux-{crc32(abs_path)}`.
+- [ ] **Test setup:** WebCrypto polyfill in `setupFiles` -- verify `mockIPC` works before writing tests
+- [ ] **Signal isolation:** `beforeEach` resets all module-level signals -- verify by running tests in reverse order
+- [ ] **Mock type safety:** All mock factories use the same interfaces as production code -- verify by changing an interface field
+- [ ] **Consolidation safety:** Every refactored module has at least one test covering its public API BEFORE the refactor
+- [ ] **Rust-JS sync:** After type tightening, verify round-trip with actual app launch (not just TypeScript compilation)
+- [ ] **Custom event contracts:** All `CustomEvent` names are documented and grep-verified before any dead code removal
+- [ ] **vitest.config.ts isolation:** No `test` key in `vite.config.ts` -- verified no duplicate plugin loading
 
-**Phase:** Phase 2 (Terminal Integration) — set the naming convention before any session creation code.
+## Recovery Strategies
 
----
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| Channel mock failure | LOW | Move Channel-dependent code to "integration test" category; mock around it |
+| Signal state leak | LOW | Add `resetStateForTesting()` and global `beforeEach`; re-run failing tests |
+| Consolidation regression | MEDIUM | Git revert the consolidation commit; write tests first; re-apply changes incrementally |
+| xterm.js jsdom crash | LOW | Add `vi.mock('@xterm/xterm')` to test file; restructure imports if needed |
+| Type tightening mismatch | MEDIUM | Compare TS interfaces against Rust structs field-by-field; add round-trip test |
+| Dead code deletion of invoke target | HIGH | Restore from git; add grep-for-strings step to consolidation checklist |
 
-### Pitfall 13: Project Directory Moved or Deleted
+## Pitfall-to-Phase Mapping
 
-**What goes wrong:** A project path stored in state (`/Users/laurent/Dev/myproject`) no longer exists. The Rust git2 crate panics or returns an error when attempting to open the repository. File watchers on `notify` emit a stream of delete events filling the event queue.
-
-**Prevention:**
-- At project load time, check `std::path::Path::exists()` for the project root. If missing, render a "Project not found" badge in the sidebar and skip git/file-watcher setup for that project.
-- Implement a `notify` event rate limiter (debounce all events by 100ms) to prevent delete-event floods from cascading.
-
-**Phase:** Phase 5 (Project System).
-
----
-
-### Pitfall 14: xterm.js Ligatures and FiraCode
-
-**What goes wrong:** FiraCode is the specified font. Ligatures (e.g., `=>`, `!=`, `->`) require a non-default rendering path. The standard xterm.js DOM and canvas renderers do not support font ligatures. The WebGL renderer also does not support ligatures natively. Users expecting FiraCode ligature rendering will see them rendered as separate characters.
-
-**Prevention:**
-- Accept this as a known limitation. xterm.js does not support ligatures in any renderer. FiraCode Light 14 still works correctly — ligatures simply won't render. This matches real-world terminal emulator behavior for most users.
-- Do not implement a ligature workaround (it requires a custom text atlas in the WebGL addon and is not worth the complexity). Document the limitation.
-
-**Phase:** Phase 3 (Terminal Theming) — note in config/docs, not a code issue.
-
----
-
-## Phase-Specific Warning Matrix
-
-| Phase | Topic | Likely Pitfall | Mitigation |
-|-------|-------|----------------|------------|
-| Phase 1 | Arrow.js + Tauri setup | ESM import CORS / CSP failure | Vendor Arrow.js locally; configure CSP early |
-| Phase 1 | Entitlements | Accidental sandbox flag | Lock entitlements.plist; no `app-sandbox` |
-| Phase 2 | PTY integration | Write buffer overflow with fast output | Implement watermark flow control from the start |
-| Phase 2 | Terminal lifecycle | WebGL context leak on tab close | Enforce dispose pattern in terminal component |
-| Phase 2 | WebGL | Context exhaustion (4+ terminals) | try/catch + canvas fallback wired in from day 1 |
-| Phase 2 | tmux detection | Silent failure if not installed | Probe tmux on startup; show friendly error modal |
-| Phase 2 | Resize | fit() called before DOM layout | Use ResizeObserver + RAF, validate cols/rows > 0 |
-| Phase 2 | Session naming | Name collision between projects | Use path hash for tmux session name |
-| Phase 2 | tmux attach | Race condition on new session | Poll with `has-session` + delay before first write |
-| Phase 3 | Theming | Ligatures don't render | Document; don't implement workaround |
-| Phase 4 | State restore | Stale session IDs after manual tmux kill | Probe all sessions before attach; show "dead" UI |
-| Phase 4 | State restore | Corrupted state.json | Schema version + migration + reset escape hatch |
-| Phase 5 | Project load | Moved/deleted project path | Check path exists before watcher/git setup |
-| Phase 7 | Agent launch | Claude Code PATH not in Tauri env | Resolve binary via full path; source shell env |
-| Phase 8 | Keyboard | Ctrl+C swallowed by Tauri shortcuts | No app-level shortcuts on terminal control sequences |
-
----
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| Channel unmockable | Phase 1 (test infra) | Document test boundary; no Channel imports in unit tests |
+| Signal state leaks | Phase 1 (test infra) | Tests pass in any order (`vitest run --shuffle`) |
+| Consolidation regression | Phase 2-3 ordering | Tests written before consolidation begins |
+| xterm.js in jsdom | Phase 1 (test infra) | Mock utility exists; test importing terminal-manager succeeds |
+| mockIPC type safety | Phase 1 (test infra) | Mock factories compile against production interfaces |
+| WebCrypto polyfill | Phase 1 (test infra) | `vitest run` succeeds on clean checkout |
+| Dead code removal | Phase 3+ (consolidation) | Grep checklist executed before every deletion |
+| Type tightening | Phase 3+ (consolidation) | Round-trip test exists; app launches after changes |
+| Vitest config conflict | Phase 1 (test infra) | Verified single plugin instance in verbose output |
 
 ## Sources
 
-- xterm.js flow control: https://xtermjs.org/docs/guides/flowcontrol/
-- xterm.js WebGL GPU memory leak (VS Code fix, 2025): https://github.com/microsoft/vscode/pull/279579
-- xterm.js WebGL context leak issue: https://github.com/xtermjs/xterm.js/issues/3889
-- xterm.js multiple WebGL context limit: https://github.com/xtermjs/xterm.js/issues/4379
-- xterm.js FitAddon resize bugs: https://github.com/xtermjs/xterm.js/issues/4841
-- tmux race condition — Claude Code issue, 2026: https://github.com/anthropics/claude-code/issues/23513
-- macOS PTY sandbox restriction: https://developer.apple.com/forums/thread/685544
-- Tauri macOS entitlements (PTY/JIT): https://dev.to/0xmassi/shipping-a-production-macos-app-with-tauri-20-code-signing-notarization-and-homebrew-mc3
-- Tauri IPC JSON overhead: https://github.com/tauri-apps/tauri/discussions/5690
-- Tauri IPC binary support: https://github.com/tauri-apps/tauri/issues/7127
-- Tauri keyboard shortcut conflicts (macOS webview): https://github.com/tauri-apps/tauri/issues/8676
-- Arrow.js lifecycle (onCleanup): https://arrow-js.com/api/
-- Tauri Webview Versions: https://v2.tauri.app/reference/webview-versions/
-- Tauri IPC architecture: https://v2.tauri.app/concept/inter-process-communication/
+- Tauri v2 mocking docs: https://v2.tauri.app/develop/tests/mocking/
+- Tauri Channel mock not supported (open issue): https://github.com/tauri-apps/tauri/issues/13753
+- Tauri event mock bug (transformCallback): https://github.com/tauri-apps/tauri/issues/14281
+- Preact signals testing best practices: https://github.com/preactjs/signals/discussions/522
+- Preact Testing Library: https://preactjs.com/guide/v10/preact-testing-library/
+- Vitest jsdom compatibility issue: https://github.com/vitest-dev/vitest/issues/9279
+- Vitest environment docs: https://vitest.dev/guide/environment
+- xterm.js WebGL testing discussion: https://github.com/xtermjs/xterm.js/discussions/5154
+- Vitest setup for Tauri projects: https://yonatankra.com/how-to-setup-vitest-in-a-tauri-project/
+
+---
+*Pitfalls research for: Efxmux v0.2.0 Testing & Consolidation*
+*Researched: 2026-04-12*
