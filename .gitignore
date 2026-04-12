@@ -2,3 +2,4 @@ RESEARCH
 node_modules/
 .code-review-graph
 dist
+coverage/

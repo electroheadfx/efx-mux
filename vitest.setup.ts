@@ -40,29 +40,33 @@ afterEach(async () => {
 // ─── D-02: xterm.js auto-mock ────────────────────────────────
 // jsdom has no WebGL/canvas — mock all xterm packages so any module
 // that transitively imports Terminal gets a stub automatically
-vi.mock('@xterm/xterm', () => ({
-  Terminal: vi.fn().mockImplementation((opts?: any) => ({
-    options: opts || {},
-    open: vi.fn(),
-    write: vi.fn(),
-    writeln: vi.fn(),
-    dispose: vi.fn(),
-    clear: vi.fn(),
-    reset: vi.fn(),
-    focus: vi.fn(),
-    blur: vi.fn(),
-    onData: vi.fn(() => ({ dispose: vi.fn() })),
-    onResize: vi.fn(() => ({ dispose: vi.fn() })),
-    onTitleChange: vi.fn(() => ({ dispose: vi.fn() })),
-    loadAddon: vi.fn(),
-    rows: 24,
-    cols: 80,
-    element: null,
-    textarea: null,
-    unicode: { activeVersion: '11' },
-    parser: { registerOscHandler: vi.fn() },
-  })),
-}));
+vi.mock('@xterm/xterm', () => {
+  class MockTerminal {
+    options: any;
+    open = vi.fn();
+    write = vi.fn();
+    writeln = vi.fn();
+    dispose = vi.fn();
+    clear = vi.fn();
+    reset = vi.fn();
+    focus = vi.fn();
+    blur = vi.fn();
+    onData = vi.fn(() => ({ dispose: vi.fn() }));
+    onResize = vi.fn(() => ({ dispose: vi.fn() }));
+    onTitleChange = vi.fn(() => ({ dispose: vi.fn() }));
+    loadAddon = vi.fn();
+    rows = 24;
+    cols = 80;
+    element = null;
+    textarea = null;
+    unicode = { activeVersion: '11' };
+    parser = { registerOscHandler: vi.fn() };
+    constructor(opts?: any) {
+      this.options = opts || {};
+    }
+  }
+  return { Terminal: MockTerminal };
+});
 
 vi.mock('@xterm/addon-webgl', () => ({
   WebglAddon: vi.fn().mockImplementation(() => ({
