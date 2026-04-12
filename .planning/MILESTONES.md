@@ -1,5 +1,21 @@
 # Milestones
 
+## v0.2.0 Testing \& Consolidation (Shipped: 2026-04-12)
+
+**Phases completed:** 4 phases, 8 plans, 18 tasks
+
+**Key accomplishments:**
+
+- Vitest test runner with jsdom, v8 coverage at 60% thresholds, and global mocks for Tauri IPC, xterm.js, and WebCrypto
+- Canary test with 8 assertions across 5 INFRA requirements proving jsdom, WebCrypto, xterm mocks, Tauri IPC mocks, jest-dom matchers, and v8 coverage all work end-to-end
+- 89 tests across 5 TypeScript modules — all passing with Tauri IPC mock infrastructure
+- 30 render tests for 4 workspace components (sidebar, server-pane, gsd-viewer, file-tree) using @testing-library/preact and mockIPC
+- Plan:
+- Commit:
+- Tasks completed (4/4):
+
+---
+
 ## v0.1.0 MVP (Shipped: 2026-04-11)
 
 **Phases:** 11 (1-10 + 6.1 insertion) | **Plans:** 63 | **Tasks:** 122
@@ -19,14 +35,17 @@
 6. **Pixel-perfect navy-blue UI** -- Design token system (tokens.ts + Tailwind @theme), Geist typography, Pencil mockup-matched components, dark/light mode
 
 **Architecture evolution:**
+
 - Phase 6.1 (INSERTED): Migrated from Arrow.js to Preact + Vite + TypeScript + Tailwind 4
 - Phase 9→10: Two-pass UI polish (GitHub-dark palette, then navy-blue Pencil reference design)
 
 **Known Gaps:**
+
 - REQUIREMENTS.md traceability table was not maintained during execution (all requirements implemented but checkboxes stale)
 - No milestone audit performed
 
 **Archives:**
+
 - `milestones/v0.1.0-ROADMAP.md` -- Full phase details
 - `milestones/v0.1.0-REQUIREMENTS.md` -- Requirements snapshot
 

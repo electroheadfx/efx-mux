@@ -38,18 +38,18 @@ Laurent (the developer) and other developers who use Claude Code / OpenCode as t
 - ✓ PTY crash recovery with restart option -- v0.1.0
 - ✓ Navy-blue pixel-perfect UI matching Pencil mockups -- v0.1.0
 - ✓ Vitest test infrastructure with Tauri IPC + xterm.js mocks, coverage reporting -- v0.2.0 Phase 11
+- ✓ 89 unit tests for 5 critical TypeScript modules (ansi-html, tokens, state-manager, theme-manager, server-bridge) -- v0.2.0 Phase 12
+- ✓ 30 component render tests for 4 workspace components (sidebar, server-pane, gsd-viewer, file-tree) -- v0.2.0 Phase 12
+- ✓ Rust unit tests for state serde, git_status, and file_ops (19 tests total) -- v0.2.0 Phase 13
+- ✓ Consolidation: dead code removal, any-type elimination, dependency audit -- v0.2.0 Phase 14
 
 ### Active
 
-#### Current Milestone: v0.2.0 Testing & Consolidation
+#### Current Milestone: v0.3.0 Planning
 
-**Goal:** Add Vitest unit tests for sensible parts of the codebase and consolidate the project after rapid MVP development.
+**Goal:** Define next milestone scope based on shipped v0.2.0 test infrastructure and consolidation.
 
-**Target features:**
-- Unit tests (Vitest) for critical TypeScript modules
-- Rust-side tests for Tauri commands where sensible
-- Project consolidation — dead code removal, type tightening, tech debt cleanup
-- Test infrastructure setup (config, utilities, CI-ready scripts)
+**Target features:** TBD -- start with `/gsd-new-milestone`
 
 ### Out of Scope
 
@@ -81,6 +81,7 @@ Laurent (the developer) and other developers who use Claude Code / OpenCode as t
 ## Context
 
 Shipped v0.1.0 MVP with 9,517 LOC (TypeScript + Rust + CSS) in 6 days.
+Shipped v0.2.0 Testing & Consolidation with 7,287 LOC (2,821 TS + 4,466 Rust), 119 tests (89 TS + 30 component + 19 Rust), 8 plans across 4 phases.
 Tech stack evolved during development: Arrow.js was replaced by Preact + Vite + TypeScript + Tailwind 4 in Phase 6.1.
 UI went through two design passes: Phase 9 (GitHub-dark palette) then Phase 10 (navy-blue Pencil reference design).
 
@@ -97,6 +98,9 @@ UI went through two design passes: Phase 9 (GitHub-dark palette) then Phase 10 (
 | Dual token system (tokens.ts + @theme) | tokens.ts for inline styles, @theme CSS vars for Tailwind utilities | ✓ Good |
 | BufReader::lines() for server output | Prevents ANSI sequence splitting in server pane | ✓ Good |
 | git2 crate (no shell-out) | Reliable, cross-platform, no dependency on system git PATH | ✓ Good |
+| Vitest + @testing-library/preact | jsdom environment, signal reset per test, vi.mock hoisting patterns | ✓ Good |
+| Class-based xterm.js Terminal mock | vi.fn() not new-able via dynamic import in Vitest 4.x; class works with `new` | ✓ Good |
+| Sync inner functions for Rust tests | Tauri commands are async; extracted `*_impl()` sync functions for unit testability | ✓ Good |
 
 ## Constraints
 
@@ -124,4 +128,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-12 after Phase 11 completion*
+*Last updated: 2026-04-12 after v0.2.0 milestone*
