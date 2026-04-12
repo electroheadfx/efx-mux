@@ -64,30 +64,30 @@ Requirements for testing & consolidation milestone. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFRA-01 | — | Pending |
-| INFRA-02 | — | Pending |
-| INFRA-03 | — | Pending |
-| INFRA-04 | — | Pending |
-| INFRA-05 | — | Pending |
-| TSTEST-01 | — | Pending |
-| TSTEST-02 | — | Pending |
-| TSTEST-03 | — | Pending |
-| TSTEST-04 | — | Pending |
-| TSTEST-05 | — | Pending |
-| TSTEST-06 | — | Pending |
-| RSTEST-01 | — | Pending |
-| RSTEST-02 | — | Pending |
-| RSTEST-03 | — | Pending |
-| RSTEST-04 | — | Pending |
-| CONS-01 | — | Pending |
-| CONS-02 | — | Pending |
-| CONS-03 | — | Pending |
+| INFRA-01 | Phase 11 | Pending |
+| INFRA-02 | Phase 11 | Pending |
+| INFRA-03 | Phase 11 | Pending |
+| INFRA-04 | Phase 11 | Pending |
+| INFRA-05 | Phase 11 | Pending |
+| TSTEST-01 | Phase 12 | Pending |
+| TSTEST-02 | Phase 12 | Pending |
+| TSTEST-03 | Phase 12 | Pending |
+| TSTEST-04 | Phase 12 | Pending |
+| TSTEST-05 | Phase 12 | Pending |
+| TSTEST-06 | Phase 12 | Pending |
+| RSTEST-01 | Phase 13 | Pending |
+| RSTEST-02 | Phase 13 | Pending |
+| RSTEST-03 | Phase 13 | Pending |
+| RSTEST-04 | Phase 13 | Pending |
+| CONS-01 | Phase 14 | Pending |
+| CONS-02 | Phase 14 | Pending |
+| CONS-03 | Phase 14 | Pending |
 
 **Coverage:**
 - v0.2.0 requirements: 18 total
-- Mapped to phases: 0
-- Unmapped: 18 ⚠️
+- Mapped to phases: 18
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-12*
-*Last updated: 2026-04-12 after initial definition*
+*Last updated: 2026-04-12 after roadmap creation*
