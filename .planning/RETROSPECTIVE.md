@@ -46,6 +46,46 @@
 
 ---
 
+## Milestone: v0.2.0 -- Testing & Consolidation
+
+**Shipped:** 2026-04-12
+**Phases:** 4 | **Plans:** 8 | **Timeline:** 1 day
+
+### What Was Built
+- Vitest test infrastructure: jsdom environment, global mocks for Tauri IPC + xterm.js, v8 coverage at 60% thresholds
+- 89 unit tests for 5 TypeScript modules (ansi-html, tokens, state-manager, theme-manager, server-bridge)
+- 30 component render tests for 4 Preact components (sidebar, server-pane, gsd-viewer, file-tree)
+- 19 Rust tests for state serde round-trips, git_status, file_ops (including T-13-03/T-13-04/T-13-05 security threat mitigations)
+- Consolidation: dead code removal, any-type elimination, dependency audit confirming all deps active
+
+### What Worked
+- **Single-day milestone**: 4 phases + 8 plans completed in one day (2026-04-12) -- fast even by v0.1.0 standards
+- **Test infrastructure first**: Phase 11 (Vitest setup) was prerequisite for 12 and 13; running it first meant later phases had regression protection immediately
+- **Auto-fix deviation pattern**: 7 Rule-1 bugs auto-fixed during Phase 12 execution -- tests caught real issues that plan assumed incorrectly
+- **Class-based xterm.js mock**: vi.fn() not new-able in Vitest 4.x dynamic import; class-based mock solved constructor compatibility cleanly
+
+### What Was Inefficient
+- **8 plans for 1 day is tight**: Phase 14 had only 2 plans but involved cross-phase coordination (dead code from Phases 1-10, type issues from Phase 6.1 migration). More buffer time would help
+- **No milestone audit**: v0.2.0 skipped audit like v0.1.0. Noticed no MILESTONE-AUDIT.md existed when complete-milestone workflow checked. Minor for solo dev, but pattern worth breaking
+
+### Patterns Established
+- vi.mock hoisting with module-level shared refs (listenHandler) for event listener tests
+- jsdom spy on style.setProperty/removeProperty instead of replacing documentElement (readonly in jsdom)
+- Sync inner functions (`*_impl()`) for Rust testability of async Tauri commands
+- Signal reset in beforeEach to prevent test pollution
+
+### Key Lessons
+1. **Test infrastructure is a prerequisite, not a phase**: Running Phase 11 first let 12 and 13 build on validated mocks; worth every minute of upfront investment
+2. **Vitest 4.x has constructor gotcha**: `vi.fn().mockImplementation()` is not usable with `new` via dynamic import; class-based mocks are the fix
+3. **Sync inner functions enable unit testing**: Tauri commands are async; extract a `fn foo_impl() -> T` wrapper that calls `foo().await` for testability
+
+### Cost Observations
+- Model mix: ~60% haiku (fast execution), ~30% sonnet (review), ~10% opus (debug)
+- Sessions: 3 (Phase 11), 2 (Phase 12), 2 (Phase 13+14 combined)
+- Notable: Phase 14 (consolidation) ran in parallel with Phase 13 (tests) -- wave-based execution kept context fresh
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -53,6 +93,7 @@
 | Milestone | Timeline | Phases | Key Change |
 |-----------|----------|--------|------------|
 | v0.1.0 | 6 days | 11 | Initial MVP -- established GSD workflow patterns |
+| v0.2.0 | 1 day | 4 | Testing infrastructure + consolidation -- 119 tests added |
 
 ### Top Lessons (Verified Across Milestones)
 
