@@ -24,7 +24,7 @@
 
 </details>
 
-- [ ] **Phase 11: Test Infrastructure** - Vitest config, mocks, coverage tooling, and CI-ready scripts
+- [x] **Phase 11: Test Infrastructure** - Vitest config, mocks, coverage tooling, and CI-ready scripts (completed 2026-04-12)
 - [ ] **Phase 12: TypeScript Tests** - Unit tests for critical TS modules and Preact components
 - [ ] **Phase 13: Rust Tests** - Unit tests for Tauri command logic, serde, git2, and file ops
 - [ ] **Phase 14: Consolidation** - Dead code removal, type tightening, dependency audit
@@ -40,10 +40,10 @@
   2. `pnpm test:coverage` produces a coverage report with configured thresholds
   3. Test files can import modules that depend on xterm.js Terminal without crashing (mock active)
   4. Test files can call any Tauri `invoke()` command and receive mock responses (IPC mock factory works)
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [x] 11-01-PLAN.md -- Install deps, configure Vitest with coverage, create vitest.setup.ts with all mocks
-- [ ] 11-02-PLAN.md -- Create canary test validating infrastructure end-to-end
+- [x] 11-02-PLAN.md -- Create canary test validating infrastructure end-to-end
 
 ### Phase 12: TypeScript Tests
 **Goal**: Critical TypeScript modules have unit test coverage that catches regressions in ANSI parsing, theming, state management, and component rendering
@@ -98,7 +98,7 @@ Phases execute in order: 11 -> 12 -> 13 -> 14
 | 8. Keyboard + Polish | v0.1.0 | 8/8 | Complete | 2026-04-10 |
 | 9. Professional UI Overhaul | v0.1.0 | 6/6 | Complete | 2026-04-10 |
 | 10. Pixel-Perfect UI Rewrite | v0.1.0 | 10/10 | Complete | 2026-04-11 |
-| 11. Test Infrastructure | v0.2.0 | 1/2 | In Progress|  |
+| 11. Test Infrastructure | v0.2.0 | 2/2 | Complete   | 2026-04-12 |
 | 12. TypeScript Tests | v0.2.0 | 0/TBD | Not started | - |
 | 13. Rust Tests | v0.2.0 | 0/TBD | Not started | - |
 | 14. Consolidation | v0.2.0 | 0/TBD | Not started | - |
