@@ -59,6 +59,7 @@ describe('GSDViewer', () => {
   });
 
   it('shows error state when invoke throws', async () => {
+    vi.spyOn(console, 'warn').mockReturnValue();
     mockIPC((cmd, _args) => {
       if (cmd === 'read_file_content') throw new Error('File not found');
       return null;

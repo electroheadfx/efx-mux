@@ -67,6 +67,7 @@ describe('state-manager', () => {
     });
 
     it('sets default state when invoke throws', async () => {
+      vi.spyOn(console, 'warn').mockReturnValue();
       mockIPC((cmd, args) => {
         throw new Error('IPC error');
       });
