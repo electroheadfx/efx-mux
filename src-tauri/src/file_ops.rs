@@ -28,78 +28,81 @@ fn is_safe_path(path: &str) -> bool {
 /// Opens the git repo at the file's parent directory, generates a patch diff.
 #[tauri::command]
 pub async fn get_file_diff(path: String) -> Result<String, String> {
-    spawn_blocking(move || {
-        let file_path = Path::new(&path);
-        if !file_path.exists() {
-            return Err(format!("File not found: {}", path));
-        }
+    spawn_blocking(move || get_file_diff_impl(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
 
-        // Guard file size > 1MB
-        let metadata = std::fs::metadata(&path).map_err(|e| e.to_string())?;
-        if metadata.len() > 1_048_576 {
-            return Err("File too large for diff viewing".to_string());
-        }
+/// Synchronous inner implementation of get_file_diff for testing.
+pub fn get_file_diff_impl(path: &str) -> Result<String, String> {
+    let file_path = Path::new(path);
+    if !file_path.exists() {
+        return Err(format!("File not found: {}", path));
+    }
 
-        // Find git repo by walking up from file's directory
-        let repo = Repository::discover(file_path.parent().unwrap_or(file_path))
-            .map_err(|e| format!("Not a git repository: {}", e))?;
+    // Guard file size > 1MB
+    let metadata = std::fs::metadata(path).map_err(|e| e.to_string())?;
+    if metadata.len() > 1_048_576 {
+        return Err("File too large for diff viewing".to_string());
+    }
 
-        let workdir = repo
-            .workdir()
-            .ok_or_else(|| "Bare repository not supported".to_string())?;
+    // Find git repo by walking up from file's directory
+    let repo = Repository::discover(file_path.parent().unwrap_or(file_path))
+        .map_err(|e| format!("Not a git repository: {}", e))?;
 
-        // Make path relative to repo workdir
-        let rel_path = file_path
-            .strip_prefix(workdir)
-            .map_err(|_| "File is not inside the git repository".to_string())?;
+    let workdir = repo
+        .workdir()
+        .ok_or_else(|| "Bare repository not supported".to_string())?;
 
-        let mut opts = DiffOptions::new();
-        opts.pathspec(rel_path.to_string_lossy().as_ref());
-        opts.include_untracked(true);
+    // Make path relative to repo workdir
+    let rel_path = file_path
+        .strip_prefix(workdir)
+        .map_err(|_| "File is not inside the git repository".to_string())?;
 
-        // Diff between index (HEAD) and workdir
-        let diff = repo
-            .diff_index_to_workdir(None, Some(&mut opts))
-            .map_err(|e| e.to_string())?;
+    let mut opts = DiffOptions::new();
+    opts.pathspec(rel_path.to_string_lossy().as_ref());
+    opts.include_untracked(true);
 
-        let mut output = String::new();
-        diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
-            let origin = line.origin();
-            match origin {
-                '+' | '-' | ' ' => {
-                    output.push(origin);
-                    if let Ok(content) = std::str::from_utf8(line.content()) {
-                        output.push_str(content);
-                    }
-                }
-                'H' => {
-                    // Hunk header line (@@...@@)
-                    if let Ok(content) = std::str::from_utf8(line.content()) {
-                        output.push_str(content);
-                    }
-                }
-                _ => {}
-            }
-            true
-        })
+    // Diff between index (HEAD) and workdir
+    let diff = repo
+        .diff_index_to_workdir(None, Some(&mut opts))
         .map_err(|e| e.to_string())?;
 
-        // If diff is empty, file might be untracked — show full content as new file
-        if output.trim().is_empty() {
-            let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-            let mut new_file_output = String::from("@@ New file @@\n");
-            for line in content.lines() {
-                new_file_output.push('+');
-                new_file_output.push_str(line);
-                new_file_output.push('\n');
+    let mut output = String::new();
+    diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+        let origin = line.origin();
+        match origin {
+            '+' | '-' | ' ' => {
+                output.push(origin);
+                if let Ok(content) = std::str::from_utf8(line.content()) {
+                    output.push_str(content);
+                }
             }
-            return Ok(new_file_output);
+            'H' => {
+                // Hunk header line (@@...@@)
+                if let Ok(content) = std::str::from_utf8(line.content()) {
+                    output.push_str(content);
+                }
+            }
+            _ => {}
         }
-
-        Ok(output)
+        true
     })
-    .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+
+    // If diff is empty, file might be untracked — show full content as new file
+    if output.trim().is_empty() {
+        let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+        let mut new_file_output = String::from("@@ New file @@\n");
+        for line in content.lines() {
+            new_file_output.push('+');
+            new_file_output.push_str(line);
+            new_file_output.push('\n');
+        }
+        return Ok(new_file_output);
+    }
+
+    Ok(output)
 }
 
 /// List directory contents sorted: directories first, then files, alphabetically (D-06).
@@ -177,6 +180,57 @@ pub async fn read_file(path: String) -> Result<String, String> {
     read_file_content(path).await
 }
 
+/// Synchronous inner implementation of write_checkbox for testing.
+pub fn write_checkbox_impl(
+    path: &str,
+    line: u32,
+    checked: bool,
+) -> Result<(), String> {
+    if !is_safe_path(path) {
+        return Err("Invalid path: directory traversal not allowed".to_string());
+    }
+
+    let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    let mut lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
+
+    let idx = line as usize;
+    if idx >= lines.len() {
+        return Err(format!(
+            "Line {} out of range (file has {} lines)",
+            line,
+            lines.len()
+        ));
+    }
+
+    let target = &lines[idx];
+    // Validate: must be a task list item (- [ ] or - [x] or * [ ] or * [x])
+    let checkbox_re = regex::Regex::new(r"^(\s*[-*]\s*\[)[ xX](\].*)$")
+        .map_err(|e| e.to_string())?;
+
+    if let Some(caps) = checkbox_re.captures(target) {
+        let prefix = &caps[1];
+        let suffix = &caps[2];
+        let mark = if checked { "x" } else { " " };
+        lines[idx] = format!("{}{}{}", prefix, mark, suffix);
+    } else {
+        return Err(format!("Line {} is not a checkbox task item", line));
+    }
+
+    // Atomic write: tmp + rename
+    let tmp_path = format!("{}.tmp", path);
+    let output = lines.join("\n");
+    // Preserve trailing newline if original had one
+    let output = if content.ends_with('\n') {
+        format!("{}\n", output)
+    } else {
+        output
+    };
+    std::fs::write(&tmp_path, &output).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp_path, &path).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 /// Write checkbox state back to a .md file (D-01).
 /// Finds the specified line, validates it contains a task list checkbox,
 /// and toggles it. Uses atomic write (tmp + rename) for safety.
@@ -204,47 +258,102 @@ pub async fn write_checkbox(
         return Err("Invalid path: directory traversal not allowed".to_string());
     }
 
-    spawn_blocking(move || {
-        let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let mut lines: Vec<String> = content.lines().map(|l| l.to_string()).collect();
+    spawn_blocking(move || write_checkbox_impl(&path, line, checked))
+        .await
+        .map_err(|e| e.to_string())?
+}
 
-        let idx = line as usize;
-        if idx >= lines.len() {
-            return Err(format!(
-                "Line {} out of range (file has {} lines)",
-                line,
-                lines.len()
-            ));
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn is_safe_path_accepts_relative_paths() {
+        assert!(is_safe_path("src/foo.ts"));
+        assert!(is_safe_path("src/nested/deep/file.rs"));
+        assert!(is_safe_path("foo"));
+        assert!(is_safe_path("a/b/c/d/e/f/g.txt"));
+    }
+
+    #[test]
+    fn is_safe_path_rejects_traversal() {
+        assert!(!is_safe_path("../foo"));
+        assert!(!is_safe_path("src/../../../etc/passwd"));
+        assert!(!is_safe_path("foo/../../bar"));
+    }
+
+    #[test]
+    fn is_safe_path_accepts_absolute_paths_on_unix() {
+        // On Unix, absolute paths like /etc/passwd don't contain ".." components,
+        // so is_safe_path (which only checks for "..") allows them.
+        // This is acceptable since the function's purpose is traversal prevention.
+        #[cfg(unix)]
+        {
+            assert!(is_safe_path("/etc/passwd"));
         }
-
-        let target = &lines[idx];
-        // Validate: must be a task list item (- [ ] or - [x] or * [ ] or * [x])
-        let checkbox_re = regex::Regex::new(r"^(\s*[-*]\s*\[)[ xX](\].*)$")
-            .map_err(|e| e.to_string())?;
-
-        if let Some(caps) = checkbox_re.captures(target) {
-            let prefix = &caps[1];
-            let suffix = &caps[2];
-            let mark = if checked { "x" } else { " " };
-            lines[idx] = format!("{}{}{}", prefix, mark, suffix);
-        } else {
-            return Err(format!("Line {} is not a checkbox task item", line));
+        // On Windows, absolute paths contain root components that are not ".."
+        #[cfg(windows)]
+        {
+            assert!(!is_safe_path("C:\\Users\\foo"));
         }
+    }
 
-        // Atomic write: tmp + rename
-        let tmp_path = format!("{}.tmp", path);
-        let output = lines.join("\n");
-        // Preserve trailing newline if original had one
-        let output = if content.ends_with('\n') {
-            format!("{}\n", output)
-        } else {
-            output
-        };
-        std::fs::write(&tmp_path, &output).map_err(|e| e.to_string())?;
-        std::fs::rename(&tmp_path, &path).map_err(|e| e.to_string())?;
+    #[test]
+    fn file_too_large_rejected() {
+        let dir = TempDir::new().unwrap();
+        let big_file = dir.path().join("big.txt");
+        // Write ~1.1MB (1,157,000 bytes)
+        let content = "x".repeat(1_157_000);
+        std::fs::write(&big_file, content).unwrap();
+        let path = big_file.to_str().unwrap().to_string();
 
-        Ok(())
-    })
-    .await
-    .map_err(|e| e.to_string())?
+        // Initialize git repo so get_file_diff can discover it
+        let _ = std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(dir.path())
+            .output();
+        let _ = std::process::Command::new("git")
+            .args(["config", "user.email", "t@t.com"])
+            .current_dir(dir.path())
+            .output();
+        let _ = std::process::Command::new("git")
+            .args(["config", "user.name", "T"])
+            .current_dir(dir.path())
+            .output();
+
+        let result = get_file_diff_impl(&path);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("too large"), "Expected 'too large' error, got: {}", err);
+    }
+
+    #[test]
+    fn write_checkbox_toggles_checkbox_state() {
+        let dir = TempDir::new().unwrap();
+        let md_file = dir.path().join("tasks.md");
+        std::fs::write(&md_file, "- [ ] Task 1\n- [x] Task 2\n").unwrap();
+        let path = md_file.to_str().unwrap().to_string();
+
+        // Toggle first line: - [ ] -> - [x]
+        let result = write_checkbox_impl(&path, 0, true);
+        assert!(result.is_ok(), "write_checkbox_impl failed: {:?}", result);
+
+        let content = std::fs::read_to_string(&md_file).unwrap();
+        assert!(content.contains("- [x] Task 1"), "First line should be checked: {}", content);
+        assert!(content.contains("- [x] Task 2"), "Second line should still be checked: {}", content);
+    }
+
+    #[test]
+    fn write_checkbox_rejects_non_checkbox_line() {
+        let dir = TempDir::new().unwrap();
+        let md_file = dir.path().join("notes.md");
+        std::fs::write(&md_file, "This is not a checkbox\n").unwrap();
+        let path = md_file.to_str().unwrap().to_string();
+
+        let result = write_checkbox_impl(&path, 0, true);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("not a checkbox"), "Expected 'not a checkbox' error, got: {}", err);
+    }
 }
