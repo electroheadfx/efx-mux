@@ -55,7 +55,10 @@ Plans:
   3. State manager and theme manager correctly serialize, load, and react to Tauri IPC responses (mock-driven tests pass)
   4. Key Preact components render expected DOM structure given props (component render tests pass)
   5. All TypeScript tests pass in CI-ready `pnpm test` with no manual intervention
-**Plans**: TBD
+**Plans:** 2/2 plans
+Plans:
+- [ ] 12-01-PLAN.md -- Module unit tests (ansi-html, tokens, state-manager, theme-manager, server-bridge)
+- [ ] 12-02-PLAN.md -- Component render tests (sidebar, server-pane, gsd-viewer, file-tree)
 
 ### Phase 13: Rust Tests
 **Goal**: Critical Rust modules have unit test coverage that catches regressions in state serialization, git operations, file safety, and command logic
