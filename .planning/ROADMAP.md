@@ -27,7 +27,7 @@
 - [x] **Phase 11: Test Infrastructure** - Vitest config, mocks, coverage tooling, and CI-ready scripts (completed 2026-04-12)
 - [x] **Phase 12: TypeScript Tests** - Unit tests for critical TS modules and Preact components (completed 2026-04-12)
 - [x] **Phase 13: Rust Tests** - Unit tests for Tauri command logic, serde, git2, and file ops (completed 2026-04-12)
-- [ ] **Phase 14: Consolidation** - Dead code removal, type tightening, dependency audit
+- [x] **Phase 14: Consolidation** - Dead code removal, type tightening, dependency audit (completed 2026-04-12)
 
 ## Phase Details
 
@@ -107,4 +107,4 @@ Phases execute in order: 11 -> 12 -> 13 -> 14
 | 11. Test Infrastructure | v0.2.0 | 2/2 | Complete    | 2026-04-12 |
 | 12. TypeScript Tests | v0.2.0 | 2/2 | Complete    | 2026-04-12 |
 | 13. Rust Tests | v0.2.0 | 2/2 | Complete    | 2026-04-12 |
-| 14. Consolidation | v0.2.0 | 0/TBD | Not started | - |
+| 14. Consolidation | v0.2.0 | 2/2 | Complete   | 2026-04-12 |
