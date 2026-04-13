@@ -6,6 +6,7 @@ import { useEffect } from 'preact/hooks';
 import { signal, computed } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { getVersion } from '@tauri-apps/api/app';
 import { GitBranch, Plus, RotateCw, Settings, X } from 'lucide-preact';
 import {
   projects,
@@ -29,6 +30,7 @@ const gitData = signal<Record<string, GitData>>({});
 const gitFiles = signal<Array<{ name: string; path: string; status: string }>>([]);
 const gitSectionOpen = signal(true);
 const removeTarget = signal<string | null>(null);
+const appVersion = signal<string>('');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -428,6 +430,9 @@ export function Sidebar() {
         // Note: Zero-project detection is handled by the wizard in main.tsx initProjects().
         // The sidebar must NOT open modals -- it only displays the project list.
         await refreshAllGitStatus();
+        // Fetch app version
+        const ver = await getVersion();
+        appVersion.value = ver;
       } catch (err) {
         console.warn('[efxmux] Failed to load projects:', err);
       }
@@ -535,7 +540,7 @@ export function Sidebar() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                padding: '16px 16px 12px',
+                padding: '16px 16px 12px 12px',
               }}
             >
               <span
@@ -548,6 +553,11 @@ export function Sidebar() {
                 }}
               >
                 EFXMUX
+                {appVersion.value && (
+                  <span style={{ fontWeight: 400, letterSpacing: '1px', marginLeft: 6, color: colors.textMuted }}>
+                    v{appVersion.value}
+                  </span>
+                )}
               </span>
               <button
                 style={{
