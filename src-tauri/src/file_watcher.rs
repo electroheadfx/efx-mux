@@ -1,7 +1,13 @@
-//! .md file watcher for GSD Viewer auto-refresh (D-02, PANEL-03).
+//! File watchers for auto-refresh functionality.
 //!
-//! Watches a project directory for changes to .md files and emits
-//! `md-file-changed` Tauri events to trigger frontend refresh.
+//! 1. .md file watcher for GSD Viewer auto-refresh (D-02, PANEL-03).
+//!    Watches a project directory for changes to .md files and emits
+//!    `md-file-changed` Tauri events to trigger frontend refresh.
+//!
+//! 2. Git status watcher for sidebar Git Changes pane auto-refresh.
+//!    Watches .git/ directory for index changes and emits `git-status-changed`
+//!    events to trigger sidebar refresh.
+//!
 //! Pattern mirrors theme/watcher.rs: watch directory (not file) because
 //! editors do atomic saves (delete + rename).
 
@@ -89,11 +95,97 @@ pub fn start_md_watcher(app_handle: tauri::AppHandle, project_path: PathBuf) {
 pub fn set_project_path(path: String, app: tauri::AppHandle) {
     let project_path = PathBuf::from(&path);
     if project_path.is_dir() {
-        start_md_watcher(app, project_path);
+        start_md_watcher(app.clone(), project_path.clone());
+        start_git_watcher(app, project_path);
     } else {
         eprintln!(
             "[efxmux] set_project_path: not a directory: {}",
             path
         );
     }
+}
+
+/// Start a background thread that watches `.git/` directory for changes.
+///
+/// Emits `git-status-changed` event when git index or refs change.
+/// Uses 300ms debounce to handle rapid git operations.
+pub fn start_git_watcher(app_handle: tauri::AppHandle, project_path: PathBuf) {
+    let git_dir = project_path.join(".git");
+
+    // Only start watcher if .git directory exists (is a git repo)
+    if !git_dir.is_dir() {
+        println!(
+            "[efxmux] No .git directory found at {:?}, skipping git watcher",
+            project_path
+        );
+        return;
+    }
+
+    std::thread::spawn(move || {
+        let handle = app_handle.clone();
+
+        let mut debouncer = match new_debouncer(
+            Duration::from_millis(300),
+            move |res: DebounceEventResult| {
+                let events = match res {
+                    Ok(events) => events,
+                    Err(e) => {
+                        eprintln!("[efxmux] Git watcher error: {:?}", e);
+                        return;
+                    }
+                };
+
+                // Check if any event is relevant to git status:
+                // - index file (staging area)
+                // - HEAD, refs/* (branch changes, commits)
+                // - COMMIT_EDITMSG (commit in progress)
+                let relevant_events: Vec<_> = events
+                    .iter()
+                    .filter(|e| {
+                        let path_str = e.path.to_string_lossy();
+                        path_str.contains(".git/index")
+                            || path_str.contains(".git/HEAD")
+                            || path_str.contains(".git/refs")
+                            || path_str.contains(".git/COMMIT_EDITMSG")
+                            || path_str.contains(".git/MERGE_HEAD")
+                            || path_str.contains(".git/REBASE_HEAD")
+                    })
+                    .collect();
+
+                if !relevant_events.is_empty() {
+                    if let Err(e) = handle.emit("git-status-changed", ()) {
+                        eprintln!("[efxmux] Failed to emit git-status-changed event: {}", e);
+                    }
+                }
+            },
+        ) {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!("[efxmux] Failed to create git watcher: {:?}", e);
+                return;
+            }
+        };
+
+        // Watch the .git directory recursively to catch index, HEAD, and refs changes
+        if let Err(e) = debouncer
+            .watcher()
+            .watch(&git_dir, RecursiveMode::Recursive)
+        {
+            eprintln!(
+                "[efxmux] Failed to watch .git dir {:?}: {:?}",
+                git_dir, e
+            );
+            return;
+        }
+
+        println!(
+            "[efxmux] Git status watcher active on {:?}",
+            git_dir
+        );
+
+        // Keep thread alive -- debouncer drops if scope exits
+        loop {
+            std::thread::sleep(Duration::from_secs(3600));
+        }
+    });
 }

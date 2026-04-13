@@ -5,6 +5,7 @@
 import { useEffect } from 'preact/hooks';
 import { signal, computed } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { GitBranch, Plus, RotateCw, Settings, X } from 'lucide-preact';
 import {
   projects,
@@ -459,10 +460,19 @@ export function Sidebar() {
     document.addEventListener('project-added', handleProjectAdded);
     document.addEventListener('open-add-project', handleOpenAddProject);
 
+    // Listen for git-status-changed Tauri event (auto-refresh when git operations occur)
+    let unlistenGit: (() => void) | undefined;
+    listen('git-status-changed', () => {
+      refreshAllGitStatus();
+    }).then((unlisten) => {
+      unlistenGit = unlisten;
+    });
+
     return () => {
       document.removeEventListener('project-changed', handleProjectChanged);
       document.removeEventListener('project-added', handleProjectAdded);
       document.removeEventListener('open-add-project', handleOpenAddProject);
+      if (unlistenGit) unlistenGit();
     };
   }, []);
 

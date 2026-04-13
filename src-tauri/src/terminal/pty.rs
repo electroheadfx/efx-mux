@@ -76,14 +76,25 @@ pub async fn spawn_terminal(
         .map(|o| o.status.success())
         .unwrap_or(false);
     if session_exists {
-        // Clear the visible pane content (like Ctrl+L)
+        // Clear the visible pane content (like Ctrl+L) -- ignore errors if terminal
+        // is in a state that doesn't support it (e.g., no scrollback or tmux version mismatch)
         let _ = std::process::Command::new("tmux")
             .args(["send-keys", "-t", &sanitized, "C-l"])
             .output();
-        // Clear the scrollback history buffer
+        // Clear the scrollback history buffer -- capture stderr to prevent tmux error
+        // "terminal does not support clear" from leaking into PTY output stream
         let _ = std::process::Command::new("tmux")
             .args(["clear-history", "-t", &sanitized])
-            .output();
+            .output()
+            .and_then(|o| {
+                if !o.status.success() {
+                    let stderr = String::from_utf8_lossy(&o.stderr);
+                    if !stderr.is_empty() {
+                        eprintln!("[efxmux] clear-history warning: {}", stderr.trim());
+                    }
+                }
+                Ok(o)
+            });
     }
 
     let pty_system = native_pty_system();
@@ -97,6 +108,9 @@ pub async fn spawn_terminal(
         .map_err(|e| e.to_string())?;
 
     let mut cmd = CommandBuilder::new("tmux");
+    cmd.env("TERM", "xterm-256color");
+    cmd.env("LANG", "en_US.UTF-8");
+    cmd.env("LC_ALL", "en_US.UTF-8");
     cmd.args(["new-session", "-A", "-s", &sanitized]);
     // Set tmux session start directory if provided (workspace-aware sessions)
     if let Some(ref dir) = start_dir {

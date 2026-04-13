@@ -53,6 +53,20 @@ pub fn run() {
                 .build()?;
             app.set_menu(menu)?;
 
+            // Augment PATH for bundled app: macOS .app bundles inherit a minimal PATH
+            // (/usr/bin:/bin:/usr/sbin:/sbin) that excludes Homebrew. Prepend known
+            // Homebrew and user-local bin directories so tmux (and agent CLIs like
+            // claude, opencode) are found regardless of launch method.
+            {
+                let current_path = std::env::var("PATH").unwrap_or_default();
+                let extra = "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin";
+                if !current_path.contains("/opt/homebrew/bin") {
+                    let augmented = format!("{}:{}", extra, current_path);
+                    std::env::set_var("PATH", &augmented);
+                    println!("[efx-mux] Augmented PATH for bundle: {}", augmented);
+                }
+            }
+
             // Ensure ~/.config/efx-mux/ exists before anything reads it
             state::ensure_config_dir();
             theme::types::ensure_config_dir();

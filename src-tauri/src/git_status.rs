@@ -68,6 +68,7 @@ pub struct GitFileEntry {
 pub fn get_git_files_impl(path: &str) -> Result<Vec<GitFileEntry>, String> {
     let repo = Repository::open(path).map_err(|e| e.to_string())?;
     let mut opts = git2::StatusOptions::new();
+    opts.show(git2::StatusShow::IndexAndWorkdir);
     opts.include_untracked(true);
     opts.recurse_untracked_dirs(true);
     let statuses = repo.statuses(Some(&mut opts)).map_err(|e| e.to_string())?;
@@ -97,32 +98,6 @@ pub fn get_git_files_impl(path: &str) -> Result<Vec<GitFileEntry>, String> {
             path: full_path,
             status: status.to_string(),
         });
-    }
-
-    // git2 statuses() doesn't include INDEX_NEW files (staged, not yet committed)
-    // that have no workdir representation. Use index entry stage to detect them.
-    // Stage 2 = file is staged (in index but not in HEAD).
-    let index = repo.index().map_err(|e| e.to_string())?;
-    for entry in index.iter() {
-        let entry_path_bytes = &entry.path;
-        let entry_path = std::str::from_utf8(entry_path_bytes)
-            .map(|s| s.to_string())
-            .unwrap_or_else(|_| String::from_utf8_lossy(entry_path_bytes).to_string());
-        // Skip if already in files
-        if files.iter().any(|f| f.name == entry_path) {
-            continue;
-        }
-        // Stage is stored in the upper 2 bits of flags (0=none, 1=normal merge, 2=staged, 3=both-merged)
-        let stage = (entry.flags >> 2) & 0x3;
-        if stage == 2 {
-            let name = entry_path.split('/').last().unwrap_or(&entry_path).to_string();
-            let full_path = format!("{}/{}", path, entry_path);
-            files.push(GitFileEntry {
-                name,
-                path: full_path,
-                status: "S".to_string(),
-            });
-        }
     }
 
     Ok(files)
@@ -213,16 +188,16 @@ mod tests {
     #[test]
     fn get_git_files_returns_correct_status_letters() {
         let (dir, path) = setup_git_repo();
-        // staged file (INDEX_NEW)
-        let staged = dir.path().join("staged.txt");
-        std::fs::write(&staged, "s").unwrap();
-        run_git(&dir.path(), &["add", "staged.txt"]);
         // modified file (WT_MODIFIED) — commit first, then edit
         let modified = dir.path().join("modified.txt");
         std::fs::write(&modified, "m").unwrap();
         run_git(&dir.path(), &["add", "modified.txt"]);
-        run_git(&dir.path(), &["commit", "-m", "m"]);
+        run_git(&dir.path(), &["commit", "-m", "add modified"]);
         std::fs::write(&modified, "mm").unwrap();
+        // staged file (INDEX_NEW) — add AFTER the commit so it stays staged
+        let staged = dir.path().join("staged.txt");
+        std::fs::write(&staged, "s").unwrap();
+        run_git(&dir.path(), &["add", "staged.txt"]);
         // untracked file (WT_NEW)
         let untracked = dir.path().join("untracked.txt");
         std::fs::write(&untracked, "u").unwrap();

@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: TBD
 status: planning
-stopped_at: v0.2.0 milestone complete (shipped 2026-04-12)
-last_updated: "2026-04-12"
-last_activity: 2026-04-12
+stopped_at: v0.2.1 patch release (shipped 2026-04-13)
+last_updated: "2026-04-13"
+last_activity: 2026-04-13
 progress:
   total_phases: 0
   completed_phases: 0
@@ -25,7 +25,10 @@ See: .planning/PROJECT.md (updated 2026-04-12 after v0.2.0 milestone)
 
 ## Current Position
 
-Milestone: v0.2.0 shipped (2026-04-12)
+Milestone: v0.2.1 patch release shipped (2026-04-13)
+- Fixed: Git Changes pane showing stale/phantom files (buggy index iteration removed)
+- Fixed: Git status auto-refresh via .git/ watcher
+
 Next: `/gsd-new-milestone` to define v0.3.0 scope
 
 ## Performance Metrics
