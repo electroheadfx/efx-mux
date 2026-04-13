@@ -54,6 +54,12 @@ None.
 
 None.
 
+## Quick Tasks Completed
+
+| ID | Description | Date |
+|----|-------------|------|
+| 260413-q8l | Add version to EFXMUX sidebar title | 2026-04-13 |
+
 ## Session Continuity
 
 v0.2.0 milestone shipped. Ready for v0.3.0 planning.
