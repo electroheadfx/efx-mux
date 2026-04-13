@@ -16,28 +16,9 @@
             "command": "bash .claude/hooks/gsd-session-state.sh"
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uvx --python 3.13 better-code-review-graph build",
-            "timeout": 30000
-          }
-        ]
       }
     ],
     "PostToolUse": [
-      {
-        "matcher": "Write|Edit|Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uvx --python 3.13 better-code-review-graph update",
-            "timeout": 5000
-          }
-        ]
-      },
       {
         "matcher": "Bash|Edit|Write|MultiEdit|Agent|Task",
         "hooks": [
@@ -104,6 +85,6 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/gsd-statusline.js"
+    "command": "node .claude/hooks/gsd-statusline.js"
   }
 }
