@@ -695,9 +695,9 @@ export function TerminalTabBar() {
 
   return (
     <div
-      class="flex gap-1 px-3 shrink-0 items-center h-[44px]"
+      class="flex gap-1 px-2 py-2 shrink-0 items-center border-b"
       role="tablist"
-      style={{ backgroundColor: colors.bgBase, borderBottom: `1px solid ${colors.bgBorder}` }}
+      style={{ backgroundColor: colors.bgBase, borderColor: colors.bgBorder }}
     >
       {tabs.map(tab => {
         const isActive = tab.id === currentId;
@@ -706,21 +706,28 @@ export function TerminalTabBar() {
             key={tab.id}
             role="tab"
             aria-selected={isActive}
-            class={isActive
-              ? 'flex items-center gap-2 px-4 py-2.5 border-b-2 border-accent text-sm font-medium font-sans cursor-pointer bg-transparent transition-all duration-150'
-              : 'flex items-center gap-2 px-4 py-2.5 text-sm font-sans cursor-pointer bg-transparent transition-all duration-150'}
-            style={{ color: isActive ? colors.textPrimary : colors.textDim }}
+            class="flex items-center gap-2 cursor-pointer transition-all duration-150"
+            style={{
+              backgroundColor: isActive ? colors.bgElevated : 'transparent',
+              border: isActive ? `1px solid ${colors.bgSurface}` : '1px solid transparent',
+              borderRadius: 6,
+              padding: '9px 16px',
+              fontFamily: fonts.sans,
+              fontSize: 13,
+              fontWeight: isActive ? 500 : 400,
+              color: isActive ? colors.textPrimary : colors.textDim,
+            }}
             onClick={() => {
               activeTabId.value = tab.id;
               switchToTab(tab.id);
             }}
             title={tab.sessionName}
           >
-            {isActive && <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: colors.statusGreen, flexShrink: 0 }} />}
+            {isActive && <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: colors.statusGreen, flexShrink: 0 }} />}
             <span>{tab.label}</span>
             <span
-              class="ml-2 text-[14px] flex items-center justify-center"
-              style={{ color: colors.textDim, width: 20, height: 20 }}
+              class="ml-1 flex items-center justify-center"
+              style={{ color: colors.textDim, fontSize: 14 }}
               onClick={(e) => {
                 e.stopPropagation();
                 closeTab(tab.id);
