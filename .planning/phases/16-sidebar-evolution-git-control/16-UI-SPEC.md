@@ -29,18 +29,15 @@ created: 2026-04-14
 
 ## Spacing Scale
 
-Declared values from existing `tokens.ts` (multiples of 4 where practical):
+Standard scale (multiples of 4 from the set {4, 8, 16, 24, 32, 48, 64}):
 
 | Token | Value | Usage |
 |-------|-------|-------|
 | md | 4px | Tight element spacing |
 | xl | 8px | Default element spacing |
-| 3xl | 12px | Section padding |
 | 4xl | 16px | Container padding |
-| 5xl | 20px | Modal padding |
-| 6xl | 28px | Major section breaks |
 
-**Named Exceptions (justified deviations from 4px multiples):**
+**Named Exceptions (justified deviations):**
 
 | Token | Value | Justification |
 |-------|-------|---------------|
@@ -48,6 +45,9 @@ Declared values from existing `tokens.ts` (multiples of 4 where practical):
 | sm | 2px | Minimal padding: used for 2px underline heights on active tabs and tight icon-to-text gaps where 4px feels too loose |
 | lg | 6px | Compact section padding: existing project pattern from sidebar.tsx; 4px too tight, 8px too loose for dense file lists |
 | 2xl | 10px | Gap between related items: existing project pattern; bridges the visual gap between 8px and 12px for mid-density layouts |
+| 3xl | 12px | Compact section padding: sits between 8px and 16px for dense sidebar rows where 8px is too tight and 16px over-spaces; used for toast internal padding |
+| 5xl | 20px | Modal padding: provides breathing room between 16px and 24px for medium-density modal content; existing project pattern |
+| 6xl | 28px | Major section breaks: used for tab row minimum height (28px) and button heights; provides larger touch targets than 24px while being more compact than 32px |
 
 **Phase 16-specific usage:**
 - Tab row padding: 4px horizontal, 8px vertical
