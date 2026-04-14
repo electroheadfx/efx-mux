@@ -5,7 +5,7 @@ milestone_name: TBD
 status: planning
 stopped_at: v0.2.1 patch release (shipped 2026-04-13)
 last_updated: "2026-04-13"
-last_activity: 2026-04-13
+last_activity: 2026-04-14
 progress:
   total_phases: 0
   completed_phases: 0
@@ -59,6 +59,7 @@ None.
 | ID | Description | Date |
 |----|-------------|------|
 | 260413-q8l | Add version to EFXMUX sidebar title | 2026-04-13 |
+| 260414-kil | Enhance TUI tab and preview bar UX (bigger hit targets) | 2026-04-14 |
 
 ## Session Continuity
 
