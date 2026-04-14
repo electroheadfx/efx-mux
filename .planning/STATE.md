@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: Workspace Evolution
-status: defining_requirements
+status: ready_to_plan
 stopped_at: null
 last_updated: "2026-04-14"
 last_activity: 2026-04-14
 progress:
-  total_phases: 0
+  total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -18,17 +18,19 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-14 after v0.3.0 milestone start)
+See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** A single native macOS window that co-locates AI agent terminals alongside live GSD progress, git diff, and file tree -- all persisted across restarts via tmux.
-**Current focus:** v0.3.0 Workspace Evolution
+**Current focus:** Phase 15 Foundation Primitives
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-04-14 — Milestone v0.3.0 started
+Phase: 15 of 21 (Foundation Primitives)
+Plan: 0 of ? in current phase
+Status: Ready to plan
+Last activity: 2026-04-14 — Roadmap created for v0.3.0
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -36,13 +38,17 @@ Last activity: 2026-04-14 — Milestone v0.3.0 started
 - 4 phases, 8 plans completed in 1 day
 - 119 tests (89 TS + 30 component + 19 Rust)
 
+**v0.1.0 velocity:**
+- 11 phases (incl. 6.1), 63 plans in 6 days
+- Average: ~10 plans/day
+
 ## Accumulated Context
 
 ### Decisions
 
 - v0.2.0: Test infrastructure first (Phase 11 prerequisite for 12 and 13)
 - v0.2.0: Sync inner functions for Rust testability of async Tauri commands
-- v0.1.0: Arrow.js → Preact migration (Phase 6.1)
+- v0.1.0: Arrow.js -> Preact migration (Phase 6.1)
 - v0.1.0: tmux session backend for persistence
 
 ### Pending Todos
@@ -51,7 +57,8 @@ None.
 
 ### Blockers/Concerns
 
-None.
+- Git push credential handling: Must decide PTY shell-out vs git2-credentials crate (Phase 16)
+- Tauri drag-drop bug #14624: Verify fix in 2.10.3 before Phase 18
 
 ## Quick Tasks Completed
 
@@ -62,4 +69,8 @@ None.
 
 ## Session Continuity
 
-v0.2.0 milestone shipped. Ready for v0.3.0 planning.
+Last session: 2026-04-14
+Stopped at: Roadmap created for v0.3.0 Workspace Evolution
+Resume file: None
+
+Next: `/gsd-plan-phase 15`

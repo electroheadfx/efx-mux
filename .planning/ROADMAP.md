@@ -4,6 +4,7 @@
 
 - ✅ **v0.1.0 MVP** -- Phases 1-10 + 6.1 (shipped 2026-04-11)
 - ✅ **v0.2.0 Testing & Consolidation** -- Phases 11-14 (shipped 2026-04-12)
+- 🚧 **v0.3.0 Workspace Evolution** -- Phases 15-21 (in progress)
 
 ## Phases
 
@@ -34,19 +35,113 @@
 
 </details>
 
+### 🚧 v0.3.0 Workspace Evolution (In Progress)
+
+**Milestone Goal:** Transform Efxmux from terminal-focused MVP to full-featured development workspace with file editing, git control, and enhanced navigation.
+
+- [ ] **Phase 15: Foundation Primitives** -- Shared UI components and Rust write commands
+- [ ] **Phase 16: Sidebar Evolution + Git Control** -- 3-tab sidebar with git staging/commit/push
+- [ ] **Phase 17: Main Panel File Tabs** -- CodeMirror editor tabs with dropdown menu
+- [ ] **Phase 18: File Tree Enhancements** -- Delete, drag/drop, external editor integration
+- [ ] **Phase 19: GSD Sub-Tabs** -- 5 sub-tabs for Milestones, Phases, Progress, History, State
+- [ ] **Phase 20: Right Panel Multi-Terminal** -- Plus menu for Terminal/Agent sub-TUI
+- [ ] **Phase 21: Bug Fix Sprint** -- File watcher, phantom chars, scrollbar, padding fixes
+
 ## Phase Details
 
-### Phase 15: TBD
-**Goal**: TBD -- define after `/gsd-new-milestone`
+### Phase 15: Foundation Primitives
+**Goal**: Shared UI components and Rust write commands are available for all downstream features
 **Depends on**: Phase 14
-**Requirements**: TBD
+**Requirements**: None directly (infrastructure phase enabling downstream features)
+**Success Criteria** (what must be TRUE):
+  1. Context menu component renders on right-click with configurable items
+  2. Dropdown menu component renders with click-to-toggle and keyboard navigation
+  3. `write_file_content` Rust command writes file and returns success/error
+  4. `git-service.ts` module exposes stage/unstage/commit/push IPC wrappers
+  5. `file-service.ts` module exposes file CRUD IPC wrappers
+**Plans**: TBD
+
+### Phase 16: Sidebar Evolution + Git Control
+**Goal**: Users can stage, commit, and push changes from a dedicated git control pane in the sidebar
+**Depends on**: Phase 15
+**Requirements**: SIDE-01, GIT-01, GIT-02, GIT-03, GIT-04, GIT-05
+**Success Criteria** (what must be TRUE):
+  1. User can switch between 3 sidebar tabs: Projects, File Tree, Git Control
+  2. User can stage individual files via checkboxes in git control pane
+  3. User can unstage individual files via checkboxes
+  4. User can commit staged changes with message input
+  5. User can push commits to remote repository
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 17: Main Panel File Tabs
+**Goal**: Users can edit files in CodeMirror tabs with save/close workflow and add new tab types via dropdown
+**Depends on**: Phase 15
+**Requirements**: EDIT-01, EDIT-02, EDIT-03, EDIT-04, EDIT-05, MAIN-01, MAIN-02
+**Success Criteria** (what must be TRUE):
+  1. User can open files in main panel tabs with CodeMirror 6 syntax highlighting
+  2. User sees unsaved indicator (dot) in tab title when file has uncommitted changes
+  3. User can save file with Cmd+S keyboard shortcut
+  4. User sees confirmation modal when closing tab with unsaved changes
+  5. User can reorder tabs via drag and drop
+  6. User can add new tabs via dropdown menu (Terminal Zsh, Agent, Git changes)
+  7. User can view git changes panel with accordion per-file diffs
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 18: File Tree Enhancements
+**Goal**: Users can delete files, open in external editors, and drag/drop within the tree
+**Depends on**: Phase 17
+**Requirements**: TREE-01, TREE-02, TREE-03, TREE-04, TREE-05, MAIN-03
+**Success Criteria** (what must be TRUE):
+  1. User can delete files/folders via context menu with confirmation dialog
+  2. User can delete files/folders via Delete key with confirmation dialog
+  3. User can open file in external editor (Zed, VSCode) via context menu
+  4. User can drag/drop files and folders to reorder within tree
+  5. User can drag files from Finder into tree to import
+  6. User can create new file from folder context in file tree
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 19: GSD Sub-Tabs
+**Goal**: Users can view GSD planning context across 5 specialized sub-tabs
+**Depends on**: Phase 15
+**Requirements**: GSD-01, GSD-02, GSD-03, GSD-04, GSD-05
+**Success Criteria** (what must be TRUE):
+  1. User can view Milestones sub-tab parsed from ROADMAP.md
+  2. User can view Phases sub-tab parsed from ROADMAP.md
+  3. User can view Progress sub-tab parsed from ROADMAP.md
+  4. User can view History sub-tab from MILESTONES.md
+  5. User can view State sub-tab (current position + decisions) from STATE.md
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 20: Right Panel Multi-Terminal
+**Goal**: Users can spawn multiple terminal/agent sub-TUIs in the right panel
+**Depends on**: Phase 15
+**Requirements**: SIDE-02
+**Success Criteria** (what must be TRUE):
+  1. User can add Terminal/Agent sub-TUI via plus menu in sidebar bash pane
+  2. User can switch between multiple terminal tabs in right panel bottom pane
+  3. Each terminal tab maintains independent PTY session
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 21: Bug Fix Sprint
+**Goal**: Known architectural debts and UI bugs are resolved
+**Depends on**: Phases 16-20 (runs after core features are stable)
+**Requirements**: FIX-01, FIX-02, FIX-03, FIX-04
+**Success Criteria** (what must be TRUE):
+  1. File tree updates when files are changed by external editors
+  2. No phantom characters appear during fast terminal scroll
+  3. Terminal has thin draggable scrollbar with faster wheel scroll
+  4. Sidebar bottom TUI has no black padding and aligns to top correctly
 **Plans**: TBD
 
 ## Progress
 
 **Execution Order:**
-Phases execute in order: 11 -> 12 -> 13 -> 14
-(Phases 12 and 13 both depend on 11; 12 runs first per research guidance; 14 runs last, protected by test suite)
+Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -65,4 +160,14 @@ Phases execute in order: 11 -> 12 -> 13 -> 14
 | 12. TypeScript Tests | v0.2.0 | 2/2 | Complete | 2026-04-12 |
 | 13. Rust Tests | v0.2.0 | 2/2 | Complete | 2026-04-12 |
 | 14. Consolidation | v0.2.0 | 2/2 | Complete | 2026-04-12 |
-| 15. TBD | v0.3.0 | TBD | Planned | TBD |
+| 15. Foundation Primitives | v0.3.0 | 0/? | Not started | - |
+| 16. Sidebar Evolution + Git Control | v0.3.0 | 0/? | Not started | - |
+| 17. Main Panel File Tabs | v0.3.0 | 0/? | Not started | - |
+| 18. File Tree Enhancements | v0.3.0 | 0/? | Not started | - |
+| 19. GSD Sub-Tabs | v0.3.0 | 0/? | Not started | - |
+| 20. Right Panel Multi-Terminal | v0.3.0 | 0/? | Not started | - |
+| 21. Bug Fix Sprint | v0.3.0 | 0/? | Not started | - |
+
+---
+*Roadmap created: 2026-04-06*
+*Last updated: 2026-04-14 (v0.3.0 phases added)*

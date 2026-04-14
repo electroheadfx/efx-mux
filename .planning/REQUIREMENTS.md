@@ -85,41 +85,41 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| EDIT-01 | — | Pending |
-| EDIT-02 | — | Pending |
-| EDIT-03 | — | Pending |
-| EDIT-04 | — | Pending |
-| EDIT-05 | — | Pending |
-| GIT-01 | — | Pending |
-| GIT-02 | — | Pending |
-| GIT-03 | — | Pending |
-| GIT-04 | — | Pending |
-| GIT-05 | — | Pending |
-| TREE-01 | — | Pending |
-| TREE-02 | — | Pending |
-| TREE-03 | — | Pending |
-| TREE-04 | — | Pending |
-| TREE-05 | — | Pending |
-| GSD-01 | — | Pending |
-| GSD-02 | — | Pending |
-| GSD-03 | — | Pending |
-| GSD-04 | — | Pending |
-| GSD-05 | — | Pending |
-| SIDE-01 | — | Pending |
-| SIDE-02 | — | Pending |
-| MAIN-01 | — | Pending |
-| MAIN-02 | — | Pending |
-| MAIN-03 | — | Pending |
-| FIX-01 | — | Pending |
-| FIX-02 | — | Pending |
-| FIX-03 | — | Pending |
-| FIX-04 | — | Pending |
+| EDIT-01 | Phase 17 | Pending |
+| EDIT-02 | Phase 17 | Pending |
+| EDIT-03 | Phase 17 | Pending |
+| EDIT-04 | Phase 17 | Pending |
+| EDIT-05 | Phase 17 | Pending |
+| GIT-01 | Phase 16 | Pending |
+| GIT-02 | Phase 16 | Pending |
+| GIT-03 | Phase 16 | Pending |
+| GIT-04 | Phase 16 | Pending |
+| GIT-05 | Phase 16 | Pending |
+| TREE-01 | Phase 18 | Pending |
+| TREE-02 | Phase 18 | Pending |
+| TREE-03 | Phase 18 | Pending |
+| TREE-04 | Phase 18 | Pending |
+| TREE-05 | Phase 18 | Pending |
+| GSD-01 | Phase 19 | Pending |
+| GSD-02 | Phase 19 | Pending |
+| GSD-03 | Phase 19 | Pending |
+| GSD-04 | Phase 19 | Pending |
+| GSD-05 | Phase 19 | Pending |
+| SIDE-01 | Phase 16 | Pending |
+| SIDE-02 | Phase 20 | Pending |
+| MAIN-01 | Phase 17 | Pending |
+| MAIN-02 | Phase 17 | Pending |
+| MAIN-03 | Phase 18 | Pending |
+| FIX-01 | Phase 21 | Pending |
+| FIX-02 | Phase 21 | Pending |
+| FIX-03 | Phase 21 | Pending |
+| FIX-04 | Phase 21 | Pending |
 
 **Coverage:**
 - v0.3.0 requirements: 29 total
-- Mapped to phases: 0
-- Unmapped: 29
+- Mapped to phases: 29
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-14*
-*Last updated: 2026-04-14 after initial definition*
+*Last updated: 2026-04-14 after roadmap creation*
