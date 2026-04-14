@@ -7,11 +7,14 @@
 import { Terminal } from '@xterm/xterm';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { FitAddon } from '@xterm/addon-fit';
+import { invoke } from '@tauri-apps/api/core';
 
 export interface TerminalOptions {
   theme?: Record<string, string>;
   font?: string;
   fontSize?: number;
+  /** tmux session name — required for Shift+Enter newline injection via send_literal_sequence */
+  sessionName?: string;
 }
 
 export interface TerminalInstance {
@@ -43,6 +46,32 @@ export function createTerminal(container: HTMLElement, options: TerminalOptions 
   // Word/line navigation: convert macOS shortcuts to terminal escape codes
   terminal.attachCustomKeyEventHandler((ev: KeyboardEvent): boolean => {
     if (ev.type !== 'keydown') return true;
+
+    // Shift+Enter -> ESC+CR sequence for newline insert (Claude Code multi-line input)
+    // By default xterm.js sends \r for both Enter and Shift+Enter. Claude Code recognises
+    // \x1b\r (ESC followed by CR) as "meta+return" = insert newline. This is the same
+    // sequence Claude Code's own /terminal-setup writes for non-native terminals (VS Code,
+    // Alacritty, Warp). CSI u (\x1b[13;2u) requires the kitty keyboard protocol handshake
+    // which efx-mux never initiates, so Claude Code ignores it.
+    //
+    // WHY NOT terminal.input(): terminal.input() routes through onData → write_pty →
+    // PTY master → tmux client keyboard-input path. tmux with extended-keys=off does
+    // NOT recognise extended sequences from the PTY and silently discards them.
+    //
+    // FIX: invoke send_literal_sequence which runs `tmux send-keys -l -t {session}`.
+    // send-keys -l bypasses tmux's key-parsing table entirely and writes the raw bytes
+    // directly to the pane's stdin. Claude Code receives \x1b\r and inserts a newline.
+    if (ev.key === 'Enter' && ev.shiftKey && !ev.metaKey && !ev.ctrlKey && !ev.altKey) {
+      ev.preventDefault();
+      const sn = options.sessionName;
+      if (sn) {
+        invoke('send_literal_sequence', {
+          sessionName: sn,
+          sequence: '\x1b[13;2u',
+        }).catch(() => {});
+      }
+      return false;
+    }
 
     // Cmd+K -> clear terminal scrollback (standard macOS shortcut)
     if (ev.metaKey && !ev.ctrlKey && !ev.altKey && (ev.key === 'k' || ev.key === 'K')) {

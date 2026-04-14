@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: TBD
 status: planning
-stopped_at: v0.2.1 patch release (shipped 2026-04-13)
-last_updated: "2026-04-13"
+stopped_at: v0.2.2 patch release (shipped 2026-04-14)
+last_updated: "2026-04-14"
 last_activity: 2026-04-14
 progress:
   total_phases: 0
@@ -25,9 +25,10 @@ See: .planning/PROJECT.md (updated 2026-04-12 after v0.2.0 milestone)
 
 ## Current Position
 
-Milestone: v0.2.1 patch release shipped (2026-04-13)
-- Fixed: Git Changes pane showing stale/phantom files (buggy index iteration removed)
-- Fixed: Git status auto-refresh via .git/ watcher
+Milestone: v0.2.2 patch release shipped (2026-04-14)
+- Enhanced: File preview bar UX (56px height, proper button styling)
+- Enhanced: Terminal tabs match right panel TabBar style (pill buttons)
+- Added: Shift+Enter newline injection via tmux send-keys -l
 
 Next: `/gsd-new-milestone` to define v0.3.0 scope
 

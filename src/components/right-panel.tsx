@@ -61,6 +61,7 @@ export function RightPanel() {
           theme: theme?.terminal,
           font: theme?.chrome?.font,
           fontSize: theme?.chrome?.fontSize || 13,
+          sessionName,
         });
         registerTerminal(terminal, fitAddon);
 

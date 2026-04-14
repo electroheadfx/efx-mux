@@ -11,7 +11,7 @@ mod theme;
 use std::collections::HashMap;
 use tauri::Manager;
 use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
-use terminal::pty::{ack_bytes, check_tmux, cleanup_dead_sessions, destroy_pty_session, get_agent_version, get_pty_sessions, resize_pty, spawn_terminal, write_pty, PtyManager};
+use terminal::pty::{ack_bytes, check_tmux, cleanup_dead_sessions, destroy_pty_session, get_agent_version, get_pty_sessions, resize_pty, send_literal_sequence, spawn_terminal, write_pty, PtyManager};
 use theme::iterm2::import_iterm2_theme;
 use server::{detect_agent, kill_all_servers, restart_server, start_server, stop_server, ServerProcesses};
 use state::{get_config_dir, load_state, save_state, ManagedAppState};
@@ -137,6 +137,9 @@ pub fn run() {
 
             // Workspace switching
             terminal::pty::switch_tmux_session,
+
+            // Shift+Enter newline: send literal sequence directly to tmux pane stdin
+            send_literal_sequence,
 
             // Agent version detection (D-17)
             get_agent_version,

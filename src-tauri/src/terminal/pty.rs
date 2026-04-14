@@ -564,6 +564,28 @@ pub fn cleanup_dead_sessions() -> Result<Vec<String>, String> {
     Ok(cleaned)
 }
 
+/// Send a literal byte sequence directly to a tmux pane's stdin.
+/// Uses `tmux send-keys -l` which bypasses tmux's key-parsing table entirely,
+/// so sequences like \x1b[13;2u (CSI u / kitty keyboard protocol) reach the
+/// inner program (e.g. Claude Code) without being eaten by tmux's key parser.
+/// This is necessary because extended-keys=off means tmux does not recognise
+/// CSI u when it arrives via the PTY master (keyboard-input path).
+#[tauri::command]
+pub fn send_literal_sequence(session_name: String, sequence: String) -> Result<(), String> {
+    let sanitized: String = session_name
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
+    if sanitized.is_empty() {
+        return Err("Invalid session name".to_string());
+    }
+    std::process::Command::new("tmux")
+        .args(["send-keys", "-t", &sanitized, "-l", &sequence])
+        .output()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// Get the version string of an AI agent binary (claude, opencode).
 /// Validates agent name against a whitelist before executing (T-09-09 mitigation).
 #[tauri::command]
