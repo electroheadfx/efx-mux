@@ -242,14 +242,14 @@ export function MainPanel() {
 
       {fileViewerVisible.value && (
         <div class="absolute inset-0 flex flex-col" style={{ backgroundColor: colors.bgBase, zIndex: 10 }}>
-          <div class="flex items-center justify-between px-3 py-1.5 shrink-0" style={{ backgroundColor: colors.bgElevated, borderBottom: `1px solid ${colors.bgBorder}` }}>
+          <div class="flex items-center justify-between px-3 py-2.5 shrink-0" style={{ backgroundColor: colors.bgElevated, borderBottom: `1px solid ${colors.bgBorder}` }}>
             <div class="flex items-center gap-2 min-w-0">
               <span class="text-[10px] px-1.5 py-px rounded-sm font-semibold tracking-wider shrink-0" style={{ backgroundColor: colors.accent, color: colors.bgBase }}>READ-ONLY</span>
               <span class="text-[13px] font-mono overflow-hidden text-ellipsis whitespace-nowrap" style={{ fontFamily: 'GeistMono', color: colors.textSecondary }}>{fileName.value}</span>
             </div>
             <button
               onClick={closeFileViewer}
-              class="cursor-pointer px-2.5 py-1 rounded text-xs font-mono transition-colors duration-150"
+              class="cursor-pointer px-3 py-1.5 rounded text-xs font-mono transition-colors duration-150"
               style={{ fontFamily: 'GeistMono', backgroundColor: 'transparent', border: `1px solid ${colors.bgBorder}`, color: colors.textMuted }}
               title="Close file viewer (Esc)"
             >Close</button>

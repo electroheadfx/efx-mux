@@ -12,7 +12,7 @@ interface TabBarProps {
 
 export function TabBar({ tabs, activeTab, onSwitch }: TabBarProps) {
   return (
-    <div class="flex gap-1 px-2 py-1.5 border-b shrink-0 items-center" style={{ backgroundColor: colors.bgBase, borderColor: colors.bgBorder }}>
+    <div class="flex gap-1 px-2 py-2 border-b shrink-0 items-center" style={{ backgroundColor: colors.bgBase, borderColor: colors.bgBorder }}>
       {tabs.map(tab => {
         const active = activeTab.value === tab;
         return (
@@ -22,7 +22,7 @@ export function TabBar({ tabs, activeTab, onSwitch }: TabBarProps) {
               backgroundColor: active ? colors.bgElevated : 'transparent',
               border: active ? `1px solid ${colors.bgSurface}` : '1px solid transparent',
               borderRadius: 6,
-              padding: '7px 14px',
+              padding: '9px 16px',
               fontFamily: fonts.sans,
               fontSize: 13,
               fontWeight: active ? 500 : 400,
