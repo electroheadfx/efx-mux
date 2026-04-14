@@ -38,27 +38,27 @@ This skill contains the following reference files:
 
 ## Statistics
 
-59 files | 10 700 lines
+59 files | 10 879 lines
 
 | Language | Files | Lines |
 |----------|------:|------:|
-| TypeScript (TSX) | 17 | 5 473 |
-| Rust | 15 | 2 855 |
-| TypeScript | 13 | 1 352 |
+| TypeScript (TSX) | 17 | 5 531 |
+| Rust | 15 | 2 939 |
+| TypeScript | 13 | 1 389 |
 | JSON | 5 | 142 |
 | No Extension | 2 | 13 |
 | Markdown | 2 | 389 |
 | PLIST | 1 | 23 |
 | HTML | 1 | 12 |
 | YAML | 1 | 3 |
-| TOML | 1 | 29 |
-| Other | 1 | 409 |
+| CSS | 1 | 409 |
+| Other | 1 | 29 |
 
 **Largest files:**
+- `src/components/terminal-tabs.tsx` (769 lines)
 - `src/components/sidebar.tsx` (744 lines)
-- `src/components/terminal-tabs.tsx` (712 lines)
+- `src-tauri/src/terminal/pty.rs` (609 lines)
 - `src/components/file-tree.tsx` (567 lines)
-- `src-tauri/src/terminal/pty.rs` (528 lines)
 - `src/components/project-modal.tsx` (501 lines)
 - `src-tauri/src/state.rs` (459 lines)
 - `src/components/preferences-panel.tsx` (420 lines)

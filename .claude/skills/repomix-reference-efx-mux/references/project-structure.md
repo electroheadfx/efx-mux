@@ -13,12 +13,12 @@ src/
     main-panel.tsx (285 lines)
     preferences-panel.tsx (420 lines)
     project-modal.tsx (501 lines)
-    right-panel.tsx (149 lines)
+    right-panel.tsx (150 lines)
     server-pane.tsx (359 lines)
     shortcut-cheatsheet.tsx (123 lines)
     sidebar.tsx (744 lines)
     tab-bar.tsx (37 lines)
-    terminal-tabs.tsx (712 lines)
+    terminal-tabs.tsx (769 lines)
   server/
     ansi-html.ts (147 lines)
     server-bridge.ts (69 lines)
@@ -26,8 +26,8 @@ src/
     app.css (409 lines)
   terminal/
     pty-bridge.ts (57 lines)
-    resize-handler.ts (54 lines)
-    terminal-manager.ts (132 lines)
+    resize-handler.ts (62 lines)
+    terminal-manager.ts (161 lines)
   theme/
     theme-manager.ts (237 lines)
   drag-manager.ts (180 lines)
@@ -41,7 +41,7 @@ src-tauri/
   src/
     terminal/
       mod.rs (1 lines)
-      pty.rs (528 lines)
+      pty.rs (609 lines)
     theme/
       iterm2.rs (131 lines)
       mod.rs (3 lines)
@@ -50,7 +50,7 @@ src-tauri/
     file_ops.rs (359 lines)
     file_watcher.rs (191 lines)
     git_status.rs (212 lines)
-    lib.rs (192 lines)
+    lib.rs (195 lines)
     main.rs (6 lines)
     project.rs (109 lines)
     server.rs (262 lines)

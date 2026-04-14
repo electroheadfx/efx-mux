@@ -1576,6 +1576,250 @@ function makeDragH(handle: HTMLElement, { onDrag, onEnd }: DragCallbacksH): void
 }
 ````
 
+## File: src/state-manager.ts
+````typescript
+// state-manager.ts -- Bridge between JS state and Rust state.json (Phase 4)
+// Per D-11: beforeunload triggers save_state via invoke
+// Per D-12: Rust uses spawn_blocking for synchronous file I/O
+// Migrated to TypeScript with @preact/signals (Phase 6.1)
+
+import { invoke } from '@tauri-apps/api/core';
+import { signal } from '@preact/signals';
+
+// ---------------------------------------------------------------------------
+// Type definitions
+// ---------------------------------------------------------------------------
+
+export interface ProjectEntry {
+  path: string;
+  name: string;
+  agent: string;
+  gsd_file?: string;
+  server_cmd?: string;
+  server_url?: string;
+}
+
+export interface GitData {
+  branch: string;
+  modified: number;
+  staged: number;
+  untracked: number;
+}
+
+export interface AppState {
+  version: number;
+  layout: Record<string, string | boolean>;
+  theme: { mode: string };
+  session: Record<string, string>;
+  project: { active: string | null; projects: ProjectEntry[] };
+  panels: Record<string, string>;
+}
+
+// ---------------------------------------------------------------------------
+// App-wide signals that components can import and subscribe to
+// ---------------------------------------------------------------------------
+
+export const projects = signal<ProjectEntry[]>([]);
+export const activeProjectName = signal<string | null>(null);
+export const sidebarCollapsed = signal(false);
+export const rightTopTab = signal('File Tree');
+export const rightBottomTab = signal('Bash');
+
+// ---------------------------------------------------------------------------
+// Internal state (raw Rust state blob, not UI-reactive)
+// ---------------------------------------------------------------------------
+
+let currentState: AppState | null = null;
+
+// ---------------------------------------------------------------------------
+// State persistence functions
+// ---------------------------------------------------------------------------
+
+/**
+ * Load app state from Rust backend (reads ~/.config/efxmux/state.json).
+ * Returns defaults if missing or corrupt (D-09, D-10).
+ */
+export async function loadAppState(): Promise<AppState> {
+  try {
+    currentState = await invoke<AppState>('load_state');
+    // Ensure project.projects exists even if loaded from older state.json (T-08-07-02)
+    if (!currentState.project) currentState.project = { active: null, projects: [] };
+    if (!currentState.project.projects) currentState.project.projects = [];
+  } catch (err) {
+    console.warn('[efxmux] Failed to load state, using defaults:', err);
+    // Return a minimal default state matching Rust defaults
+    currentState = {
+      version: 1,
+      layout: { 'sidebar-w': '200px', 'right-w': '25%', 'right-h-pct': '50', 'sidebar-collapsed': false },
+      theme: { mode: 'dark' },
+      session: { 'main-tmux-session': 'efx-mux', 'right-tmux-session': 'efx-mux-right' },
+      project: { active: null, projects: [] },
+      panels: { 'right-top-tab': 'File Tree', 'right-bottom-tab': 'Bash' },
+    };
+  }
+
+  // Set signals from loaded state
+  sidebarCollapsed.value = currentState?.layout?.['sidebar-collapsed'] === true || currentState?.layout?.['sidebar-collapsed'] === 'true';
+  if (currentState?.panels?.['right-top-tab'] && currentState.panels['right-top-tab'] !== 'gsd') rightTopTab.value = currentState.panels['right-top-tab'];
+  if (currentState?.panels?.['right-bottom-tab']) rightBottomTab.value = currentState.panels['right-bottom-tab'];
+
+  // Restore projects and active project from persisted state (T-08-07-02)
+  if (currentState?.project?.projects?.length) {
+    projects.value = currentState.project.projects;
+  }
+  if (currentState?.project?.active) {
+    activeProjectName.value = currentState.project.active;
+  }
+
+  return currentState!;
+}
+
+/**
+ * Save app state to Rust backend (writes ~/.config/efxmux/state.json).
+ */
+export async function saveAppState(state: AppState): Promise<void> {
+  try {
+    // Sync project data from signals before every save (T-08-07-02)
+    if (!state.project) state.project = { active: null, projects: [] };
+    state.project.active = activeProjectName.value;
+    state.project.projects = projects.value;
+    const stateJson = JSON.stringify(state);
+    await invoke('save_state', { stateJson });
+  } catch (err) {
+    console.warn('[efxmux] Failed to save state:', err);
+  }
+}
+
+/**
+ * Get the current state (loaded or default).
+ */
+export function getCurrentState(): AppState | null {
+  return currentState;
+}
+
+/**
+ * Update layout fields in current state and persist.
+ */
+export async function updateLayout(patch: Record<string, string | boolean>): Promise<void> {
+  if (!currentState) return;
+  if (!currentState.layout) currentState.layout = {};
+  for (const [key, value] of Object.entries(patch)) {
+    currentState.layout[key] = value;
+  }
+  await saveAppState(currentState);
+}
+
+/**
+ * Update theme mode in current state and persist.
+ */
+export async function updateThemeMode(mode: 'dark' | 'light'): Promise<void> {
+  if (!currentState) return;
+  if (!currentState.theme) currentState.theme = { mode: 'dark' };
+  currentState.theme.mode = mode;
+  await saveAppState(currentState);
+}
+
+/**
+ * Update tmux session names in current state and persist.
+ */
+export async function updateSession(patch: Record<string, string>): Promise<void> {
+  if (!currentState) return;
+  if (!currentState.session) currentState.session = {};
+  for (const [key, value] of Object.entries(patch)) {
+    currentState.session[key] = value;
+  }
+  await saveAppState(currentState);
+}
+
+/**
+ * Wire window:beforeunload to save state before app closes (D-11).
+ * Call this once during app init.
+ */
+export function initBeforeUnload(): void {
+  window.addEventListener('beforeunload', () => {
+    if (currentState) {
+      // Sync project data from signals into state before saving (T-08-07-02)
+      if (!currentState.project) currentState.project = { active: null, projects: [] };
+      currentState.project.active = activeProjectName.value;
+      currentState.project.projects = projects.value;
+      // Invoke save_state -- the spawn_blocking on Rust side ensures the write
+      // completes before the process exits (Tauri waits for pending commands).
+      invoke('save_state', { stateJson: JSON.stringify(currentState) }).catch(() => {});
+    }
+  });
+}
+
+// ============================================================================
+// Project registry helpers (Phase 5: project system sidebar)
+// ============================================================================
+
+/**
+ * Get all registered projects from Rust state.
+ */
+export async function getProjects(): Promise<ProjectEntry[]> {
+  return await invoke<ProjectEntry[]>('get_projects');
+}
+
+/**
+ * Get the currently active project name.
+ */
+export async function getActiveProject(): Promise<string | null> {
+  return await invoke<string | null>('get_active_project');
+}
+
+/**
+ * Add a new project to the registry.
+ */
+export async function addProject(entry: ProjectEntry): Promise<void> {
+  await invoke('add_project', { entry });
+  // Reload state from Rust to pick up the persisted mutation
+  currentState = await invoke<AppState>('load_state');
+  projects.value = await invoke<ProjectEntry[]>('get_projects');
+}
+
+/**
+ * Update an existing project in the registry.
+ */
+export async function updateProject(name: string, entry: ProjectEntry): Promise<void> {
+  await invoke('update_project', { name, entry });
+  currentState = await invoke<AppState>('load_state');
+  projects.value = await invoke<ProjectEntry[]>('get_projects');
+}
+
+/**
+ * Remove a project from the registry.
+ */
+export async function removeProject(name: string): Promise<void> {
+  await invoke('remove_project', { name });
+  // Reload state from Rust to pick up the persisted mutation
+  currentState = await invoke<AppState>('load_state');
+  projects.value = await invoke<ProjectEntry[]>('get_projects');
+}
+
+/**
+ * Switch to a different project (updates state.json active field).
+ * Updates activeProjectName signal and emits 'project-changed' custom event for backward compat.
+ */
+export async function switchProject(name: string): Promise<void> {
+  await invoke('switch_project', { name });
+  // Reload state from Rust to pick up the persisted mutation
+  currentState = await invoke<AppState>('load_state');
+  // Emit pre-switch event so listeners can save state under the OLD project name
+  // BEFORE activeProjectName changes (fixes per-project server pane isolation)
+  document.dispatchEvent(new CustomEvent('project-pre-switch', { detail: { oldName: activeProjectName.value, newName: name } }));
+  activeProjectName.value = name;
+  // Backward compat: main.js project-changed listener (will be removed in Plan 05)
+  document.dispatchEvent(new CustomEvent('project-changed', { detail: { name } }));
+}
+
+/**
+ * Get git status for a project directory.
+ */
+export async function getGitStatus(path: string): Promise<GitData> {
+  return await invoke<GitData>('get_git_status', { path });
+}
+````
+
 ## File: src/tokens.ts
 ````typescript
 /**
@@ -1823,6 +2067,297 @@ pub fn import_iterm2_theme(path: String) -> Result<String, String> {
 pub mod iterm2;
 pub mod types;
 pub mod watcher;
+````
+
+## File: src-tauri/src/theme/types.rs
+````rust
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+
+// ── Chrome (app UI) theme ────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChromeTheme {
+    #[serde(default = "default_chrome_bg")]
+    pub bg: String,
+
+    #[serde(default = "default_chrome_bg_raised", rename = "bgRaised")]
+    pub bg_raised: String,
+
+    #[serde(default = "default_chrome_border")]
+    pub border: String,
+
+    #[serde(default = "default_chrome_text")]
+    pub text: String,
+
+    #[serde(default = "default_chrome_text_bright", rename = "textBright")]
+    pub text_bright: String,
+
+    #[serde(default = "default_chrome_accent")]
+    pub accent: String,
+
+    #[serde(default = "default_chrome_font")]
+    pub font: String,
+
+    #[serde(default = "default_chrome_font_size", rename = "fontSize")]
+    pub font_size: u32,
+
+    #[serde(default = "default_chrome_file_tree_bg", rename = "fileTreeBg")]
+    pub file_tree_bg: String,
+
+    #[serde(default = "default_chrome_file_tree_font", rename = "fileTreeFont")]
+    pub file_tree_font: String,
+
+    #[serde(default = "default_chrome_file_tree_font_size", rename = "fileTreeFontSize")]
+    pub file_tree_font_size: u32,
+
+    #[serde(default = "default_chrome_file_tree_line_height", rename = "fileTreeLineHeight")]
+    pub file_tree_line_height: u32,
+
+    #[serde(default = "default_chrome_bg_terminal", rename = "bgTerminal")]
+    pub bg_terminal: String,
+}
+
+// Chrome defaults (Solarized Dark)
+fn default_chrome_bg() -> String { "#282d3a".into() }
+fn default_chrome_bg_raised() -> String { "#19243A".into() }
+fn default_chrome_border() -> String { "#3e454a".into() }
+fn default_chrome_text() -> String { "#8d999a".into() }
+fn default_chrome_text_bright() -> String { "#92a0a0".into() }
+fn default_chrome_accent() -> String { "#258ad1".into() }
+fn default_chrome_font() -> String { "FiraCode Light".into() }
+fn default_chrome_font_size() -> u32 { 14 }
+fn default_chrome_file_tree_bg() -> String { "#0B1120".into() }
+fn default_chrome_file_tree_font() -> String { "Geist".into() }
+fn default_chrome_file_tree_font_size() -> u32 { 13 }
+fn default_chrome_file_tree_line_height() -> u32 { 5 }
+fn default_chrome_bg_terminal() -> String { "#111927".into() }
+
+impl Default for ChromeTheme {
+    fn default() -> Self {
+        Self {
+            bg: default_chrome_bg(),
+            bg_raised: default_chrome_bg_raised(),
+            border: default_chrome_border(),
+            text: default_chrome_text(),
+            text_bright: default_chrome_text_bright(),
+            accent: default_chrome_accent(),
+            font: default_chrome_font(),
+            font_size: default_chrome_font_size(),
+            file_tree_bg: default_chrome_file_tree_bg(),
+            file_tree_font: default_chrome_file_tree_font(),
+            file_tree_font_size: default_chrome_file_tree_font_size(),
+            file_tree_line_height: default_chrome_file_tree_line_height(),
+            bg_terminal: default_chrome_bg_terminal(),
+        }
+    }
+}
+
+// ── Terminal theme (xterm.js ANSI colors) ────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TerminalTheme {
+    #[serde(default = "default_term_background")]
+    pub background: String,
+
+    #[serde(default = "default_term_foreground")]
+    pub foreground: String,
+
+    #[serde(default = "default_term_cursor")]
+    pub cursor: String,
+
+    #[serde(default = "default_term_selection_background", rename = "selectionBackground")]
+    pub selection_background: String,
+
+    #[serde(default = "default_term_black")]
+    pub black: String,
+
+    #[serde(default = "default_term_red")]
+    pub red: String,
+
+    #[serde(default = "default_term_green")]
+    pub green: String,
+
+    #[serde(default = "default_term_yellow")]
+    pub yellow: String,
+
+    #[serde(default = "default_term_blue")]
+    pub blue: String,
+
+    #[serde(default = "default_term_magenta")]
+    pub magenta: String,
+
+    #[serde(default = "default_term_cyan")]
+    pub cyan: String,
+
+    #[serde(default = "default_term_white")]
+    pub white: String,
+
+    #[serde(default = "default_term_bright_black", rename = "brightBlack")]
+    pub bright_black: String,
+
+    #[serde(default = "default_term_bright_red", rename = "brightRed")]
+    pub bright_red: String,
+
+    #[serde(default = "default_term_bright_green", rename = "brightGreen")]
+    pub bright_green: String,
+
+    #[serde(default = "default_term_bright_yellow", rename = "brightYellow")]
+    pub bright_yellow: String,
+
+    #[serde(default = "default_term_bright_blue", rename = "brightBlue")]
+    pub bright_blue: String,
+
+    #[serde(default = "default_term_bright_magenta", rename = "brightMagenta")]
+    pub bright_magenta: String,
+
+    #[serde(default = "default_term_bright_cyan", rename = "brightCyan")]
+    pub bright_cyan: String,
+
+    #[serde(default = "default_term_bright_white", rename = "brightWhite")]
+    pub bright_white: String,
+}
+
+// Terminal defaults (Solarized Dark ANSI)
+fn default_term_background() -> String { "#282d3a".into() }
+fn default_term_foreground() -> String { "#92a0a0".into() }
+fn default_term_cursor() -> String { "#258ad1".into() }
+fn default_term_selection_background() -> String { "#3e454a".into() }
+fn default_term_black() -> String { "#073642".into() }
+fn default_term_red() -> String { "#dc322f".into() }
+fn default_term_green() -> String { "#859900".into() }
+fn default_term_yellow() -> String { "#b58900".into() }
+fn default_term_blue() -> String { "#268bd2".into() }
+fn default_term_magenta() -> String { "#d33682".into() }
+fn default_term_cyan() -> String { "#2aa198".into() }
+fn default_term_white() -> String { "#eee8d5".into() }
+fn default_term_bright_black() -> String { "#002b36".into() }
+fn default_term_bright_red() -> String { "#cb4b16".into() }
+fn default_term_bright_green() -> String { "#586e75".into() }
+fn default_term_bright_yellow() -> String { "#657b83".into() }
+fn default_term_bright_blue() -> String { "#839496".into() }
+fn default_term_bright_magenta() -> String { "#6c71c4".into() }
+fn default_term_bright_cyan() -> String { "#93a1a1".into() }
+fn default_term_bright_white() -> String { "#fdf6e3".into() }
+
+impl Default for TerminalTheme {
+    fn default() -> Self {
+        Self {
+            background: default_term_background(),
+            foreground: default_term_foreground(),
+            cursor: default_term_cursor(),
+            selection_background: default_term_selection_background(),
+            black: default_term_black(),
+            red: default_term_red(),
+            green: default_term_green(),
+            yellow: default_term_yellow(),
+            blue: default_term_blue(),
+            magenta: default_term_magenta(),
+            cyan: default_term_cyan(),
+            white: default_term_white(),
+            bright_black: default_term_bright_black(),
+            bright_red: default_term_bright_red(),
+            bright_green: default_term_bright_green(),
+            bright_yellow: default_term_bright_yellow(),
+            bright_blue: default_term_bright_blue(),
+            bright_magenta: default_term_bright_magenta(),
+            bright_cyan: default_term_bright_cyan(),
+            bright_white: default_term_bright_white(),
+        }
+    }
+}
+
+// ── Top-level theme config ───────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThemeConfig {
+    #[serde(default)]
+    pub chrome: ChromeTheme,
+
+    #[serde(default)]
+    pub terminal: TerminalTheme,
+}
+
+impl Default for ThemeConfig {
+    fn default() -> Self {
+        Self {
+            chrome: ChromeTheme::default(),
+            terminal: TerminalTheme::default(),
+        }
+    }
+}
+
+// ── Path helpers ─────────────────────────────────────────────────────────────
+
+pub fn config_dir() -> PathBuf {
+    let home = std::env::var("HOME")
+        .ok()
+        .filter(|h| !h.is_empty())
+        .unwrap_or_else(|| {
+            eprintln!("[efxmux] WARNING: HOME not set; using /tmp/efx-mux-fallback for config");
+            "/tmp/efx-mux-fallback".to_string()
+        });
+    PathBuf::from(home).join(".config/efx-mux")
+}
+
+pub fn theme_path() -> PathBuf {
+    config_dir().join("theme.json")
+}
+
+pub fn ensure_config_dir() {
+    let dir = config_dir();
+    if !dir.exists() {
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            eprintln!("[efxmux] Failed to create config dir {:?}: {}", dir, e);
+        }
+    }
+}
+
+// ── Load / create ────────────────────────────────────────────────────────────
+
+pub fn load_or_create_theme() -> ThemeConfig {
+    ensure_config_dir();
+
+    let path = theme_path();
+    if path.exists() {
+        match std::fs::read_to_string(&path) {
+            Ok(content) => match serde_json::from_str::<ThemeConfig>(&content) {
+                Ok(theme) => return theme,
+                Err(err) => {
+                    eprintln!(
+                        "[efxmux] Invalid theme.json: {}. Using defaults.",
+                        err
+                    );
+                }
+            },
+            Err(err) => {
+                eprintln!("[efxmux] Failed to read theme.json: {}. Using defaults.", err);
+            }
+        }
+    } else {
+        // First launch: write defaults
+        let defaults = ThemeConfig::default();
+        match serde_json::to_string_pretty(&defaults) {
+            Ok(json) => {
+                if let Err(e) = std::fs::write(&path, &json) {
+                    eprintln!("[efxmux] Failed to write default theme.json: {}", e);
+                }
+            }
+            Err(e) => {
+                eprintln!("[efxmux] Failed to serialize default theme: {}", e);
+            }
+        }
+    }
+
+    ThemeConfig::default()
+}
+
+// ── Tauri command ────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn load_theme() -> ThemeConfig {
+    load_or_create_theme()
+}
 ````
 
 ## File: src-tauri/src/main.rs
@@ -2854,6 +3389,430 @@ export function FuzzySearch() {
 }
 ````
 
+## File: src/components/preferences-panel.tsx
+````typescript
+// preferences-panel.tsx -- Ctrl+, preferences panel overlay (UX-01)
+// Restyled to navy-blue palette with reference PreferencesPanel pattern (Phase 10)
+
+import { useEffect } from 'preact/hooks';
+import type { ComponentChildren } from 'preact';
+import { signal } from '@preact/signals';
+import { activeProjectName, projects, updateLayout } from '../state-manager';
+import { openProjectModal } from './project-modal';
+import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from './file-tree';
+import { colors, fonts } from '../tokens';
+
+// ---------------------------------------------------------------------------
+// Module-level state
+// ---------------------------------------------------------------------------
+
+const visible = signal(false);
+
+export function togglePreferences() {
+  visible.value = !visible.value;
+}
+
+export function closePreferences() {
+  visible.value = false;
+}
+
+// ---------------------------------------------------------------------------
+// Visual primitives (matching reference PreferencesPanel)
+// ---------------------------------------------------------------------------
+
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <div style={{ padding: '16px 24px 4px 24px' }}>
+      <span
+        style={{
+          fontFamily: fonts.mono,
+          fontSize: 10,
+          color: colors.textDim,
+          letterSpacing: '1.5px',
+        }}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function SettingRow({
+  label,
+  children,
+  border = true,
+}: {
+  label: string;
+  children: ComponentChildren;
+  border?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '10px 24px',
+        borderBottom: border ? '1px solid #1B202880' : 'none',
+      }}
+    >
+      <span
+        style={{
+          fontFamily: fonts.sans,
+          fontSize: 13,
+          color: colors.textMuted,
+        }}
+      >
+        {label}
+      </span>
+      <div style={{ display: 'flex', alignItems: 'center' }}>{children}</div>
+    </div>
+  );
+}
+
+function KbdKey({ label }: { label: string }) {
+  return (
+    <span
+      style={{
+        fontFamily: fonts.mono,
+        fontSize: 10,
+        color: colors.textMuted,
+        backgroundColor: colors.bgBase,
+        border: `1px solid ${colors.bgSurface}`,
+        borderRadius: 4,
+        padding: '3px 8px',
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function AgentBadge({ name }: { name: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div
+        style={{
+          width: 16,
+          height: 16,
+          borderRadius: 4,
+          background: 'linear-gradient(180deg, #A855F7 0%, #6366F1 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        }}
+      >
+        <span
+          style={{
+            fontFamily: fonts.sans,
+            color: 'white',
+            fontSize: 7,
+          }}
+        >
+          {'\u25C6'}
+        </span>
+      </div>
+      <span
+        style={{
+          fontFamily: fonts.sans,
+          fontSize: 13,
+          fontWeight: 500,
+          color: colors.textPrimary,
+        }}
+      >
+        {name}
+      </span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export function PreferencesPanel() {
+  useEffect(() => {
+    if (!visible.value) return;
+
+    function handleKeydown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        closePreferences();
+      }
+    }
+
+    document.addEventListener('keydown', handleKeydown, { capture: true });
+    return () => document.removeEventListener('keydown', handleKeydown, { capture: true });
+  }, [visible.value]);
+
+  if (!visible.value) return null;
+
+  const name = activeProjectName.value;
+  const activeProject = name ? projects.value.find(p => p.name === name) : null;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        zIndex: 100,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+      onClick={closePreferences}
+    >
+      <div
+        style={{
+          width: 520,
+          maxHeight: '70vh',
+          backgroundColor: colors.bgElevated,
+          border: `1px solid ${colors.bgSurface}`,
+          borderRadius: 12,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+          overflowY: 'auto',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '20px 24px 16px 24px',
+            borderBottom: `1px solid ${colors.bgBorder}`,
+          }}
+        >
+          <span
+            style={{
+              fontFamily: fonts.sans,
+              fontSize: 16,
+              fontWeight: 600,
+              color: colors.textPrimary,
+            }}
+          >
+            Preferences
+          </span>
+          <button
+            onClick={closePreferences}
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              border: `1px solid ${colors.bgSurface}`,
+              backgroundColor: 'transparent',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+            }}
+            title="Close preferences"
+          >
+            <span
+              style={{
+                fontFamily: fonts.sans,
+                color: colors.textMuted,
+                fontSize: 14,
+                lineHeight: 1,
+              }}
+            >
+              {'\u2715'}
+            </span>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: '16px 0' }}>
+          {/* Current Project */}
+          <SectionLabel label="CURRENT PROJECT" />
+          <SettingRow label="Name">
+            <span
+              style={{
+                fontFamily: fonts.sans,
+                fontSize: 13,
+                fontWeight: 500,
+                color: colors.textPrimary,
+              }}
+            >
+              {name ?? 'None'}
+            </span>
+          </SettingRow>
+          <SettingRow label="Path">
+            <span
+              style={{
+                fontFamily: fonts.mono,
+                fontSize: 11,
+                color: colors.textMuted,
+                maxWidth: 280,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+              title={activeProject?.path ?? ''}
+            >
+              {activeProject?.path ?? 'N/A'}
+            </span>
+          </SettingRow>
+          <SettingRow label="Agent">
+            <AgentBadge name="Claude Code" />
+          </SettingRow>
+
+          {/* File Tree Controls */}
+          <SectionLabel label="FILE TREE" />
+          <SettingRow label="Font size">
+            <input
+              type="range"
+              min="10"
+              max="20"
+              value={fileTreeFontSize.value}
+              onInput={(e) => {
+                fileTreeFontSize.value = parseInt((e.target as HTMLInputElement).value);
+                updateLayout({ 'file-tree-font-size': String(fileTreeFontSize.value) });
+              }}
+              style={{ width: 80, accentColor: colors.accent }}
+            />
+          </SettingRow>
+          <SettingRow label="Line height">
+            <input
+              type="range"
+              min="2"
+              max="12"
+              value={fileTreeLineHeight.value}
+              onInput={(e) => {
+                fileTreeLineHeight.value = parseInt((e.target as HTMLInputElement).value);
+                updateLayout({ 'file-tree-line-height': String(fileTreeLineHeight.value) });
+              }}
+              style={{ width: 80, accentColor: colors.accent }}
+            />
+          </SettingRow>
+          <SettingRow label="BG color">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="color"
+                value={fileTreeBgColor.value || colors.bgDeep}
+                onInput={(e) => {
+                  fileTreeBgColor.value = (e.target as HTMLInputElement).value;
+                  updateLayout({ 'file-tree-bg-color': fileTreeBgColor.value });
+                }}
+                style={{ width: 28, height: 28, border: `1px solid ${colors.bgSurface}`, borderRadius: 4, padding: 0, cursor: 'pointer', backgroundColor: 'transparent' }}
+              />
+              {fileTreeBgColor.value && (
+                <button
+                  onClick={() => { fileTreeBgColor.value = ''; updateLayout({ 'file-tree-bg-color': '' }); }}
+                  style={{
+                    fontFamily: fonts.mono,
+                    fontSize: 10,
+                    color: colors.textMuted,
+                    backgroundColor: 'transparent',
+                    border: `1px solid ${colors.bgSurface}`,
+                    borderRadius: 4,
+                    padding: '3px 8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+          </SettingRow>
+
+          {/* Shortcuts */}
+          <SectionLabel label="SHORTCUTS" />
+          <SettingRow label="Toggle sidebar">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <KbdKey label="Ctrl" />
+              <span
+                style={{
+                  fontFamily: fonts.mono,
+                  fontSize: 10,
+                  color: colors.textDim,
+                }}
+              >
+                +
+              </span>
+              <KbdKey label="B" />
+            </div>
+          </SettingRow>
+          <SettingRow label="Quick switch">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <KbdKey label="Ctrl" />
+              <span
+                style={{
+                  fontFamily: fonts.mono,
+                  fontSize: 10,
+                  color: colors.textDim,
+                }}
+              >
+                +
+              </span>
+              <KbdKey label="P" />
+            </div>
+          </SettingRow>
+          <SettingRow label="New tab">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <KbdKey label="Ctrl" />
+              <span
+                style={{
+                  fontFamily: fonts.mono,
+                  fontSize: 10,
+                  color: colors.textDim,
+                }}
+              >
+                +
+              </span>
+              <KbdKey label="T" />
+            </div>
+          </SettingRow>
+          <SettingRow label="Close tab">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <KbdKey label="\u2318" />
+              <span
+                style={{
+                  fontFamily: fonts.mono,
+                  fontSize: 10,
+                  color: colors.textDim,
+                }}
+              >
+                +
+              </span>
+              <KbdKey label="W" />
+            </div>
+          </SettingRow>
+
+          {/* Actions */}
+          <SectionLabel label="ACTIONS" />
+          <div style={{ padding: '12px 24px' }}>
+            <button
+              onClick={() => {
+                closePreferences();
+                openProjectModal({ project: activeProject ?? undefined });
+              }}
+              style={{
+                borderRadius: 8,
+                backgroundColor: colors.accent,
+                border: 'none',
+                padding: '8px 16px',
+                fontFamily: fonts.sans,
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'white',
+                cursor: 'pointer',
+              }}
+            >
+              Edit Project
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+````
+
 ## File: src/components/project-modal.tsx
 ````typescript
 // project-modal.tsx -- Add Project modal with form, directory browser, validation
@@ -3359,763 +4318,6 @@ export function ProjectModal() {
 }
 ````
 
-## File: src/components/tab-bar.tsx
-````typescript
-// tab-bar.tsx -- Reusable tab bar component for right panel views (D-11, PANEL-01)
-// Visual rewrite: Phase 10 pill-style pattern (RightPanel TabButton reference)
-
-import type { Signal } from '@preact/signals';
-import { colors, fonts } from '../tokens';
-
-interface TabBarProps {
-  tabs: string[];
-  activeTab: Signal<string>;
-  onSwitch: (tab: string) => void;
-}
-
-export function TabBar({ tabs, activeTab, onSwitch }: TabBarProps) {
-  return (
-    <div class="flex gap-1 px-2 py-1.5 border-b shrink-0 items-center" style={{ backgroundColor: colors.bgBase, borderColor: colors.bgBorder }}>
-      {tabs.map(tab => {
-        const active = activeTab.value === tab;
-        return (
-          <button
-            class="cursor-pointer transition-all duration-150"
-            style={{
-              backgroundColor: active ? colors.bgElevated : 'transparent',
-              border: active ? `1px solid ${colors.bgSurface}` : '1px solid transparent',
-              borderRadius: 6,
-              padding: '7px 14px',
-              fontFamily: fonts.sans,
-              fontSize: 13,
-              fontWeight: active ? 500 : 400,
-              color: active ? colors.textPrimary : colors.textDim,
-            }}
-            onClick={() => onSwitch(tab)}
-          >{tab}</button>
-        );
-      })}
-    </div>
-  );
-}
-````
-
-## File: src/components/terminal-tabs.tsx
-````typescript
-// terminal-tabs.tsx -- Multi-tab terminal management for main panel (UX-02, D-04/D-05/D-06/D-07)
-// Each tab is its own tmux session backed by a separate PTY.
-// Tab state persists to state.json via updateSession (Pitfall 6).
-// display:none/block preserves xterm.js scrollback + WebGL context.
-
-import { signal } from '@preact/signals';
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import type { Terminal } from '@xterm/xterm';
-import type { FitAddon } from '@xterm/addon-fit';
-import { createTerminal, type TerminalOptions } from '../terminal/terminal-manager';
-import { connectPty } from '../terminal/pty-bridge';
-import { attachResizeHandler } from '../terminal/resize-handler';
-import { registerTerminal, getTheme } from '../theme/theme-manager';
-import { updateSession, activeProjectName, projects, getCurrentState } from '../state-manager';
-import { detectAgent } from '../server/server-bridge';
-import { colors, fonts } from '../tokens';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface TerminalTab {
-  id: string;
-  sessionName: string;
-  label: string;
-  terminal: Terminal;
-  fitAddon: FitAddon;
-  container: HTMLDivElement;
-  ptyConnected: boolean;
-  disconnectPty?: () => void;
-  detachResize?: () => void;
-  exitCode?: number | null;  // undefined = running, number = exited
-}
-
-// ---------------------------------------------------------------------------
-// Signals
-// ---------------------------------------------------------------------------
-
-export const terminalTabs = signal<TerminalTab[]>([]);
-export const activeTabId = signal<string>('');
-let tabCounter = 0;
-
-/**
- * In-memory cache of tab metadata per project name.
- * Used to restore tabs when switching back to a previously visited project.
- * Key: project name, Value: array of { sessionName, label } for each tab.
- */
-const projectTabCache = new Map<string, Array<{ sessionName: string; label: string }>>();
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Derive a tmux session name from a project name.
- * Sanitizes to alphanumeric + hyphen + underscore (matching pty.rs sanitization).
- */
-function projectSessionName(projectName: string | null, suffix?: string): string {
-  if (!projectName) return suffix ? `efx-mux-${suffix}` : 'efx-mux';
-  const base = projectName.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
-  return suffix ? `${base}-${suffix}` : base;
-}
-
-function getTerminalContainersEl(): HTMLElement | null {
-  return document.querySelector('.terminal-containers');
-}
-
-function getThemeOptions(): TerminalOptions {
-  const theme = getTheme();
-  return {
-    theme: theme?.terminal,
-    font: theme?.chrome?.font,
-    fontSize: theme?.chrome?.fontSize,
-  };
-}
-
-async function getActiveProjectInfo(): Promise<{ path?: string; agent?: string } | null> {
-  const activeName = activeProjectName.value;
-  if (!activeName) return null;
-  const project = projects.value.find(p => p.name === activeName);
-  return project ? { path: project.path, agent: project.agent } : null;
-}
-
-async function resolveAgentBinary(agent?: string): Promise<string | undefined> {
-  if (!agent || agent === 'bash') return undefined;
-  try {
-    return await detectAgent(agent);
-  } catch {
-    return undefined;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Tab management functions (exported for keyboard handler)
-// ---------------------------------------------------------------------------
-
-/**
- * Create a new terminal tab with its own tmux session.
- */
-export async function createNewTab(): Promise<TerminalTab | null> {
-  const wrapper = getTerminalContainersEl();
-  if (!wrapper) {
-    console.error('[efxmux] .terminal-containers not found');
-    return null;
-  }
-
-  tabCounter++;
-  const id = `tab-${Date.now()}-${tabCounter}`;
-
-  // Derive session name
-  const activeName = activeProjectName.value;
-  const sessionSuffix = tabCounter > 1 ? String(tabCounter) : undefined;
-  const sessionName = projectSessionName(activeName, sessionSuffix);
-
-  // Label: first tab gets agent name if configured
-  const projectInfo = await getActiveProjectInfo();
-  const isFirstTab = terminalTabs.value.length === 0;
-  let label: string;
-  if (isFirstTab && projectInfo?.agent && projectInfo.agent !== 'bash') {
-    label = projectInfo.agent === 'claude' ? 'Claude' : projectInfo.agent === 'opencode' ? 'OpenCode' : `Terminal ${tabCounter}`;
-  } else {
-    label = `Terminal ${tabCounter}`;
-  }
-
-  // Create container
-  const container = document.createElement('div');
-  container.className = 'absolute inset-0';
-  container.style.display = 'none'; // Will be shown by switchToTab
-  wrapper.appendChild(container);
-
-  // Create terminal
-  const themeOpts = getThemeOptions();
-  const { terminal, fitAddon } = createTerminal(container, themeOpts);
-  registerTerminal(terminal, fitAddon);
-
-  // Connect PTY -- Ctrl+T tabs are always plain shell (UAT gap 1)
-  const agentBinary = undefined;
-  let disconnectPty: (() => void) | undefined;
-  let ptyConnected = false;
-
-  try {
-    const conn = await connectPty(terminal, sessionName, projectInfo?.path, agentBinary);
-    disconnectPty = conn.disconnect;
-    ptyConnected = true;
-  } catch (err) {
-    console.error('[efxmux] Failed to connect PTY for tab:', err);
-    terminal.writeln(`\x1b[33mFailed to connect PTY: ${err}\x1b[0m`);
-  }
-
-  // Attach resize handler
-  const resizeHandle = attachResizeHandler(container, terminal, fitAddon, sessionName);
-
-  const tab: TerminalTab = {
-    id,
-    sessionName,
-    label,
-    terminal,
-    fitAddon,
-    container,
-    ptyConnected,
-    disconnectPty,
-    detachResize: resizeHandle.detach,
-    exitCode: undefined,
-  };
-
-  terminalTabs.value = [...terminalTabs.value, tab];
-  activeTabId.value = id;
-  switchToTab(id);
-  persistTabState();
-
-  return tab;
-}
-
-/**
- * Close the active terminal tab. If last tab, auto-creates a fresh one (D-07).
- */
-export async function closeActiveTab(): Promise<void> {
-  const tabs = terminalTabs.value;
-  const currentId = activeTabId.value;
-  const idx = tabs.findIndex(t => t.id === currentId);
-  if (idx === -1) return;
-
-  const tab = tabs[idx];
-  // Destroy PTY session in Rust before disposing JS-side resources
-  try { await invoke('destroy_pty_session', { sessionName: tab.sessionName }); } catch {}
-  disposeTab(tab);
-
-  const remaining = tabs.filter(t => t.id !== currentId);
-  terminalTabs.value = remaining;
-
-  if (remaining.length === 0) {
-    // D-07: closing last tab auto-creates fresh default
-    await createNewTab();
-  } else {
-    // Switch to previous tab (or first)
-    const newIdx = Math.min(idx, remaining.length - 1);
-    activeTabId.value = remaining[newIdx].id;
-    switchToTab(remaining[newIdx].id);
-  }
-
-  persistTabState();
-}
-
-/**
- * Close a specific tab by ID.
- */
-export async function closeTab(tabId: string): Promise<void> {
-  const tabs = terminalTabs.value;
-  const idx = tabs.findIndex(t => t.id === tabId);
-  if (idx === -1) return;
-
-  // If this is the active tab, use closeActiveTab logic
-  if (tabId === activeTabId.value) {
-    await closeActiveTab();
-    return;
-  }
-
-  const tab = tabs[idx];
-  try { await invoke('destroy_pty_session', { sessionName: tab.sessionName }); } catch {}
-  disposeTab(tab);
-  terminalTabs.value = tabs.filter(t => t.id !== tabId);
-  persistTabState();
-}
-
-/**
- * Cycle to the next tab (wraps around).
- */
-export function cycleToNextTab(): void {
-  const tabs = terminalTabs.value;
-  if (tabs.length <= 1) return;
-
-  const idx = tabs.findIndex(t => t.id === activeTabId.value);
-  const nextIdx = (idx + 1) % tabs.length;
-  activeTabId.value = tabs[nextIdx].id;
-  switchToTab(tabs[nextIdx].id);
-}
-
-/**
- * Get the active terminal + fitAddon, or null if no tabs.
- */
-export function getActiveTerminal(): { terminal: Terminal; fitAddon: FitAddon } | null {
-  const tab = terminalTabs.value.find(t => t.id === activeTabId.value);
-  if (!tab) return null;
-  return { terminal: tab.terminal, fitAddon: tab.fitAddon };
-}
-
-// ---------------------------------------------------------------------------
-// Init first tab (called from main.tsx bootstrap)
-// ---------------------------------------------------------------------------
-
-/**
- * Initialize the first terminal tab during app bootstrap.
- * Replaces inline createTerminal + connectPty in main.tsx.
- */
-export async function initFirstTab(
-  themeOptions: TerminalOptions,
-  sessionName: string,
-  projectPath?: string,
-  agentBinary?: string,
-): Promise<{ terminal: Terminal; fitAddon: FitAddon } | null> {
-  const wrapper = getTerminalContainersEl();
-  if (!wrapper) {
-    console.error('[efxmux] .terminal-containers not found');
-    return null;
-  }
-
-  tabCounter++;
-  const id = `tab-${Date.now()}-${tabCounter}`;
-
-  // Label: use agent name if configured
-  const activeName = activeProjectName.value;
-  const activeProject = activeName ? projects.value.find(p => p.name === activeName) : null;
-  let label: string;
-  if (activeProject?.agent && activeProject.agent !== 'bash') {
-    label = activeProject.agent === 'claude' ? 'Claude' : activeProject.agent === 'opencode' ? 'OpenCode' : 'Terminal 1';
-  } else {
-    label = 'Terminal 1';
-  }
-
-  // Create container
-  const container = document.createElement('div');
-  container.className = 'absolute inset-0';
-  wrapper.appendChild(container);
-
-  // Create terminal
-  const { terminal, fitAddon } = createTerminal(container, themeOptions);
-
-  // Connect PTY
-  let disconnectPty: (() => void) | undefined;
-  let ptyConnected = false;
-
-  try {
-    const conn = await connectPty(terminal, sessionName, projectPath, agentBinary);
-    disconnectPty = conn.disconnect;
-    ptyConnected = true;
-  } catch (err) {
-    console.error('[efxmux] Failed to connect PTY:', err);
-    terminal.writeln('\x1b[33mWarning: Could not attach to tmux session "' + sessionName + '":\x1b[0m ' + err);
-    terminal.writeln('\x1b[33mIf tmux is not installed, run: brew install tmux\x1b[0m');
-  }
-
-  // Attach resize handler
-  const resizeHandle = attachResizeHandler(container, terminal, fitAddon, sessionName);
-
-  const tab: TerminalTab = {
-    id,
-    sessionName,
-    label,
-    terminal,
-    fitAddon,
-    container,
-    ptyConnected,
-    disconnectPty,
-    detachResize: resizeHandle.detach,
-    exitCode: undefined,
-  };
-
-  terminalTabs.value = [tab];
-  activeTabId.value = id;
-  // Container is already visible (no display:none needed for first tab)
-
-  persistTabState();
-
-  return { terminal, fitAddon };
-}
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-function switchToTab(tabId: string): void {
-  const tabs = terminalTabs.value;
-  for (const tab of tabs) {
-    if (tab.id === tabId) {
-      tab.container.style.display = 'block';
-    } else {
-      tab.container.style.display = 'none';
-    }
-  }
-  // Defer focus+fit until after browser reflow (UAT gap 3)
-  requestAnimationFrame(() => {
-    const active = tabs.find(t => t.id === tabId);
-    if (active) {
-      active.fitAddon.fit();
-      active.terminal.focus();
-    }
-  });
-}
-
-function disposeTab(tab: TerminalTab): void {
-  tab.disconnectPty?.();
-  tab.detachResize?.();
-  tab.terminal.dispose();
-  tab.container.remove();
-}
-
-// ---------------------------------------------------------------------------
-// Tab persistence (Pitfall 6)
-// ---------------------------------------------------------------------------
-
-function persistTabState(): void {
-  const activeName = activeProjectName.value;
-  const tabs = terminalTabs.value.map(t => ({
-    sessionName: t.sessionName,
-    label: t.label,
-  }));
-  const data = JSON.stringify({ tabs, activeTabId: activeTabId.value });
-  // Save under per-project key (and legacy flat key for backward compat)
-  const patch: Record<string, string> = { 'terminal-tabs': data };
-  if (activeName) {
-    patch[`terminal-tabs:${activeName}`] = data;
-  }
-  updateSession(patch);
-}
-
-// ---------------------------------------------------------------------------
-// Restart a tab's PTY session (for crash overlay)
-// ---------------------------------------------------------------------------
-
-export async function restartTabSession(tabId: string): Promise<void> {
-  const tabs = terminalTabs.value;
-  const tab = tabs.find(t => t.id === tabId);
-  if (!tab) return;
-
-  // Disconnect old PTY
-  tab.disconnectPty?.();
-  tab.detachResize?.();
-  tab.terminal.dispose();
-
-  // Clear exit code
-  tab.exitCode = undefined;
-
-  // Create new terminal in same container
-  tab.container.innerHTML = '';
-  const themeOpts = getThemeOptions();
-  const { terminal, fitAddon } = createTerminal(tab.container, themeOpts);
-  registerTerminal(terminal, fitAddon);
-
-  // New session name (increment suffix)
-  const projectInfo = await getActiveProjectInfo();
-  tabCounter++;
-  const newSessionSuffix = `r${tabCounter}`;
-  const newSessionName = projectSessionName(activeProjectName.value, newSessionSuffix);
-
-  // Connect PTY
-  const agentBinary = await resolveAgentBinary(projectInfo?.agent);
-  try {
-    const conn = await connectPty(terminal, newSessionName, projectInfo?.path, agentBinary);
-    tab.disconnectPty = conn.disconnect;
-    tab.ptyConnected = true;
-  } catch (err) {
-    console.error('[efxmux] Failed to restart PTY:', err);
-    terminal.writeln(`\x1b[33mFailed to restart: ${err}\x1b[0m`);
-    tab.ptyConnected = false;
-  }
-
-  // Attach resize handler
-  const resizeHandle = attachResizeHandler(tab.container, terminal, fitAddon, newSessionName);
-  tab.detachResize = resizeHandle.detach;
-
-  tab.terminal = terminal;
-  tab.fitAddon = fitAddon;
-  tab.sessionName = newSessionName;
-
-  // Trigger re-render
-  terminalTabs.value = [...tabs];
-  terminal.focus();
-  fitAddon.fit();
-  persistTabState();
-}
-
-// ---------------------------------------------------------------------------
-// Clear all tabs (for project switch)
-// ---------------------------------------------------------------------------
-
-/**
- * Save current tabs to the per-project cache before clearing.
- * Call this with the OLD project name before switching away.
- */
-export function saveProjectTabs(projectName: string): void {
-  const tabs = terminalTabs.value;
-  if (tabs.length > 0) {
-    const tabMeta = tabs.map(t => ({
-      sessionName: t.sessionName,
-      label: t.label,
-    }));
-    projectTabCache.set(projectName, tabMeta);
-    // Persist to disk so tabs survive app restart
-    updateSession({
-      [`terminal-tabs:${projectName}`]: JSON.stringify({ tabs: tabMeta, activeTabId: activeTabId.value }),
-    });
-  }
-}
-
-/**
- * Check if cached tabs exist for a project (in-memory or persisted on disk).
- */
-export function hasProjectTabs(projectName: string): boolean {
-  const cached = projectTabCache.get(projectName);
-  if (cached && cached.length > 0) return true;
-  // Also check persisted state on disk
-  const state = getCurrentState();
-  const persisted = state?.session?.[`terminal-tabs:${projectName}`];
-  if (persisted) {
-    try {
-      const parsed = JSON.parse(persisted);
-      return parsed?.tabs?.length > 0;
-    } catch { return false; }
-  }
-  return false;
-}
-
-/**
- * Restore tabs from the per-project cache (in-memory first, then disk).
- * Re-attaches to existing tmux sessions (whose history was cleared by
- * spawn_terminal in pty.rs to prevent stale content dump).
- * Returns true if tabs were restored, false if no cache exists.
- */
-export async function restoreProjectTabs(
-  projectName: string,
-  projectPath?: string,
-  agentBinary?: string,
-): Promise<boolean> {
-  let tabData: Array<{ sessionName: string; label: string }> | null = null;
-
-  // Try in-memory cache first (from same-session project switch)
-  const cached = projectTabCache.get(projectName);
-  if (cached && cached.length > 0) {
-    tabData = cached;
-  }
-
-  // Fall back to persisted state on disk (survives app restart)
-  if (!tabData) {
-    const state = getCurrentState();
-    const persisted = state?.session?.[`terminal-tabs:${projectName}`];
-    if (persisted) {
-      try {
-        const parsed = JSON.parse(persisted);
-        if (parsed?.tabs?.length > 0) {
-          tabData = parsed.tabs;
-        }
-      } catch { /* ignore parse errors */ }
-    }
-  }
-
-  if (!tabData || tabData.length === 0) return false;
-
-  const restored = await restoreTabs(
-    { tabs: tabData, activeTabId: '' },
-    projectPath,
-    agentBinary,
-  );
-
-  if (restored) {
-    // Clear the in-memory cache entry since tabs are now live again
-    projectTabCache.delete(projectName);
-  }
-
-  return restored;
-}
-
-export async function clearAllTabs(): Promise<void> {
-  // Destroy PTY sessions in Rust so old PTY clients disconnect.
-  // The tmux sessions are kept alive (not killed) so tabs can be restored
-  // when switching back to this project. Stale screen content is cleared
-  // by spawn_terminal before re-attaching.
-  for (const tab of terminalTabs.value) {
-    try {
-      await invoke('destroy_pty_session', { sessionName: tab.sessionName });
-    } catch {
-      // Session may already be gone -- safe to ignore
-    }
-    disposeTab(tab);
-  }
-  terminalTabs.value = [];
-  activeTabId.value = '';
-  tabCounter = 0;
-}
-
-// ---------------------------------------------------------------------------
-// Tab restoration (called from main.tsx bootstrap for session persistence)
-// ---------------------------------------------------------------------------
-
-/**
- * Restore tabs from persisted state.json data on app startup.
- * Returns true if at least 1 tab was restored, false otherwise.
- */
-export async function restoreTabs(
-  savedData: { tabs: Array<{ sessionName: string; label: string }>; activeTabId: string },
-  projectPath?: string,
-  agentBinary?: string,
-): Promise<boolean> {
-  if (!savedData?.tabs?.length) return false;
-
-  const wrapper = getTerminalContainersEl();
-  if (!wrapper) return false;
-
-  const restoredTabs: TerminalTab[] = [];
-
-  for (let i = 0; i < savedData.tabs.length; i++) {
-    const saved = savedData.tabs[i];
-    tabCounter++;
-    const id = `tab-${Date.now()}-${tabCounter}`;
-
-    // Create container
-    const container = document.createElement('div');
-    container.className = 'absolute inset-0';
-    container.style.display = 'none'; // switchToTab will show the active one
-    wrapper.appendChild(container);
-
-    // Create terminal
-    const themeOpts = getThemeOptions();
-    const { terminal, fitAddon } = createTerminal(container, themeOpts);
-    registerTerminal(terminal, fitAddon);
-
-    // Connect PTY -- first tab gets agent binary (it's the agent tab), rest are plain shell
-    const shellCmd = (i === 0 && agentBinary) ? agentBinary : undefined;
-    let disconnectPty: (() => void) | undefined;
-    let ptyConnected = false;
-
-    try {
-      const conn = await connectPty(terminal, saved.sessionName, projectPath, shellCmd);
-      disconnectPty = conn.disconnect;
-      ptyConnected = true;
-    } catch (err) {
-      console.error('[efxmux] Failed to restore PTY for tab:', saved.sessionName, err);
-      terminal.writeln(`\x1b[33mFailed to restore session "${saved.sessionName}": ${err}\x1b[0m`);
-    }
-
-    // Attach resize handler
-    const resizeHandle = attachResizeHandler(container, terminal, fitAddon, saved.sessionName);
-
-    restoredTabs.push({
-      id,
-      sessionName: saved.sessionName,
-      label: saved.label,
-      terminal,
-      fitAddon,
-      container,
-      ptyConnected,
-      disconnectPty,
-      detachResize: resizeHandle.detach,
-      exitCode: undefined,
-    });
-  }
-
-  if (restoredTabs.length === 0) return false;
-
-  terminalTabs.value = restoredTabs;
-
-  // Activate the saved active tab (or first if saved ID no longer maps)
-  // Since we generate new IDs, activate by index -- savedData.activeTabId won't match
-  // Default to first tab
-  activeTabId.value = restoredTabs[0].id;
-  switchToTab(restoredTabs[0].id);
-
-  persistTabState();
-  return true;
-}
-
-// ---------------------------------------------------------------------------
-// PTY exit event listener
-// ---------------------------------------------------------------------------
-
-listen<{ session: string; code: number }>('pty-exited', (event) => {
-  const { session, code } = event.payload;
-  const tabs = terminalTabs.value;
-  const tab = tabs.find(t => t.sessionName === session);
-  if (tab) {
-    tab.exitCode = code;
-    terminalTabs.value = [...tabs]; // trigger re-render
-  }
-});
-
-// ---------------------------------------------------------------------------
-// TerminalTabBar component (UI-SPEC Component 1)
-// ---------------------------------------------------------------------------
-
-import { CrashOverlay } from './crash-overlay';
-
-export function TerminalTabBar() {
-  const tabs = terminalTabs.value;
-  const currentId = activeTabId.value;
-
-  return (
-    <div
-      class="flex gap-0.5 px-2 shrink-0 items-center h-[34px]"
-      role="tablist"
-      style={{ backgroundColor: colors.bgBase, borderBottom: `1px solid ${colors.bgBorder}` }}
-    >
-      {tabs.map(tab => {
-        const isActive = tab.id === currentId;
-        return (
-          <button
-            key={tab.id}
-            role="tab"
-            aria-selected={isActive}
-            class={isActive
-              ? 'flex items-center gap-1.5 px-3 py-2 border-b-2 border-accent text-xs font-medium font-sans cursor-pointer bg-transparent transition-all duration-150'
-              : 'flex items-center gap-1 px-3 py-2 text-xs font-sans cursor-pointer bg-transparent transition-all duration-150'}
-            style={{ color: isActive ? colors.textPrimary : colors.textDim }}
-            onClick={() => {
-              activeTabId.value = tab.id;
-              switchToTab(tab.id);
-            }}
-            title={tab.sessionName}
-          >
-            {isActive && <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: colors.statusGreen, flexShrink: 0 }} />}
-            <span>{tab.label}</span>
-            <span
-              class="ml-1 text-[10px]"
-              style={{ color: colors.textDim }}
-              onClick={(e) => {
-                e.stopPropagation();
-                closeTab(tab.id);
-              }}
-              onMouseEnter={(e) => { (e.target as HTMLElement).style.color = colors.textPrimary; }}
-              onMouseLeave={(e) => { (e.target as HTMLElement).style.color = colors.textDim; }}
-              title="Close tab"
-            >{'\u00D7'}</span>
-          </button>
-        );
-      })}
-      {/* New tab button */}
-      <button
-        class="w-6 h-6 rounded flex items-center justify-center text-sm cursor-pointer"
-        style={{ color: colors.textDim, fontFamily: fonts.sans }}
-        onMouseEnter={(e) => { const t = e.target as HTMLElement; t.style.color = colors.textPrimary; t.style.backgroundColor = colors.bgElevated; }}
-        onMouseLeave={(e) => { const t = e.target as HTMLElement; t.style.color = colors.textDim; t.style.backgroundColor = 'transparent'; }}
-        onClick={() => createNewTab()}
-        title="New terminal tab (Ctrl+T)"
-      >+</button>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Active tab crash overlay rendering (used in main-panel.tsx)
-// ---------------------------------------------------------------------------
-
-export function ActiveTabCrashOverlay() {
-  const tab = terminalTabs.value.find(t => t.id === activeTabId.value);
-  if (!tab || tab.exitCode === undefined || tab.exitCode === null) return null;
-
-  return (
-    <CrashOverlay
-      tab={tab}
-      onRestart={() => restartTabSession(tab.id)}
-    />
-  );
-}
-````
-
 ## File: src/terminal/pty-bridge.ts
 ````typescript
 // pty-bridge.ts -- Channel setup, PTY I/O, flow control ACK
@@ -4172,64 +4374,6 @@ export async function connectPty(terminal: Terminal, sessionName: string, startD
     disconnect(): void {
       onDataDisposable.dispose();
       onResizeDisposable.dispose();
-    },
-  };
-}
-````
-
-## File: src/terminal/resize-handler.ts
-````typescript
-// resize-handler.ts -- ResizeObserver + FitAddon + debounced IPC
-// Per D-12: FitAddon.fit() fires instantly, invoke('resize_pty') debounced at 150ms
-// Per D-14: resize is a control operation (always goes through)
-// Per Pitfall 4: track last cols/rows to avoid infinite loop
-// Migrated to TypeScript with @tauri-apps/api imports (Phase 6.1)
-
-import { invoke } from '@tauri-apps/api/core';
-import type { Terminal } from '@xterm/xterm';
-import type { FitAddon } from '@xterm/addon-fit';
-
-/**
- * Attach resize handling to a terminal + container.
- */
-export function attachResizeHandler(
-  container: HTMLElement,
-  terminal: Terminal,
-  fitAddon: FitAddon,
-  sessionName: string
-): { detach: () => void } {
-  let lastCols = 0;
-  let lastRows = 0;
-  let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-
-  const observer = new ResizeObserver(() => {
-    // Defer fit() to next frame to avoid ResizeObserver infinite loop (UAT gap test 5)
-    requestAnimationFrame(() => {
-      fitAddon.fit();
-
-      const { cols, rows } = terminal;
-
-      // Guard against infinite loop (Pitfall 4):
-      // Only send IPC if dimensions actually changed
-      if (cols === lastCols && rows === lastRows) return;
-
-      lastCols = cols;
-      lastRows = rows;
-
-      // Debounced IPC to Rust (D-12: 150ms trailing)
-      if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
-        invoke('resize_pty', { cols, rows, sessionName }).catch(() => {});
-      }, 150);
-    });
-  });
-
-  observer.observe(container);
-
-  return {
-    detach(): void {
-      observer.disconnect();
-      if (resizeTimer) clearTimeout(resizeTimer);
     },
   };
 }
@@ -4859,297 +5003,6 @@ document.addEventListener('project-changed', async (e: Event) => {
 });
 
 bootstrap();
-````
-
-## File: src-tauri/src/theme/types.rs
-````rust
-use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-
-// ── Chrome (app UI) theme ────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChromeTheme {
-    #[serde(default = "default_chrome_bg")]
-    pub bg: String,
-
-    #[serde(default = "default_chrome_bg_raised", rename = "bgRaised")]
-    pub bg_raised: String,
-
-    #[serde(default = "default_chrome_border")]
-    pub border: String,
-
-    #[serde(default = "default_chrome_text")]
-    pub text: String,
-
-    #[serde(default = "default_chrome_text_bright", rename = "textBright")]
-    pub text_bright: String,
-
-    #[serde(default = "default_chrome_accent")]
-    pub accent: String,
-
-    #[serde(default = "default_chrome_font")]
-    pub font: String,
-
-    #[serde(default = "default_chrome_font_size", rename = "fontSize")]
-    pub font_size: u32,
-
-    #[serde(default = "default_chrome_file_tree_bg", rename = "fileTreeBg")]
-    pub file_tree_bg: String,
-
-    #[serde(default = "default_chrome_file_tree_font", rename = "fileTreeFont")]
-    pub file_tree_font: String,
-
-    #[serde(default = "default_chrome_file_tree_font_size", rename = "fileTreeFontSize")]
-    pub file_tree_font_size: u32,
-
-    #[serde(default = "default_chrome_file_tree_line_height", rename = "fileTreeLineHeight")]
-    pub file_tree_line_height: u32,
-
-    #[serde(default = "default_chrome_bg_terminal", rename = "bgTerminal")]
-    pub bg_terminal: String,
-}
-
-// Chrome defaults (Solarized Dark)
-fn default_chrome_bg() -> String { "#282d3a".into() }
-fn default_chrome_bg_raised() -> String { "#19243A".into() }
-fn default_chrome_border() -> String { "#3e454a".into() }
-fn default_chrome_text() -> String { "#8d999a".into() }
-fn default_chrome_text_bright() -> String { "#92a0a0".into() }
-fn default_chrome_accent() -> String { "#258ad1".into() }
-fn default_chrome_font() -> String { "FiraCode Light".into() }
-fn default_chrome_font_size() -> u32 { 14 }
-fn default_chrome_file_tree_bg() -> String { "#0B1120".into() }
-fn default_chrome_file_tree_font() -> String { "Geist".into() }
-fn default_chrome_file_tree_font_size() -> u32 { 13 }
-fn default_chrome_file_tree_line_height() -> u32 { 5 }
-fn default_chrome_bg_terminal() -> String { "#111927".into() }
-
-impl Default for ChromeTheme {
-    fn default() -> Self {
-        Self {
-            bg: default_chrome_bg(),
-            bg_raised: default_chrome_bg_raised(),
-            border: default_chrome_border(),
-            text: default_chrome_text(),
-            text_bright: default_chrome_text_bright(),
-            accent: default_chrome_accent(),
-            font: default_chrome_font(),
-            font_size: default_chrome_font_size(),
-            file_tree_bg: default_chrome_file_tree_bg(),
-            file_tree_font: default_chrome_file_tree_font(),
-            file_tree_font_size: default_chrome_file_tree_font_size(),
-            file_tree_line_height: default_chrome_file_tree_line_height(),
-            bg_terminal: default_chrome_bg_terminal(),
-        }
-    }
-}
-
-// ── Terminal theme (xterm.js ANSI colors) ────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TerminalTheme {
-    #[serde(default = "default_term_background")]
-    pub background: String,
-
-    #[serde(default = "default_term_foreground")]
-    pub foreground: String,
-
-    #[serde(default = "default_term_cursor")]
-    pub cursor: String,
-
-    #[serde(default = "default_term_selection_background", rename = "selectionBackground")]
-    pub selection_background: String,
-
-    #[serde(default = "default_term_black")]
-    pub black: String,
-
-    #[serde(default = "default_term_red")]
-    pub red: String,
-
-    #[serde(default = "default_term_green")]
-    pub green: String,
-
-    #[serde(default = "default_term_yellow")]
-    pub yellow: String,
-
-    #[serde(default = "default_term_blue")]
-    pub blue: String,
-
-    #[serde(default = "default_term_magenta")]
-    pub magenta: String,
-
-    #[serde(default = "default_term_cyan")]
-    pub cyan: String,
-
-    #[serde(default = "default_term_white")]
-    pub white: String,
-
-    #[serde(default = "default_term_bright_black", rename = "brightBlack")]
-    pub bright_black: String,
-
-    #[serde(default = "default_term_bright_red", rename = "brightRed")]
-    pub bright_red: String,
-
-    #[serde(default = "default_term_bright_green", rename = "brightGreen")]
-    pub bright_green: String,
-
-    #[serde(default = "default_term_bright_yellow", rename = "brightYellow")]
-    pub bright_yellow: String,
-
-    #[serde(default = "default_term_bright_blue", rename = "brightBlue")]
-    pub bright_blue: String,
-
-    #[serde(default = "default_term_bright_magenta", rename = "brightMagenta")]
-    pub bright_magenta: String,
-
-    #[serde(default = "default_term_bright_cyan", rename = "brightCyan")]
-    pub bright_cyan: String,
-
-    #[serde(default = "default_term_bright_white", rename = "brightWhite")]
-    pub bright_white: String,
-}
-
-// Terminal defaults (Solarized Dark ANSI)
-fn default_term_background() -> String { "#282d3a".into() }
-fn default_term_foreground() -> String { "#92a0a0".into() }
-fn default_term_cursor() -> String { "#258ad1".into() }
-fn default_term_selection_background() -> String { "#3e454a".into() }
-fn default_term_black() -> String { "#073642".into() }
-fn default_term_red() -> String { "#dc322f".into() }
-fn default_term_green() -> String { "#859900".into() }
-fn default_term_yellow() -> String { "#b58900".into() }
-fn default_term_blue() -> String { "#268bd2".into() }
-fn default_term_magenta() -> String { "#d33682".into() }
-fn default_term_cyan() -> String { "#2aa198".into() }
-fn default_term_white() -> String { "#eee8d5".into() }
-fn default_term_bright_black() -> String { "#002b36".into() }
-fn default_term_bright_red() -> String { "#cb4b16".into() }
-fn default_term_bright_green() -> String { "#586e75".into() }
-fn default_term_bright_yellow() -> String { "#657b83".into() }
-fn default_term_bright_blue() -> String { "#839496".into() }
-fn default_term_bright_magenta() -> String { "#6c71c4".into() }
-fn default_term_bright_cyan() -> String { "#93a1a1".into() }
-fn default_term_bright_white() -> String { "#fdf6e3".into() }
-
-impl Default for TerminalTheme {
-    fn default() -> Self {
-        Self {
-            background: default_term_background(),
-            foreground: default_term_foreground(),
-            cursor: default_term_cursor(),
-            selection_background: default_term_selection_background(),
-            black: default_term_black(),
-            red: default_term_red(),
-            green: default_term_green(),
-            yellow: default_term_yellow(),
-            blue: default_term_blue(),
-            magenta: default_term_magenta(),
-            cyan: default_term_cyan(),
-            white: default_term_white(),
-            bright_black: default_term_bright_black(),
-            bright_red: default_term_bright_red(),
-            bright_green: default_term_bright_green(),
-            bright_yellow: default_term_bright_yellow(),
-            bright_blue: default_term_bright_blue(),
-            bright_magenta: default_term_bright_magenta(),
-            bright_cyan: default_term_bright_cyan(),
-            bright_white: default_term_bright_white(),
-        }
-    }
-}
-
-// ── Top-level theme config ───────────────────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ThemeConfig {
-    #[serde(default)]
-    pub chrome: ChromeTheme,
-
-    #[serde(default)]
-    pub terminal: TerminalTheme,
-}
-
-impl Default for ThemeConfig {
-    fn default() -> Self {
-        Self {
-            chrome: ChromeTheme::default(),
-            terminal: TerminalTheme::default(),
-        }
-    }
-}
-
-// ── Path helpers ─────────────────────────────────────────────────────────────
-
-pub fn config_dir() -> PathBuf {
-    let home = std::env::var("HOME")
-        .ok()
-        .filter(|h| !h.is_empty())
-        .unwrap_or_else(|| {
-            eprintln!("[efxmux] WARNING: HOME not set; using /tmp/efx-mux-fallback for config");
-            "/tmp/efx-mux-fallback".to_string()
-        });
-    PathBuf::from(home).join(".config/efx-mux")
-}
-
-pub fn theme_path() -> PathBuf {
-    config_dir().join("theme.json")
-}
-
-pub fn ensure_config_dir() {
-    let dir = config_dir();
-    if !dir.exists() {
-        if let Err(e) = std::fs::create_dir_all(&dir) {
-            eprintln!("[efxmux] Failed to create config dir {:?}: {}", dir, e);
-        }
-    }
-}
-
-// ── Load / create ────────────────────────────────────────────────────────────
-
-pub fn load_or_create_theme() -> ThemeConfig {
-    ensure_config_dir();
-
-    let path = theme_path();
-    if path.exists() {
-        match std::fs::read_to_string(&path) {
-            Ok(content) => match serde_json::from_str::<ThemeConfig>(&content) {
-                Ok(theme) => return theme,
-                Err(err) => {
-                    eprintln!(
-                        "[efxmux] Invalid theme.json: {}. Using defaults.",
-                        err
-                    );
-                }
-            },
-            Err(err) => {
-                eprintln!("[efxmux] Failed to read theme.json: {}. Using defaults.", err);
-            }
-        }
-    } else {
-        // First launch: write defaults
-        let defaults = ThemeConfig::default();
-        match serde_json::to_string_pretty(&defaults) {
-            Ok(json) => {
-                if let Err(e) = std::fs::write(&path, &json) {
-                    eprintln!("[efxmux] Failed to write default theme.json: {}", e);
-                }
-            }
-            Err(e) => {
-                eprintln!("[efxmux] Failed to serialize default theme: {}", e);
-            }
-        }
-    }
-
-    ThemeConfig::default()
-}
-
-// ── Tauri command ────────────────────────────────────────────────────────────
-
-#[tauri::command]
-pub fn load_theme() -> ThemeConfig {
-    load_or_create_theme()
-}
 ````
 
 ## File: src-tauri/src/theme/watcher.rs
@@ -5826,51 +5679,6 @@ pub fn start_git_watcher(app_handle: tauri::AppHandle, project_path: PathBuf) {
 }
 ````
 
-## File: src-tauri/tauri.conf.json
-````json
-{
-  "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Efxmux",
-  "version": "0.2.1",
-  "identifier": "com.efxmux.app",
-  "build": {
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
-    "devUrl": "http://localhost:1420",
-    "frontendDist": "../dist"
-  },
-  "app": {
-    "withGlobalTauri": false,
-    "windows": [
-      {
-        "title": "Efxmux",
-        "width": 1400,
-        "height": 900,
-        "resizable": true,
-        "decorations": true
-      }
-    ],
-    "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
-    }
-  },
-  "bundle": {
-    "active": true,
-    "targets": "all",
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ],
-    "macOS": {
-      "entitlements": "./Entitlements.plist"
-    }
-  }
-}
-````
-
 ## File: tsconfig.json
 ````json
 {
@@ -5893,960 +5701,523 @@ pub fn start_git_watcher(app_handle: tauri::AppHandle, project_path: PathBuf) {
 }
 ````
 
-## File: src/components/preferences-panel.tsx
+## File: src/components/tab-bar.tsx
 ````typescript
-// preferences-panel.tsx -- Ctrl+, preferences panel overlay (UX-01)
-// Restyled to navy-blue palette with reference PreferencesPanel pattern (Phase 10)
+// tab-bar.tsx -- Reusable tab bar component for right panel views (D-11, PANEL-01)
+// Visual rewrite: Phase 10 pill-style pattern (RightPanel TabButton reference)
 
-import { useEffect } from 'preact/hooks';
-import type { ComponentChildren } from 'preact';
-import { signal } from '@preact/signals';
-import { activeProjectName, projects, updateLayout } from '../state-manager';
-import { openProjectModal } from './project-modal';
-import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from './file-tree';
+import type { Signal } from '@preact/signals';
 import { colors, fonts } from '../tokens';
 
-// ---------------------------------------------------------------------------
-// Module-level state
-// ---------------------------------------------------------------------------
-
-const visible = signal(false);
-
-export function togglePreferences() {
-  visible.value = !visible.value;
+interface TabBarProps {
+  tabs: string[];
+  activeTab: Signal<string>;
+  onSwitch: (tab: string) => void;
 }
 
-export function closePreferences() {
-  visible.value = false;
-}
-
-// ---------------------------------------------------------------------------
-// Visual primitives (matching reference PreferencesPanel)
-// ---------------------------------------------------------------------------
-
-function SectionLabel({ label }: { label: string }) {
+export function TabBar({ tabs, activeTab, onSwitch }: TabBarProps) {
   return (
-    <div style={{ padding: '16px 24px 4px 24px' }}>
-      <span
-        style={{
-          fontFamily: fonts.mono,
-          fontSize: 10,
-          color: colors.textDim,
-          letterSpacing: '1.5px',
-        }}
-      >
-        {label}
-      </span>
-    </div>
-  );
-}
-
-function SettingRow({
-  label,
-  children,
-  border = true,
-}: {
-  label: string;
-  children: ComponentChildren;
-  border?: boolean;
-}) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '10px 24px',
-        borderBottom: border ? '1px solid #1B202880' : 'none',
-      }}
-    >
-      <span
-        style={{
-          fontFamily: fonts.sans,
-          fontSize: 13,
-          color: colors.textMuted,
-        }}
-      >
-        {label}
-      </span>
-      <div style={{ display: 'flex', alignItems: 'center' }}>{children}</div>
-    </div>
-  );
-}
-
-function KbdKey({ label }: { label: string }) {
-  return (
-    <span
-      style={{
-        fontFamily: fonts.mono,
-        fontSize: 10,
-        color: colors.textMuted,
-        backgroundColor: colors.bgBase,
-        border: `1px solid ${colors.bgSurface}`,
-        borderRadius: 4,
-        padding: '3px 8px',
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
-function AgentBadge({ name }: { name: string }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <div
-        style={{
-          width: 16,
-          height: 16,
-          borderRadius: 4,
-          background: 'linear-gradient(180deg, #A855F7 0%, #6366F1 100%)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-        }}
-      >
-        <span
-          style={{
-            fontFamily: fonts.sans,
-            color: 'white',
-            fontSize: 7,
-          }}
-        >
-          {'\u25C6'}
-        </span>
-      </div>
-      <span
-        style={{
-          fontFamily: fonts.sans,
-          fontSize: 13,
-          fontWeight: 500,
-          color: colors.textPrimary,
-        }}
-      >
-        {name}
-      </span>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
-export function PreferencesPanel() {
-  useEffect(() => {
-    if (!visible.value) return;
-
-    function handleKeydown(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        closePreferences();
-      }
-    }
-
-    document.addEventListener('keydown', handleKeydown, { capture: true });
-    return () => document.removeEventListener('keydown', handleKeydown, { capture: true });
-  }, [visible.value]);
-
-  if (!visible.value) return null;
-
-  const name = activeProjectName.value;
-  const activeProject = name ? projects.value.find(p => p.name === name) : null;
-
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        zIndex: 100,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-      onClick={closePreferences}
-    >
-      <div
-        style={{
-          width: 520,
-          maxHeight: '70vh',
-          backgroundColor: colors.bgElevated,
-          border: `1px solid ${colors.bgSurface}`,
-          borderRadius: 12,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-          overflowY: 'auto',
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '20px 24px 16px 24px',
-            borderBottom: `1px solid ${colors.bgBorder}`,
-          }}
-        >
-          <span
-            style={{
-              fontFamily: fonts.sans,
-              fontSize: 16,
-              fontWeight: 600,
-              color: colors.textPrimary,
-            }}
-          >
-            Preferences
-          </span>
+    <div class="flex gap-1 px-2 py-2 border-b shrink-0 items-center" style={{ backgroundColor: colors.bgBase, borderColor: colors.bgBorder }}>
+      {tabs.map(tab => {
+        const active = activeTab.value === tab;
+        return (
           <button
-            onClick={closePreferences}
+            class="cursor-pointer transition-all duration-150"
             style={{
-              width: 28,
-              height: 28,
+              backgroundColor: active ? colors.bgElevated : 'transparent',
+              border: active ? `1px solid ${colors.bgSurface}` : '1px solid transparent',
               borderRadius: 6,
-              border: `1px solid ${colors.bgSurface}`,
-              backgroundColor: 'transparent',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
+              padding: '9px 16px',
+              fontFamily: fonts.sans,
+              fontSize: 13,
+              fontWeight: active ? 500 : 400,
+              color: active ? colors.textPrimary : colors.textDim,
             }}
-            title="Close preferences"
-          >
-            <span
-              style={{
-                fontFamily: fonts.sans,
-                color: colors.textMuted,
-                fontSize: 14,
-                lineHeight: 1,
-              }}
-            >
-              {'\u2715'}
-            </span>
-          </button>
-        </div>
-
-        {/* Body */}
-        <div style={{ padding: '16px 0' }}>
-          {/* Current Project */}
-          <SectionLabel label="CURRENT PROJECT" />
-          <SettingRow label="Name">
-            <span
-              style={{
-                fontFamily: fonts.sans,
-                fontSize: 13,
-                fontWeight: 500,
-                color: colors.textPrimary,
-              }}
-            >
-              {name ?? 'None'}
-            </span>
-          </SettingRow>
-          <SettingRow label="Path">
-            <span
-              style={{
-                fontFamily: fonts.mono,
-                fontSize: 11,
-                color: colors.textMuted,
-                maxWidth: 280,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-              title={activeProject?.path ?? ''}
-            >
-              {activeProject?.path ?? 'N/A'}
-            </span>
-          </SettingRow>
-          <SettingRow label="Agent">
-            <AgentBadge name="Claude Code" />
-          </SettingRow>
-
-          {/* File Tree Controls */}
-          <SectionLabel label="FILE TREE" />
-          <SettingRow label="Font size">
-            <input
-              type="range"
-              min="10"
-              max="20"
-              value={fileTreeFontSize.value}
-              onInput={(e) => {
-                fileTreeFontSize.value = parseInt((e.target as HTMLInputElement).value);
-                updateLayout({ 'file-tree-font-size': String(fileTreeFontSize.value) });
-              }}
-              style={{ width: 80, accentColor: colors.accent }}
-            />
-          </SettingRow>
-          <SettingRow label="Line height">
-            <input
-              type="range"
-              min="2"
-              max="12"
-              value={fileTreeLineHeight.value}
-              onInput={(e) => {
-                fileTreeLineHeight.value = parseInt((e.target as HTMLInputElement).value);
-                updateLayout({ 'file-tree-line-height': String(fileTreeLineHeight.value) });
-              }}
-              style={{ width: 80, accentColor: colors.accent }}
-            />
-          </SettingRow>
-          <SettingRow label="BG color">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input
-                type="color"
-                value={fileTreeBgColor.value || colors.bgDeep}
-                onInput={(e) => {
-                  fileTreeBgColor.value = (e.target as HTMLInputElement).value;
-                  updateLayout({ 'file-tree-bg-color': fileTreeBgColor.value });
-                }}
-                style={{ width: 28, height: 28, border: `1px solid ${colors.bgSurface}`, borderRadius: 4, padding: 0, cursor: 'pointer', backgroundColor: 'transparent' }}
-              />
-              {fileTreeBgColor.value && (
-                <button
-                  onClick={() => { fileTreeBgColor.value = ''; updateLayout({ 'file-tree-bg-color': '' }); }}
-                  style={{
-                    fontFamily: fonts.mono,
-                    fontSize: 10,
-                    color: colors.textMuted,
-                    backgroundColor: 'transparent',
-                    border: `1px solid ${colors.bgSurface}`,
-                    borderRadius: 4,
-                    padding: '3px 8px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Reset
-                </button>
-              )}
-            </div>
-          </SettingRow>
-
-          {/* Shortcuts */}
-          <SectionLabel label="SHORTCUTS" />
-          <SettingRow label="Toggle sidebar">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <KbdKey label="Ctrl" />
-              <span
-                style={{
-                  fontFamily: fonts.mono,
-                  fontSize: 10,
-                  color: colors.textDim,
-                }}
-              >
-                +
-              </span>
-              <KbdKey label="B" />
-            </div>
-          </SettingRow>
-          <SettingRow label="Quick switch">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <KbdKey label="Ctrl" />
-              <span
-                style={{
-                  fontFamily: fonts.mono,
-                  fontSize: 10,
-                  color: colors.textDim,
-                }}
-              >
-                +
-              </span>
-              <KbdKey label="P" />
-            </div>
-          </SettingRow>
-          <SettingRow label="New tab">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <KbdKey label="Ctrl" />
-              <span
-                style={{
-                  fontFamily: fonts.mono,
-                  fontSize: 10,
-                  color: colors.textDim,
-                }}
-              >
-                +
-              </span>
-              <KbdKey label="T" />
-            </div>
-          </SettingRow>
-          <SettingRow label="Close tab">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <KbdKey label="\u2318" />
-              <span
-                style={{
-                  fontFamily: fonts.mono,
-                  fontSize: 10,
-                  color: colors.textDim,
-                }}
-              >
-                +
-              </span>
-              <KbdKey label="W" />
-            </div>
-          </SettingRow>
-
-          {/* Actions */}
-          <SectionLabel label="ACTIONS" />
-          <div style={{ padding: '12px 24px' }}>
-            <button
-              onClick={() => {
-                closePreferences();
-                openProjectModal({ project: activeProject ?? undefined });
-              }}
-              style={{
-                borderRadius: 8,
-                backgroundColor: colors.accent,
-                border: 'none',
-                padding: '8px 16px',
-                fontFamily: fonts.sans,
-                fontSize: 13,
-                fontWeight: 600,
-                color: 'white',
-                cursor: 'pointer',
-              }}
-            >
-              Edit Project
-            </button>
-          </div>
-        </div>
-      </div>
+            onClick={() => onSwitch(tab)}
+          >{tab}</button>
+        );
+      })}
     </div>
   );
 }
 ````
 
-## File: src/components/right-panel.tsx
-````typescript
-// right-panel.tsx -- Right panel with tabbed views and Bash Terminal
-// D-11: Tab bars for right-top (GSD/Diff/File Tree) and right-bottom (Bash)
-// D-12: Bash terminal lazy-connects via connectPty on first tab selection
-// Phase 10: Navy-blue palette rewrite (Plan 06)
+## File: src/styles/app.css
+````css
+@import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
 
-import { useEffect, useRef } from 'preact/hooks';
-import { invoke } from '@tauri-apps/api/core';
-import { rightTopTab, rightBottomTab, loadAppState, activeProjectName, projects } from '../state-manager';
-import { getTheme, registerTerminal } from '../theme/theme-manager';
-import { colors } from '../tokens';
-import { TabBar } from './tab-bar';
-import { GSDViewer } from './gsd-viewer';
-import { DiffViewer } from './diff-viewer';
-import { FileTree } from './file-tree';
+@theme {
+  --color-bg: #111927;           /* bgBase */
+  --color-bg-raised: #19243A;    /* bgElevated */
+  --color-bg-terminal: #111927;  /* bgDeep — harmonized with bgBase per user preference */
+  --color-border: #243352;       /* bgBorder */
+  --color-border-interactive: #324568; /* bgSurface */
+  --color-text: #8B949E;         /* textMuted */
+  --color-text-bright: #E6EDF3;  /* textPrimary */
+  --color-text-secondary: #C9D1D9; /* textSecondary (NEW — for GSD content subheadings) */
+  --color-text-muted: #556A85;   /* textDim */
+  --color-accent: #258AD1;       /* unchanged from Phase 9 */
+  --color-success: #3FB950;
+  --color-warning: #D29922;
+  --color-danger: #F85149;
 
-const RIGHT_TOP_TABS = ['File Tree', 'GSD', 'Diff'];
-const RIGHT_BOTTOM_TABS = ['Bash'];
+  /* Light mode values — harmonized per D-14 */
+  --color-bg-light: #FFFFFF;
+  --color-bg-raised-light: #FFFFFF;
+  --color-bg-terminal-light: #FFFFFF;
+  --color-border-light: #D0D7DE;
+  --color-border-interactive-light: #D0D7DE;
+  --color-text-light: #656D76;
+  --color-text-bright-light: #1F2328;
+  --color-accent-light: #0969DA;
+  --color-success-light: #1A7F37;
+  --color-warning-light: #9A6700;
+  --color-danger-light: #CF222E;
 
-/**
- * RightPanel component.
- * Two sub-panels separated by a horizontal split handle.
- * Right-top: GSD Viewer, Diff Viewer, File Tree (tabbed)
- * Right-bottom: Bash Terminal (tabbed, lazy-connected)
- */
-export function RightPanel() {
-  const bashContainerRef = useRef<HTMLDivElement>(null);
-  const bashConnected = useRef(false);
-  const bashSessionRef = useRef('');
-
-  // Auto-switch to Diff tab when a file is clicked in sidebar GIT CHANGES
-  useEffect(() => {
-    function handleOpenDiff() {
-      rightTopTab.value = 'Diff';
-    }
-    document.addEventListener('open-diff', handleOpenDiff);
-    return () => {
-      document.removeEventListener('open-diff', handleOpenDiff);
-    };
-  }, []);
-
-  // Lazy-connect bash terminal on mount
-  useEffect(() => {
-    async function connectBashTerminal() {
-      const container = bashContainerRef.current;
-      if (!container || bashConnected.current) return;
-
-      try {
-        const { createTerminal } = await import('../terminal/terminal-manager');
-        const { connectPty } = await import('../terminal/pty-bridge');
-        const { attachResizeHandler } = await import('../terminal/resize-handler');
-
-        const activeName = activeProjectName.value;
-        const appState = await loadAppState();
-        const sessionName = activeName
-          ? activeName.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase() + '-right'
-          : (appState?.session?.['right-tmux-session'] || 'efx-mux-right');
-        bashSessionRef.current = sessionName;
-
-        const theme = getTheme();
-        const { terminal, fitAddon } = createTerminal(container, {
-          theme: theme?.terminal,
-          font: theme?.chrome?.font,
-          fontSize: theme?.chrome?.fontSize || 13,
-        });
-        registerTerminal(terminal, fitAddon);
-
-        const activeProject = activeName ? projects.value.find(p => p.name === activeName) : null;
-        await connectPty(terminal, sessionName, activeProject?.path);
-        bashConnected.current = true;
-
-        setTimeout(() => {
-          fitAddon.fit();
-          attachResizeHandler(container, terminal, fitAddon, sessionName);
-        }, 100);
-      } catch (err) {
-        console.error('[efxmux] Failed to connect bash terminal:', err);
-      }
-    }
-
-    // Listen for project switch events (silent via Rust command)
-    function handleSwitchBash(e: Event) {
-      const { currentSession, targetSession, startDir } = (e as CustomEvent).detail;
-      if (!currentSession) return;
-      invoke('switch_tmux_session', {
-        currentSession,
-        targetSession,
-        startDir: startDir ?? null,
-      }).catch((err) => console.error('[efxmux] Failed to switch bash session:', err));
-    }
-
-    document.addEventListener('switch-bash-session', handleSwitchBash);
-
-    // Initial connection
-    setTimeout(() => connectBashTerminal(), 200);
-
-    return () => {
-      document.removeEventListener('switch-bash-session', handleSwitchBash);
-    };
-  }, []);
-
-  return (
-    <aside class="right-panel" aria-label="Right panel" style={{ backgroundColor: colors.bgBase, borderLeft: `1px solid ${colors.bgBorder}` }}>
-      {/* Top panel: GSD / Diff / File Tree */}
-      <div class="right-top flex flex-col min-h-0">
-        <TabBar
-          tabs={RIGHT_TOP_TABS}
-          activeTab={rightTopTab}
-          onSwitch={(tab) => { rightTopTab.value = tab; }}
-        />
-        <div class="right-top-content flex-1 min-h-0 overflow-hidden relative p-1">
-          <div style={{ height: '100%', display: rightTopTab.value === 'GSD' ? 'block' : 'none' }}>
-            <GSDViewer />
-          </div>
-          <div style={{ height: '100%', display: rightTopTab.value === 'Diff' ? 'block' : 'none' }}>
-            <DiffViewer />
-          </div>
-          <div style={{ height: '100%', display: rightTopTab.value === 'File Tree' ? 'block' : 'none' }}>
-            <FileTree />
-          </div>
-        </div>
-      </div>
-
-      {/* Split handle */}
-      <div
-        class="split-handle-h"
-        data-handle="right-h"
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label="Resize right panels"
-      />
-
-      {/* Bottom panel: Bash */}
-      <div class="right-bottom flex flex-col min-h-0">
-        <TabBar
-          tabs={RIGHT_BOTTOM_TABS}
-          activeTab={rightBottomTab}
-          onSwitch={(tab) => { rightBottomTab.value = tab; }}
-        />
-        <div class="right-bottom-content flex-1 min-h-0 overflow-hidden" style={{ backgroundColor: colors.bgDeep }}>
-          <div
-            ref={bashContainerRef}
-            class="bash-terminal h-full"
-            id="bash-terminal-container"
-          />
-        </div>
-      </div>
-    </aside>
-  );
+  --font-family-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+  --font-family-mono: 'GeistMono', 'FiraCode', 'SF Mono', 'Monaco', 'Menlo', monospace;
 }
+
+@font-face {
+  font-family: 'FiraCode';
+  src: url('/fonts/FiraCode-Light.woff2') format('woff2');
+  font-weight: 300;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Geist';
+  src: url('/fonts/Geist-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'GeistMono';
+  src: url('/fonts/GeistMono-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+
+/* Light mode override (data-theme attribute on :root) */
+[data-theme="light"] {
+  --color-bg: var(--color-bg-light);
+  --color-bg-raised: var(--color-bg-raised-light);
+  --color-bg-terminal: var(--color-bg-terminal-light);
+  --color-border: var(--color-border-light);
+  --color-border-interactive: var(--color-border-interactive-light);
+  --color-text: var(--color-text-light);
+  --color-text-bright: var(--color-text-bright-light);
+  --color-accent: var(--color-accent-light);
+  --color-success: var(--color-success-light);
+  --color-warning: var(--color-warning-light);
+  --color-danger: var(--color-danger-light);
+}
+
+/* Section label utility (D-08): uppercase Geist Mono section headers */
+.section-label {
+  font-family: 'GeistMono', monospace;
+  font-weight: 500;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--color-text-muted);
+}
+
+/* Dynamic layout properties (set by JS drag-manager) */
+:root {
+  --sidebar-w: 200px;
+  --right-w: 25%;
+  --handle-size: 1px;
+  --handle-hit: 8px;
+}
+
+/* ─── Panel layout (consumed by drag-manager CSS vars) ─── */
+.sidebar {
+  width: var(--sidebar-w);
+  min-width: 40px;
+  height: 100%;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  border-right: 1px solid var(--color-border);
+}
+
+.sidebar.collapsed {
+  width: 40px;
+  min-width: 40px;
+}
+
+.sidebar-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px;
+}
+
+.main-panel {
+  flex: 1;
+  min-width: 200px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.right-panel {
+  width: var(--right-w);
+  min-width: 180px;
+  height: 100%;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid var(--color-border);
+}
+
+.right-top {
+  flex: 1 1 60%;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.right-bottom {
+  flex: 1 1 40%;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.right-top-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.right-bottom-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.terminal-area {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--color-bg-terminal);
+  position: relative;
+}
+
+.terminal-area .xterm {
+  height: 100%;
+}
+
+.terminal-area .xterm-viewport {
+  background-color: var(--color-bg-terminal) !important;
+}
+
+.terminal-area .xterm-screen {
+  background-color: var(--color-bg-terminal);
+}
+
+.server-pane {
+  flex-shrink: 0;
+  border-top: 1px solid var(--color-border);
+  transition: height 0.15s ease;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.server-pane.state-strip {
+  height: 28px;
+  overflow: hidden;
+}
+
+.server-pane.state-expanded {
+  height: var(--server-pane-h, 200px);
+}
+
+.server-pane-toolbar {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  background: var(--color-bg-raised);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.server-pane-logs {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 16px;
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text);
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: var(--color-bg-raised);
+}
+
+.server-btn {
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  padding: 4px 8px;
+  border-radius: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-family-sans);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.server-btn:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-text-bright);
+}
+
+.server-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Global reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ─── xterm.js scrollbar overrides (cannot be Tailwind-ized) ─── */
+.xterm-viewport::-webkit-scrollbar { width: 8px; }
+.xterm-viewport::-webkit-scrollbar-track { background: var(--color-bg); }
+.xterm-viewport::-webkit-scrollbar-thumb { background: var(--color-border-interactive); border-radius: 4px; }
+.xterm-viewport::-webkit-scrollbar-thumb:hover { background: var(--color-text); }
+
+/* ─── Global custom scrollbars (match xterm style) ─── */
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--color-border-interactive); border-radius: 4px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--color-text); }
+
+/* ─── Drag state overlay (applied by drag-manager) ─── */
+.app-dragging .sidebar,
+.app-dragging .main-panel,
+.app-dragging .right-panel {
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ─── GSD Viewer uses .file-viewer-markdown (shared with file preview) ─── */
+
+/* ─── Diff Viewer color classes ─── */
+.diff-add { border-left: 3px solid var(--color-success); }
+.diff-del { border-left: 3px solid var(--color-danger); }
+
+/* ─── File Tree focus ─── */
+.file-tree:focus { outline: 1px solid var(--color-accent); outline-offset: -1px; }
+
+/* ─── Vertical split handle (sidebar<->main, main<->right) ─── */
+.split-handle-v {
+  width: var(--handle-size);
+  min-width: var(--handle-size);
+  height: 100%;
+  cursor: col-resize;
+  background: var(--color-border);
+  background-clip: content-box;
+  flex-shrink: 0;
+  /* Widen hit target with negative margin + transparent padding trick */
+  margin: 0 calc((var(--handle-hit) - var(--handle-size)) / -2);
+  padding: 0 calc((var(--handle-hit) - var(--handle-size)) / 2);
+  z-index: 10;
+  transition: background 0.1s ease;
+}
+
+.split-handle-v:hover,
+.split-handle-v.dragging {
+  background: var(--color-accent);
+  background-clip: content-box;
+}
+
+/* ─── Horizontal split handle between right sub-panels ─── */
+.split-handle-h {
+  width: 100%;
+  height: var(--handle-size);
+  min-height: var(--handle-size);
+  cursor: row-resize;
+  background: var(--color-border);
+  background-clip: content-box;
+  flex-shrink: 0;
+  /* Widen vertical hit target */
+  margin: calc((var(--handle-hit) - var(--handle-size)) / -2) 0;
+  padding: calc((var(--handle-hit) - var(--handle-size)) / 2) 0;
+  z-index: 10;
+  transition: background 0.1s ease;
+}
+
+.split-handle-h:hover,
+.split-handle-h.dragging {
+  background: var(--color-accent);
+  background-clip: content-box;
+}
+
+/* ─── Project row hover actions ─── */
+.group:hover .project-row-actions {
+  opacity: 1 !important;
+}
+
+/* Agent icon gradient utility (D-17: replaces inline style={{ background: 'linear-gradient(180deg, #A855F7, #6366F1)' }}) */
+.agent-icon-gradient {
+  background: linear-gradient(180deg, #A855F7, #6366F1);
+}
+
+/* ─── Syntax highlighting tokens (file viewer) ─── */
+.syn-kw { color: #c792ea; }           /* keywords: purple */
+.syn-str { color: #c3e88d; }          /* strings: green */
+.syn-cm { color: #546e7a; }           /* comments: dim gray */
+.syn-num { color: #f78c6c; }          /* numbers: orange */
+.syn-fn { color: #82aaff; }           /* functions: blue */
+.syn-op { color: #89ddff; }           /* operators: cyan */
+.syn-type { color: #ffcb6b; }         /* types/classes: yellow */
+
+/* ─── File viewer markdown rendering ─── */
+.file-viewer-markdown h1,
+.file-viewer-markdown h2,
+.file-viewer-markdown h3,
+.file-viewer-markdown h4 {
+  color: var(--color-text-bright);
+  margin: 20px 0 10px;
+  font-weight: 600;
+}
+.file-viewer-markdown h1 { font-size: 24px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px; }
+.file-viewer-markdown h2 { font-size: 20px; border-bottom: 1px solid var(--color-border); padding-bottom: 6px; }
+.file-viewer-markdown h3 { font-size: 16px; }
+.file-viewer-markdown h4 { font-size: 14px; }
+.file-viewer-markdown p { margin: 10px 0; line-height: 1.7; }
+.file-viewer-markdown a { color: var(--color-accent); text-decoration: underline; }
+.file-viewer-markdown code {
+  background: var(--color-bg-raised);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: var(--font-family-mono);
+}
+.file-viewer-markdown pre {
+  background: var(--color-bg-raised);
+  padding: 14px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 12px 0;
+}
+.file-viewer-markdown pre code { background: none; padding: 0; }
+.file-viewer-markdown ul, .file-viewer-markdown ol { padding-left: 24px; margin: 8px 0; }
+.file-viewer-markdown li { margin: 4px 0; line-height: 1.6; }
+.file-viewer-markdown blockquote {
+  border-left: 3px solid var(--color-accent);
+  padding: 4px 16px;
+  margin: 12px 0;
+  color: var(--color-text);
+  background: var(--color-bg-raised);
+  border-radius: 0 4px 4px 0;
+}
+.file-viewer-markdown hr { border: none; border-top: 1px solid var(--color-border); margin: 20px 0; }
+.file-viewer-markdown table { border-collapse: collapse; margin: 12px 0; width: 100%; }
+.file-viewer-markdown th, .file-viewer-markdown td {
+  border: 1px solid var(--color-border);
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 13px;
+}
+.file-viewer-markdown th { background: var(--color-bg-raised); font-weight: 600; color: var(--color-text-bright); }
+.file-viewer-markdown img { max-width: 100%; border-radius: 4px; }
+.file-viewer-markdown .task-checkbox { margin-right: 8px; cursor: pointer; accent-color: var(--color-accent); }
 ````
 
-## File: src/terminal/terminal-manager.ts
+## File: src/terminal/resize-handler.ts
 ````typescript
-// terminal-manager.ts -- xterm.js lifecycle: create, mount, WebGL/DOM fallback
-// Per D-06: retry WebGL once on context loss, then permanent DOM fallback
-// Per D-07: silent fallback -- no visible indicator
-// Per D-08: mount via querySelector, not Arrow.js ref
-// Migrated to TypeScript (Phase 6.1)
+// resize-handler.ts -- ResizeObserver + FitAddon + debounced IPC
+// Per D-12: FitAddon.fit() fires instantly, invoke('resize_pty') debounced at 150ms
+// Per D-14: resize is a control operation (always goes through)
+// Per Pitfall 4: track last cols/rows to avoid infinite loop
+// Migrated to TypeScript with @tauri-apps/api imports (Phase 6.1)
 
-import { Terminal } from '@xterm/xterm';
-import { WebglAddon } from '@xterm/addon-webgl';
-import { FitAddon } from '@xterm/addon-fit';
-
-export interface TerminalOptions {
-  theme?: Record<string, string>;
-  font?: string;
-  fontSize?: number;
-}
-
-export interface TerminalInstance {
-  terminal: Terminal;
-  fitAddon: FitAddon;
-  dispose: () => void;
-}
+import { invoke } from '@tauri-apps/api/core';
+import type { Terminal } from '@xterm/xterm';
+import type { FitAddon } from '@xterm/addon-fit';
 
 /**
- * Create and mount an xterm.js Terminal instance.
+ * Attach resize handling to a terminal + container.
  */
-export function createTerminal(container: HTMLElement, options: TerminalOptions = {}): TerminalInstance {
-  const terminal = new Terminal({
-    cursorBlink: true,
-    cursorStyle: 'bar',
-    scrollback: 10000,
-    fontSize: options.fontSize || 14,
-    fontFamily: options.font ? `'${options.font}', monospace` : "'FiraCode Light', 'Fira Code', monospace",
-    theme: options.theme || {
-      background: '#111927',
-      foreground: '#92a0a0',
-      cursor: '#258ad1',
-      selectionBackground: '#3e454a',
-    },
-    overviewRuler: { width: 10 },
-    allowProposedApi: true,
+export function attachResizeHandler(
+  container: HTMLElement,
+  terminal: Terminal,
+  fitAddon: FitAddon,
+  sessionName: string
+): { detach: () => void } {
+  let lastCols = 0;
+  let lastRows = 0;
+  let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const observer = new ResizeObserver(() => {
+    // Defer fit() to next frame to avoid ResizeObserver infinite loop (UAT gap test 5)
+    requestAnimationFrame(() => {
+      // Skip fit when container is hidden (display:none). During restoreTabs(), all
+      // non-active tab containers are display:none while their ResizeObservers are
+      // active. When a subsequent tab is appended and the browser reflows, the
+      // ResizeObserver fires for the hidden container. Without this guard,
+      // fitAddon.fit() would measure 0 cols, terminal.onResize would emit, and
+      // resize_pty would be invoked with 0 dimensions — sending SIGWINCH with the
+      // wrong size to the running process (e.g. Claude Code TUI), breaking fullscreen.
+      if (container.style.display === 'none') return;
+      fitAddon.fit();
+
+      const { cols, rows } = terminal;
+
+      // Guard against infinite loop (Pitfall 4):
+      // Only send IPC if dimensions actually changed
+      if (cols === lastCols && rows === lastRows) return;
+
+      lastCols = cols;
+      lastRows = rows;
+
+      // Debounced IPC to Rust (D-12: 150ms trailing)
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        invoke('resize_pty', { cols, rows, sessionName }).catch(() => {});
+      }, 150);
+    });
   });
 
-  // Word/line navigation: convert macOS shortcuts to terminal escape codes
-  terminal.attachCustomKeyEventHandler((ev: KeyboardEvent): boolean => {
-    if (ev.type !== 'keydown') return true;
-
-    // Cmd+K -> clear terminal scrollback (standard macOS shortcut)
-    if (ev.metaKey && !ev.ctrlKey && !ev.altKey && (ev.key === 'k' || ev.key === 'K')) {
-      ev.preventDefault();
-      terminal.clear();
-      return false;
-    }
-
-    // Cmd+Left -> beginning of line (Ctrl+A)
-    if (ev.metaKey && ev.key === 'ArrowLeft') {
-      ev.preventDefault();
-      terminal.write('\x01'); // Ctrl+A - beginning of line
-      return false;
-    }
-    // Cmd+Right -> end of line (Ctrl+E)
-    if (ev.metaKey && ev.key === 'ArrowRight') {
-      ev.preventDefault();
-      terminal.write('\x05'); // Ctrl+E - end of line
-      return false;
-    }
-    // Alt+Left -> word left (ESC b)
-    if (ev.altKey && ev.key === 'ArrowLeft') {
-      ev.preventDefault();
-      terminal.write('\x1bb'); // ESC b - word backward
-      return false;
-    }
-    // Alt+Right -> word right (ESC f)
-    if (ev.altKey && ev.key === 'ArrowRight') {
-      ev.preventDefault();
-      terminal.write('\x1bf'); // ESC f - word forward
-      return false;
-    }
-    // Block all Ctrl+key app shortcuts from reaching terminal (D-01, UX-01)
-    if (ev.ctrlKey && !ev.metaKey) {
-      const k = ev.key.toLowerCase();
-      // App-claimed non-shift keys
-      if (!ev.shiftKey && !ev.altKey && ['t', 'w', 'b', 's', 'p', 'k'].includes(k)) return false;
-      // Ctrl+Tab
-      if (ev.key === 'Tab' && !ev.shiftKey) return false;
-      // Ctrl+? (Ctrl+Shift+/) and Ctrl+/
-      if (k === '/' || ev.key === '?') return false;
-      // Ctrl+Shift+T (theme toggle)
-      if (k === 't' && ev.shiftKey) return false;
-    }
-    return true;
-  });
-
-  const fitAddon = new FitAddon();
-  terminal.loadAddon(fitAddon);
-
-  // Mount to DOM
-  terminal.open(container);
-
-  // Attempt WebGL renderer (D-06: retry once on context loss)
-  let webglAttempts = 0;
-  function tryWebGL(): void {
-    try {
-      const webgl = new WebglAddon();
-      webgl.onContextLoss(() => {
-        webgl.dispose();
-        webglAttempts++;
-        if (webglAttempts < 2) {
-          // Retry once (D-06)
-          tryWebGL();
-        }
-        // If second attempt fails, DOM renderer stays active (D-07: silent, no indicator)
-      });
-      terminal.loadAddon(webgl);
-    } catch (e: unknown) {
-      // WebGL2 not available -- DOM renderer is the default, nothing to do (D-07)
-      const msg = e instanceof Error ? e.message : String(e);
-      console.warn('[efxmux] WebGL not available, using DOM renderer:', msg);
-    }
-  }
-  tryWebGL();
-
-  // Initial fit after mount
-  fitAddon.fit();
+  observer.observe(container);
 
   return {
-    terminal,
-    fitAddon,
-    dispose(): void {
-      terminal.dispose();
+    detach(): void {
+      observer.disconnect();
+      if (resizeTimer) clearTimeout(resizeTimer);
     },
   };
-}
-````
-
-## File: src/state-manager.ts
-````typescript
-// state-manager.ts -- Bridge between JS state and Rust state.json (Phase 4)
-// Per D-11: beforeunload triggers save_state via invoke
-// Per D-12: Rust uses spawn_blocking for synchronous file I/O
-// Migrated to TypeScript with @preact/signals (Phase 6.1)
-
-import { invoke } from '@tauri-apps/api/core';
-import { signal } from '@preact/signals';
-
-// ---------------------------------------------------------------------------
-// Type definitions
-// ---------------------------------------------------------------------------
-
-export interface ProjectEntry {
-  path: string;
-  name: string;
-  agent: string;
-  gsd_file?: string;
-  server_cmd?: string;
-  server_url?: string;
-}
-
-export interface GitData {
-  branch: string;
-  modified: number;
-  staged: number;
-  untracked: number;
-}
-
-export interface AppState {
-  version: number;
-  layout: Record<string, string | boolean>;
-  theme: { mode: string };
-  session: Record<string, string>;
-  project: { active: string | null; projects: ProjectEntry[] };
-  panels: Record<string, string>;
-}
-
-// ---------------------------------------------------------------------------
-// App-wide signals that components can import and subscribe to
-// ---------------------------------------------------------------------------
-
-export const projects = signal<ProjectEntry[]>([]);
-export const activeProjectName = signal<string | null>(null);
-export const sidebarCollapsed = signal(false);
-export const rightTopTab = signal('File Tree');
-export const rightBottomTab = signal('Bash');
-
-// ---------------------------------------------------------------------------
-// Internal state (raw Rust state blob, not UI-reactive)
-// ---------------------------------------------------------------------------
-
-let currentState: AppState | null = null;
-
-// ---------------------------------------------------------------------------
-// State persistence functions
-// ---------------------------------------------------------------------------
-
-/**
- * Load app state from Rust backend (reads ~/.config/efxmux/state.json).
- * Returns defaults if missing or corrupt (D-09, D-10).
- */
-export async function loadAppState(): Promise<AppState> {
-  try {
-    currentState = await invoke<AppState>('load_state');
-    // Ensure project.projects exists even if loaded from older state.json (T-08-07-02)
-    if (!currentState.project) currentState.project = { active: null, projects: [] };
-    if (!currentState.project.projects) currentState.project.projects = [];
-  } catch (err) {
-    console.warn('[efxmux] Failed to load state, using defaults:', err);
-    // Return a minimal default state matching Rust defaults
-    currentState = {
-      version: 1,
-      layout: { 'sidebar-w': '200px', 'right-w': '25%', 'right-h-pct': '50', 'sidebar-collapsed': false },
-      theme: { mode: 'dark' },
-      session: { 'main-tmux-session': 'efx-mux', 'right-tmux-session': 'efx-mux-right' },
-      project: { active: null, projects: [] },
-      panels: { 'right-top-tab': 'File Tree', 'right-bottom-tab': 'Bash' },
-    };
-  }
-
-  // Set signals from loaded state
-  sidebarCollapsed.value = currentState?.layout?.['sidebar-collapsed'] === true || currentState?.layout?.['sidebar-collapsed'] === 'true';
-  if (currentState?.panels?.['right-top-tab'] && currentState.panels['right-top-tab'] !== 'gsd') rightTopTab.value = currentState.panels['right-top-tab'];
-  if (currentState?.panels?.['right-bottom-tab']) rightBottomTab.value = currentState.panels['right-bottom-tab'];
-
-  // Restore projects and active project from persisted state (T-08-07-02)
-  if (currentState?.project?.projects?.length) {
-    projects.value = currentState.project.projects;
-  }
-  if (currentState?.project?.active) {
-    activeProjectName.value = currentState.project.active;
-  }
-
-  return currentState!;
-}
-
-/**
- * Save app state to Rust backend (writes ~/.config/efxmux/state.json).
- */
-export async function saveAppState(state: AppState): Promise<void> {
-  try {
-    // Sync project data from signals before every save (T-08-07-02)
-    if (!state.project) state.project = { active: null, projects: [] };
-    state.project.active = activeProjectName.value;
-    state.project.projects = projects.value;
-    const stateJson = JSON.stringify(state);
-    await invoke('save_state', { stateJson });
-  } catch (err) {
-    console.warn('[efxmux] Failed to save state:', err);
-  }
-}
-
-/**
- * Get the current state (loaded or default).
- */
-export function getCurrentState(): AppState | null {
-  return currentState;
-}
-
-/**
- * Update layout fields in current state and persist.
- */
-export async function updateLayout(patch: Record<string, string | boolean>): Promise<void> {
-  if (!currentState) return;
-  if (!currentState.layout) currentState.layout = {};
-  for (const [key, value] of Object.entries(patch)) {
-    currentState.layout[key] = value;
-  }
-  await saveAppState(currentState);
-}
-
-/**
- * Update theme mode in current state and persist.
- */
-export async function updateThemeMode(mode: 'dark' | 'light'): Promise<void> {
-  if (!currentState) return;
-  if (!currentState.theme) currentState.theme = { mode: 'dark' };
-  currentState.theme.mode = mode;
-  await saveAppState(currentState);
-}
-
-/**
- * Update tmux session names in current state and persist.
- */
-export async function updateSession(patch: Record<string, string>): Promise<void> {
-  if (!currentState) return;
-  if (!currentState.session) currentState.session = {};
-  for (const [key, value] of Object.entries(patch)) {
-    currentState.session[key] = value;
-  }
-  await saveAppState(currentState);
-}
-
-/**
- * Wire window:beforeunload to save state before app closes (D-11).
- * Call this once during app init.
- */
-export function initBeforeUnload(): void {
-  window.addEventListener('beforeunload', () => {
-    if (currentState) {
-      // Sync project data from signals into state before saving (T-08-07-02)
-      if (!currentState.project) currentState.project = { active: null, projects: [] };
-      currentState.project.active = activeProjectName.value;
-      currentState.project.projects = projects.value;
-      // Invoke save_state -- the spawn_blocking on Rust side ensures the write
-      // completes before the process exits (Tauri waits for pending commands).
-      invoke('save_state', { stateJson: JSON.stringify(currentState) }).catch(() => {});
-    }
-  });
-}
-
-// ============================================================================
-// Project registry helpers (Phase 5: project system sidebar)
-// ============================================================================
-
-/**
- * Get all registered projects from Rust state.
- */
-export async function getProjects(): Promise<ProjectEntry[]> {
-  return await invoke<ProjectEntry[]>('get_projects');
-}
-
-/**
- * Get the currently active project name.
- */
-export async function getActiveProject(): Promise<string | null> {
-  return await invoke<string | null>('get_active_project');
-}
-
-/**
- * Add a new project to the registry.
- */
-export async function addProject(entry: ProjectEntry): Promise<void> {
-  await invoke('add_project', { entry });
-  // Reload state from Rust to pick up the persisted mutation
-  currentState = await invoke<AppState>('load_state');
-  projects.value = await invoke<ProjectEntry[]>('get_projects');
-}
-
-/**
- * Update an existing project in the registry.
- */
-export async function updateProject(name: string, entry: ProjectEntry): Promise<void> {
-  await invoke('update_project', { name, entry });
-  currentState = await invoke<AppState>('load_state');
-  projects.value = await invoke<ProjectEntry[]>('get_projects');
-}
-
-/**
- * Remove a project from the registry.
- */
-export async function removeProject(name: string): Promise<void> {
-  await invoke('remove_project', { name });
-  // Reload state from Rust to pick up the persisted mutation
-  currentState = await invoke<AppState>('load_state');
-  projects.value = await invoke<ProjectEntry[]>('get_projects');
-}
-
-/**
- * Switch to a different project (updates state.json active field).
- * Updates activeProjectName signal and emits 'project-changed' custom event for backward compat.
- */
-export async function switchProject(name: string): Promise<void> {
-  await invoke('switch_project', { name });
-  // Reload state from Rust to pick up the persisted mutation
-  currentState = await invoke<AppState>('load_state');
-  // Emit pre-switch event so listeners can save state under the OLD project name
-  // BEFORE activeProjectName changes (fixes per-project server pane isolation)
-  document.dispatchEvent(new CustomEvent('project-pre-switch', { detail: { oldName: activeProjectName.value, newName: name } }));
-  activeProjectName.value = name;
-  // Backward compat: main.js project-changed listener (will be removed in Plan 05)
-  document.dispatchEvent(new CustomEvent('project-changed', { detail: { name } }));
-}
-
-/**
- * Get git status for a project directory.
- */
-export async function getGitStatus(path: string): Promise<GitData> {
-  return await invoke<GitData>('get_git_status', { path });
 }
 ````
 
@@ -7063,1100 +6434,6 @@ mod tests {
         assert_eq!(file_statuses.get("modified.txt").map(|s| *s), Some("M"));
         assert_eq!(file_statuses.get("untracked.txt").map(|s| *s), Some("U"));
     }
-}
-````
-
-## File: src-tauri/src/lib.rs
-````rust
-// src-tauri/src/lib.rs
-pub mod file_ops;
-pub mod file_watcher;
-pub mod git_status;
-pub mod project;
-pub mod server;
-mod state;
-mod terminal;
-mod theme;
-
-use std::collections::HashMap;
-use tauri::Manager;
-use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
-use terminal::pty::{ack_bytes, check_tmux, cleanup_dead_sessions, destroy_pty_session, get_agent_version, get_pty_sessions, resize_pty, spawn_terminal, write_pty, PtyManager};
-use theme::iterm2::import_iterm2_theme;
-use server::{detect_agent, kill_all_servers, restart_server, start_server, stop_server, ServerProcesses};
-use state::{get_config_dir, load_state, save_state, ManagedAppState};
-use theme::types::load_theme;
-
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    tauri::Builder::default()
-        .setup(|app| {
-            // ── macOS Application menu (first submenu = app name menu on macOS) ──
-            let app_menu = SubmenuBuilder::new(app, "Efxmux")
-                .item(&PredefinedMenuItem::about(app, None, None)?)
-                .separator()
-                .item(&PredefinedMenuItem::quit(app, None)?)
-                .build()?;
-
-            // ── Edit menu — wires Cmd+C/V/X/A to WKWebView clipboard (per D-16) ──
-            // PredefinedMenuItem maps to OS-level accelerators; WKWebView inherits.
-            // @tauri-apps/plugin-clipboard-manager NOT needed for Cmd+C/V.
-            let edit_menu = SubmenuBuilder::new(app, "Edit")
-                .item(&PredefinedMenuItem::undo(app, None)?)
-                .item(&PredefinedMenuItem::redo(app, None)?)
-                .separator()
-                .item(&PredefinedMenuItem::cut(app, None)?)
-                .item(&PredefinedMenuItem::copy(app, None)?)
-                .item(&PredefinedMenuItem::paste(app, None)?)
-                .separator()
-                .item(&PredefinedMenuItem::select_all(app, None)?)
-                .build()?;
-
-            // ── Window menu ───────────────────────────────────────────────────────
-            let window_menu = SubmenuBuilder::new(app, "Window")
-                .item(&PredefinedMenuItem::minimize(app, None)?)
-                .build()?;
-
-            // Build and set the full menu
-            let menu = MenuBuilder::new(app)
-                .items(&[&app_menu, &edit_menu, &window_menu])
-                .build()?;
-            app.set_menu(menu)?;
-
-            // Augment PATH for bundled app: macOS .app bundles inherit a minimal PATH
-            // (/usr/bin:/bin:/usr/sbin:/sbin) that excludes Homebrew. Prepend known
-            // Homebrew and user-local bin directories so tmux (and agent CLIs like
-            // claude, opencode) are found regardless of launch method.
-            {
-                let current_path = std::env::var("PATH").unwrap_or_default();
-                let extra = "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin";
-                if !current_path.contains("/opt/homebrew/bin") {
-                    let augmented = format!("{}:{}", extra, current_path);
-                    std::env::set_var("PATH", &augmented);
-                    println!("[efx-mux] Augmented PATH for bundle: {}", augmented);
-                }
-            }
-
-            // Ensure ~/.config/efx-mux/ exists before anything reads it
-            state::ensure_config_dir();
-            theme::types::ensure_config_dir();
-
-            // Load initial state into Tauri managed state (for close handler, WR-03)
-            let initial_state = state::load_state_sync();
-            app.manage(ManagedAppState(std::sync::Mutex::new(initial_state)));
-
-            // Initialize PtyManager for multi-session PTY support (D-09)
-            app.manage(PtyManager(std::sync::Mutex::new(HashMap::new())));
-
-            // Initialize ServerProcesses managed state for per-project server management (Phase 7, 07-06)
-            app.manage(ServerProcesses(std::sync::Mutex::new(HashMap::new())));
-
-            // Start theme file watcher (D-09: watch theme.json for changes)
-            let app_handle = app.handle().clone();
-            theme::watcher::start_theme_watcher(app_handle);
-
-            // Probe for tmux availability (D-01)
-            // If tmux is missing, the frontend will show a modal.
-            match check_tmux() {
-                Ok(version) => println!("[efx-mux] tmux found: {}", version),
-                Err(e) => eprintln!("[efx-mux] WARNING: {}", e),
-            }
-
-            Ok(())
-        })
-        .invoke_handler(tauri::generate_handler![
-            // PTY commands (D-09: session-aware via PtyManager)
-            spawn_terminal,
-            write_pty,
-            resize_pty,
-            ack_bytes,
-            get_pty_sessions,
-            destroy_pty_session,
-            cleanup_dead_sessions,
-
-            // Theme
-            load_theme,
-            import_iterm2_theme,
-
-            // State
-            load_state,
-            save_state,
-            get_config_dir,
-
-            // Git
-            git_status::get_git_status,
-            git_status::get_git_files,
-
-            // Projects
-            project::add_project,
-            project::update_project,
-            project::remove_project,
-            project::switch_project,
-            project::get_projects,
-            project::get_active_project,
-
-            // Phase 6: File operations (D-04, D-06, D-01)
-            file_ops::get_file_diff,
-            file_ops::list_directory,
-            file_ops::read_file_content,
-            file_ops::read_file,
-            file_ops::write_checkbox,
-
-            // Phase 6: File watcher (D-02)
-            file_watcher::set_project_path,
-
-            // Workspace switching
-            terminal::pty::switch_tmux_session,
-
-            // Agent version detection (D-17)
-            get_agent_version,
-
-            // Phase 7: Server process management
-            start_server,
-            stop_server,
-            restart_server,
-            detect_agent,
-        ])
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init())
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Kill ALL server processes on close (07-06: per-project HashMap, T-07-10)
-                kill_all_servers(&window.app_handle());
-
-                // Synchronously save the latest in-memory state to disk.
-                // This guarantees state.json is written even if the JS
-                // beforeunload async invoke did not complete (WR-03 fix).
-                let managed = window.state::<ManagedAppState>();
-                let snapshot = managed.0.lock().ok().map(|g| g.clone());
-                if let Some(ref s) = snapshot {
-                    if let Err(e) = state::save_state_sync(s) {
-                        eprintln!("[efxmux] WARNING: Failed to save state on close: {}", e);
-                    }
-                }
-            }
-        })
-        .build(tauri::generate_context!())
-        .expect("error while building tauri application")
-        .run(|app_handle, event| {
-            match &event {
-                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
-                    // Kill ALL server processes on Cmd+Q / app quit (07-09: T-07-10)
-                    // Both ExitRequested and Exit are handled to cover all exit paths:
-                    // - ExitRequested fires when last window closes naturally
-                    // - Exit fires unconditionally on app termination (Cmd+Q, menu quit)
-                    kill_all_servers(app_handle);
-
-                    // Synchronously save the latest in-memory state to disk.
-                    let managed = app_handle.state::<ManagedAppState>();
-                    let snapshot = managed.0.lock().ok().map(|g| g.clone());
-                    if let Some(ref s) = snapshot {
-                        if let Err(e) = state::save_state_sync(s) {
-                            eprintln!("[efxmux] WARNING: Failed to save state on quit: {}", e);
-                        }
-                    }
-                }
-                _ => {}
-            }
-        });
-}
-````
-
-## File: src-tauri/Cargo.toml
-````toml
-[package]
-name = "gsd-mux"
-version = "0.2.1"
-description = "Terminal Multiplexer for AI-Assisted Development"
-authors = ["Laurent Marques"]
-edition = "2021"
-
-[lib]
-name = "gsd_mux_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
-
-[build-dependencies]
-tauri-build = { version = "2", features = [] }
-
-[dependencies]
-tauri = { version = "2", features = [] }
-tauri-plugin-opener = "2"
-tauri-plugin-dialog = "2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-portable-pty = "0.9.0"
-notify = { version = "8.2", features = ["serde"] }
-notify-debouncer-mini = "0.7"
-git2 = "0.20.4"
-regex = "1"
-libc = "0.2"
-
-[dev-dependencies]
-tempfile = "3"
-````
-
-## File: .gitignore
-````
-RESEARCH
-node_modules/
-.code-review-graph
-dist
-coverage/
-repomix-output.xml
-````
-
-## File: README.md
-````markdown
-# Efxmux
-
-![Efxmux](public/img/app-ui.png)
-
-**A native macOS terminal multiplexer for AI-assisted development.**
-
-Efxmux wraps Claude Code and OpenCode terminal sessions in a structured, multi-panel workspace. It co-locates the AI agent terminal, a live GSD progress viewer with checkbox write-back, git diff, file tree, and a secondary bash terminal — all around a real PTY connected to tmux. No wrapping, no protocol hacks, just the raw binary in a native window.
-
-> Developers using Claude Code or OpenCode lose context switching between the terminal, their editor, and their planning docs. Efxmux collapses all of that into one native window with a terminal-first aesthetic — dark, fast, keyboard-driven.
-
----
-
-## Why Efxmux
-
-- **Zero wrapping** — Claude Code and OpenCode run as native PTY processes inside tmux. Full color, full interactivity, zero compatibility issues.
-- **Persistent sessions** — Close the app, reopen it. Your layout, tabs, and tmux sessions are exactly where you left them. Processes keep running in the background.
-- **Live planning panel** — Render your GSD `PLAN.md` with progress bars and checkboxes. Click a checkbox in the panel, it writes back to the `.md` file on disk, and Claude Code sees the change. Bidirectional.
-- **Git diff at a glance** — GitHub-style unified diff viewer powered by `git2` (no shell-out). See what changed without leaving the workspace.
-- **Project-scoped workspaces** — Register multiple projects. Switch between them and the terminal session, git status, file tree, and GSD viewer all update atomically.
-- **Native performance** — Tauri 2 + Rust backend. WebGL-accelerated terminal rendering via xterm.js 6.0. Sub-20ms input latency.
-
----
-
-## Features
-
-### Terminal
-
-- Real xterm.js 6.0 terminal connected to a live PTY via tmux
-- WebGL2 GPU-accelerated rendering with automatic DOM fallback
-- Flow control with backpressure (400KB high / 100KB low watermark)
-- PTY output streamed via Tauri IPC channels for ordered, low-latency delivery
-- Correct terminal resize (SIGWINCH) when panel splits are dragged
-- Multi-tab terminal with per-project tab isolation and persistence
-- Crash recovery overlay with "Restart Session" button
-
-### Theming
-
-- Navy-blue dark palette with layered depth and refined typography (Geist / Geist Mono)
-- User-defined terminal colors via `~/.config/efx-mux/theme.json`
-- iTerm2 `.json` profile auto-conversion
-- Hot-reload: save `theme.json` and all terminals re-theme instantly
-- Light mode with harmonized white palette
-
-### Layout
-
-- 3-zone layout: collapsible sidebar + main terminal + right panel (top/bottom split)
-- Drag-resizable splits with persisted ratios
-- Sidebar toggles between 40px icon strip and full-width (Ctrl+B)
-- Collapsible server pane at the bottom of the main panel (Ctrl+S)
-
-### Right Panel Views
-
-| Tab | Description |
-|-----|-------------|
-| **GSD** | Markdown viewer with live file watching, progress bars, and checkbox write-back |
-| **Diff** | GitHub-style unified diff with colored additions/deletions and +/- stats |
-| **File Tree** | Interactive directory tree with folder collapse, inline icons, and keyboard navigation |
-| **Bash** | Independent xterm.js terminal for ad-hoc commands |
-
-### Project System
-
-- Register projects with path, name, agent type, GSD file, and server command
-- Sidebar shows project list with git branch badges and file change counts (M/S/U)
-- Fuzzy-search project switcher (Ctrl+P)
-- Atomic project switch: terminal session, git status, file tree, GSD viewer all update together
-
-### Agent Support
-
-- Auto-detect `claude` or `opencode` binary on PATH
-- Launch directly in tmux PTY — no wrapping, no protocol interception
-- Per-project agent configuration
-- Agent header card with version info, model name, and status pill
-- Fallback to plain bash with informational banner if agent not found
-
-### Server Pane
-
-- Collapsible bottom split with strip/expanded toggle
-- Run your dev server with ANSI color output
-- Controls: Open in Browser, Restart, Stop
-- Per-project server isolation — servers keep running across project switches
-
-### Keyboard
-
-| Shortcut | Action |
-|----------|--------|
-| Ctrl+B | Toggle sidebar |
-| Ctrl+S | Toggle server pane |
-| Ctrl+T | New terminal tab |
-| Ctrl+W / Cmd+W | Close tab |
-| Ctrl+Tab | Cycle tabs |
-| Ctrl+P | Fuzzy project switcher |
-| Ctrl+, | Preferences |
-| Ctrl+/ | Keyboard cheatsheet |
-| Cmd+K | Clear terminal |
-| Ctrl+C/D/Z/L/R | Always passed through to PTY when terminal is focused |
-
-### Session Persistence
-
-- Full layout state saved to `~/.config/efx-mux/state.json`
-- On reopen: layout restored, tabs restored, tmux sessions reattached
-- Dead session detection with fresh session creation
-- Corrupted state fallback to safe defaults
-- First-run wizard for initial project setup
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Shell | [Tauri 2](https://v2.tauri.app) (Rust) |
-| Frontend | [Preact](https://preactjs.com) + [Signals](https://preactjs.com/guide/v10/signals/) |
-| Bundler | [Vite](https://vite.dev) |
-| Styling | [Tailwind CSS 4](https://tailwindcss.com) |
-| Language | TypeScript 6 |
-| Terminal | [xterm.js 6.0](https://xtermjs.org) + WebGL addon |
-| PTY | [portable-pty](https://docs.rs/portable-pty) (Rust) |
-| Sessions | tmux |
-| Git | [git2](https://docs.rs/git2) (libgit2 bindings, no shell-out) |
-| File watching | [notify](https://docs.rs/notify) (Rust) |
-| Markdown | [marked](https://marked.js.org) |
-| Icons | [Lucide](https://lucide.dev) |
-| Fonts | Geist, Geist Mono, FiraCode |
-
----
-
-## Design System
-
-Efxmux uses a navy-blue palette with layered depth, designed for long coding sessions:
-
-| Token | Dark | Light |
-|-------|------|-------|
-| Background | `#111927` | `#FFFFFF` |
-| Elevated | `#19243A` | `#F6F8FA` |
-| Deep | `#0B1120` | `#FFFFFF` |
-| Border | `#243352` | `#D0D7DE` |
-| Surface | `#324568` | `#E8ECF0` |
-| Accent | `#258AD1` | `#258AD1` |
-| Text | `#E6EDF3` | `#1F2328` |
-| Text Muted | `#8B949E` | `#59636E` |
-
-Typography: **Geist** for UI chrome, **Geist Mono** for code and section labels, **FiraCode** inside xterm.js.
-
----
-
-## Prerequisites
-
-- **macOS** (Monterey 12+ recommended)
-- **tmux** 3.x+ (`brew install tmux`)
-- **Rust** toolchain (`rustup`)
-- **Node.js** 18+ and **pnpm**
-- **Claude Code** or **OpenCode** (optional — falls back to plain bash)
-
-## Getting Started
-
-```bash
-# Clone the repository
-git clone https://github.com/your-username/efx-mux.git
-cd efx-mux
-
-# Install dependencies
-pnpm install
-
-# Run in development mode (Vite + Tauri hot-reload)
-pnpm tauri dev
-
-# Build for production
-pnpm tauri build
-```
-
-On first launch, the setup wizard will guide you through adding your first project and selecting your AI agent.
-
----
-
-## Architecture
-
-```
-src/                          # Frontend (Preact + TypeScript)
-  components/                 # 16 UI components
-    sidebar.tsx               # Project list, git status, collapsible
-    main-panel.tsx            # Primary terminal + server pane
-    right-panel.tsx           # Tabbed views (GSD/Diff/FileTree/Bash)
-    terminal-tabs.tsx         # Tab lifecycle, per-project persistence
-    agent-header.tsx          # Agent info card with status
-    gsd-viewer.tsx            # Markdown viewer with write-back
-    diff-viewer.tsx           # GitHub-style unified diff
-    file-tree.tsx             # Interactive directory tree
-    server-pane.tsx           # Dev server controls
-    ...
-  terminal/                   # xterm.js management
-    terminal-manager.ts       # Create/configure xterm instances
-    pty-bridge.ts             # Tauri IPC ↔ PTY communication
-    resize-handler.ts         # SIGWINCH propagation
-  tokens.ts                   # Design system tokens
-  state-manager.ts            # App state persistence
-  main.tsx                    # Entry point + keyboard handler
-
-src-tauri/                    # Backend (Rust)
-  src/
-    terminal/pty.rs           # PTY spawning, flow control, tmux
-    theme/                    # Theme loading, hot-reload, iTerm2 import
-    state.rs                  # State persistence (state.json)
-    project.rs                # Project registration and switching
-    git_status.rs             # git2 integration
-    file_watcher.rs           # notify-based file watching
-    server.rs                 # Dev server process management
-    file_ops.rs               # File read/write for frontend
-```
-
----
-
-## What Efxmux Is Not
-
-- **Not a text editor** — Files open in your `$EDITOR` via a terminal tab
-- **Not an AI shell copilot** — Claude Code _is_ the AI; Efxmux is the workspace around it
-- **Not cross-platform** — macOS first. No Windows/Linux support planned for v0.1
-- **Not a collaboration tool** — Solo developer workspace, no cloud sync
-- **Not a plugin platform** — Focused tool, not an extensible framework
-
----
-
-## License
-
-MIT
-
----
-
-Built with Tauri, Preact, xterm.js, and tmux. Designed for developers who live in the terminal.
-````
-
-## File: repomix.config.json
-````json
-{
-  "output": {
-    "filePath": "repomix-output.xml",
-    "style": "xml"
-  },
-  "ignore": {
-    "customPatterns": [
-      "src-tauri/target/**",
-      "src-tauri/icons/**",
-      "dist/**",
-      "coverage/**",
-      ".planning/**",
-      ".claude/**",
-      "RESEARCH/**",
-      ".vscode/**",
-      ".github/**",
-      "**/*.woff2",
-      "**/*.icns",
-      "**/*.ico",
-      "**/*.png",
-      "pnpm-lock.yaml",
-      "package-lock.json",
-      "**/*.test.ts",
-      "**/*.test.tsx"
-    ]
-  }
-}
-````
-
-## File: vitest.config.ts
-````typescript
-import { defineConfig } from 'vitest/config';
-import preact from '@preact/preset-vite';
-
-export default defineConfig({
-  plugins: [preact()],
-  test: {
-    environment: 'jsdom',
-    include: ['src/**/*.test.{ts,tsx}'],
-    setupFiles: ['./vitest.setup.ts'],
-    globals: true,
-    passWithNoTests: true,
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json-summary', 'html'],
-      include: ['src/**/*.{ts,tsx}'],
-      exclude: [
-        'src/vite-env.d.ts',
-        'src/**/*.test.{ts,tsx}',
-        'src/main.tsx',
-        'src/terminal/terminal-manager.ts',
-        'src/terminal/pty-bridge.ts',
-        'src/terminal/resize-handler.ts',
-        'src/drag-manager.ts',
-        'src/**/*.d.ts',
-      ],
-      thresholds: {
-        statements: 60,
-        branches: 60,
-        functions: 60,
-        lines: 60,
-      },
-    },
-  },
-});
-````
-
-## File: vitest.setup.ts
-````typescript
-// vitest.setup.ts — Global test setup for Efxmux
-// Runs before every test file via vitest.config.ts setupFiles
-import { vi, beforeEach, afterEach } from 'vitest';
-import '@testing-library/jest-dom/vitest';
-
-// ─── D-03: WebCrypto polyfill ────────────────────────────────
-// jsdom lacks crypto.getRandomValues, which Tauri mocks need at import time
-if (!globalThis.crypto?.getRandomValues) {
-  const { randomFillSync } = await import('node:crypto');
-  Object.defineProperty(globalThis, 'crypto', {
-    value: {
-      getRandomValues: (buf: Uint8Array) => randomFillSync(buf),
-      subtle: {},
-    },
-  });
-}
-
-// ─── D-01: Tauri IPC auto-mock ───────────────────────────────
-// Set __TAURI_INTERNALS__ so any module importing @tauri-apps/api/core
-// does not throw at module load time (Pitfall 1 from research)
-beforeEach(() => {
-  (globalThis as any).__TAURI_INTERNALS__ = {
-    postMessage: vi.fn(),
-    ipc: vi.fn(),
-  };
-  (globalThis as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = {};
-});
-
-afterEach(async () => {
-  try {
-    const { clearMocks } = await import('@tauri-apps/api/mocks');
-    clearMocks();
-  } catch {
-    // clearMocks may fail if mocks weren't initialized; safe to ignore
-  }
-  delete (globalThis as any).__TAURI_INTERNALS__;
-  delete (globalThis as any).__TAURI_EVENT_PLUGIN_INTERNALS__;
-});
-
-// ─── D-02: xterm.js auto-mock ────────────────────────────────
-// jsdom has no WebGL/canvas — mock all xterm packages so any module
-// that transitively imports Terminal gets a stub automatically
-vi.mock('@xterm/xterm', () => {
-  class MockTerminal {
-    options: any;
-    open = vi.fn();
-    write = vi.fn();
-    writeln = vi.fn();
-    dispose = vi.fn();
-    clear = vi.fn();
-    reset = vi.fn();
-    focus = vi.fn();
-    blur = vi.fn();
-    onData = vi.fn(() => ({ dispose: vi.fn() }));
-    onResize = vi.fn(() => ({ dispose: vi.fn() }));
-    onTitleChange = vi.fn(() => ({ dispose: vi.fn() }));
-    loadAddon = vi.fn();
-    rows = 24;
-    cols = 80;
-    element = null;
-    textarea = null;
-    unicode = { activeVersion: '11' };
-    parser = { registerOscHandler: vi.fn() };
-    constructor(opts?: any) {
-      this.options = opts || {};
-    }
-  }
-  return { Terminal: MockTerminal };
-});
-
-vi.mock('@xterm/addon-webgl', () => ({
-  WebglAddon: vi.fn().mockImplementation(() => ({
-    dispose: vi.fn(),
-    onContextLoss: vi.fn(() => ({ dispose: vi.fn() })),
-  })),
-}));
-
-vi.mock('@xterm/addon-fit', () => ({
-  FitAddon: vi.fn().mockImplementation(() => ({
-    fit: vi.fn(),
-    proposeDimensions: vi.fn(() => ({ cols: 80, rows: 24 })),
-    dispose: vi.fn(),
-  })),
-}));
-
-vi.mock('@xterm/addon-web-links', () => ({
-  WebLinksAddon: vi.fn().mockImplementation(() => ({
-    dispose: vi.fn(),
-  })),
-}));
-
-// ─── D-04: Signal reset utility ──────────────────────────────
-// Exported for test files that need to reset module-scoped signals.
-// Each test file imports and calls resetSignals() in its own beforeEach.
-// We do NOT auto-reset here to avoid importing all signal modules globally
-// (which would create circular dependency risk).
-//
-// Usage in test files:
-//   import { someSignal } from './state-manager';
-//   beforeEach(() => { someSignal.value = initialValue; });
-````
-
-## File: src/components/gsd-viewer.tsx
-````typescript
-// gsd-viewer.tsx -- GSD Markdown viewer with checkbox write-back + auto-refresh
-// D-01: Checkbox write-back via write_checkbox Rust command
-// D-02: marked.js renders markdown with task checkboxes
-// D-03: Auto-refresh on md-file-changed Tauri event
-
-import { useRef, useEffect } from 'preact/hooks';
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import { marked } from 'marked';
-import { activeProjectName, projects } from '../state-manager';
-import type { ProjectEntry } from '../state-manager';
-import { colors } from '../tokens';
-
-/**
- * Build a map of checkbox index -> line number (0-indexed).
- * Scans markdown text for task list items: `- [ ]`, `- [x]`, `* [ ]`, `* [x]`.
- */
-function buildLineMap(text: string): number[] {
-  const lines = text.split('\n');
-  const lineMap: number[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    if (/^\s*[-*]\s*\[[ xX]\]/.test(lines[i])) {
-      lineMap.push(i);
-    }
-  }
-  return lineMap;
-}
-
-/**
- * Inject data-line attributes into rendered HTML.
- * Finds <input> checkboxes and wraps their parent <li> with data-line.
- */
-function injectLineNumbers(renderedHtml: string, lineMap: number[]): string {
-  let checkboxIndex = 0;
-  return renderedHtml.replace(
-    /<input type="checkbox" class="task-checkbox"([^>]*)>/g,
-    (_match: string, attrs: string) => {
-      const line = lineMap[checkboxIndex] !== undefined ? lineMap[checkboxIndex] : -1;
-      checkboxIndex++;
-      return `<input type="checkbox" class="task-checkbox" data-line="${line}"${attrs}>`;
-    }
-  );
-}
-
-// Configure marked with custom checkbox renderer (D-02)
-marked.use({
-  renderer: {
-    checkbox({ checked }: { checked: boolean }) {
-      return `<input type="checkbox" class="task-checkbox"${checked ? ' checked' : ''}>`;
-    }
-  }
-});
-
-/**
- * GSD Viewer component.
- * Renders markdown with interactive checkboxes that write back to the .md file.
- * Auto-refreshes when the watched .md file changes externally.
- */
-export function GSDViewer() {
-  const contentRef = useRef<HTMLDivElement>(null);
-  const currentPathRef = useRef<string | null>(null);
-
-  /**
-   * Get the active project from signals.
-   */
-  function getActiveProject(): ProjectEntry | undefined {
-    return projects.value.find(p => p.name === activeProjectName.value);
-  }
-
-  useEffect(() => {
-    /**
-     * Load and render the GSD markdown file for a project.
-     */
-    async function loadGSD(project: ProjectEntry) {
-      if (!project || !project.path) return;
-      const gsdFile = project.gsd_file || 'PLAN.md';
-      const path = project.path + '/' + gsdFile;
-      currentPathRef.current = path;
-
-      try {
-        const content = await invoke<string>('read_file_content', { path });
-        const lineMap = buildLineMap(content);
-        const rendered = marked.parse(content, { async: false }) as string;
-        const withLines = injectLineNumbers(rendered, lineMap);
-        if (contentRef.current) {
-          contentRef.current.innerHTML = withLines;
-        }
-      } catch (err) {
-        console.warn('[efxmux] Failed to load GSD file:', err);
-        if (contentRef.current) {
-          contentRef.current.innerHTML = `<div class="p-4 text-text text-[13px]">No GSD file found (${gsdFile})</div>`;
-        }
-      }
-    }
-
-    // Listen for md-file-changed Tauri event (D-03: auto-refresh)
-    let unlistenFn: (() => void) | null = null;
-    listen('md-file-changed', () => {
-      const project = getActiveProject();
-      if (project && currentPathRef.current) {
-        loadGSD(project);
-      }
-    }).then(fn => { unlistenFn = fn; });
-
-    // Listen for project-changed DOM event (re-render when project switches)
-    function handleProjectChanged() {
-      setTimeout(() => {
-        const project = getActiveProject();
-        if (project) loadGSD(project);
-      }, 50);
-    }
-    document.addEventListener('project-changed', handleProjectChanged);
-
-    // Initial load when component mounts
-    const project = getActiveProject();
-    if (project) loadGSD(project);
-
-    return () => {
-      if (unlistenFn) unlistenFn();
-      document.removeEventListener('project-changed', handleProjectChanged);
-    };
-  }, []);
-
-  /**
-   * Handle checkbox click events (D-01: write-back).
-   * Delegates from container to avoid per-checkbox listeners.
-   */
-  function handleClick(e: MouseEvent) {
-    const target = e.target as HTMLElement;
-    if (!target.classList.contains('task-checkbox')) return;
-    const input = target as HTMLInputElement;
-    const line = parseInt(input.dataset.line || '', 10);
-    if (isNaN(line) || line < 0) return;
-    const checked = input.checked;
-    if (!currentPathRef.current) return;
-    invoke('write_checkbox', { path: currentPathRef.current, line, checked }).catch((err: unknown) => {
-      console.error('[efxmux] write_checkbox failed:', err);
-      // Revert checkbox visual state on error
-      input.checked = !checked;
-    });
-  }
-
-  return (
-    <div
-      class="h-full overflow-y-auto bg-bg-terminal p-1 flex flex-col"
-      onClick={handleClick}
-    >
-      <div
-        ref={contentRef}
-        class="file-viewer-markdown flex-1 m-0 overflow-auto text-[14px] leading-relaxed"
-        style={{ fontFamily: 'Geist, system-ui, sans-serif', color: colors.textMuted, padding: '6px' }}
-      >
-        <div class="text-text text-[13px]">Loading GSD...</div>
-      </div>
-    </div>
-  );
-}
-````
-
-## File: src/components/main-panel.tsx
-````typescript
-// main-panel.tsx -- Main panel with terminal-area + file viewer overlay + server-pane
-// Phase 2: terminal-area is empty -- xterm.js mounts via querySelector (D-08)
-
-import { signal } from '@preact/signals';
-import { useEffect } from 'preact/hooks';
-import { marked } from 'marked';
-import { ServerPane, serverPaneState } from './server-pane';
-import { TerminalTabBar, ActiveTabCrashOverlay } from './terminal-tabs';
-import { AgentHeader } from './agent-header';
-import { colors } from '../tokens';
-
-// Module-level signals for file viewer state
-const fileViewerVisible = signal(false);
-const fileName = signal('');
-const filePath = signal('');
-const fileContent = signal('');
-
-function closeFileViewer(): void {
-  fileViewerVisible.value = false;
-  fileContent.value = '';
-}
-
-/**
- * Escape HTML entities for safe rendering in pre block.
- */
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-/**
- * Detect if a filename is a markdown file.
- */
-function isMarkdownFile(name: string): boolean {
-  return /\.(md|markdown|mdx)$/i.test(name);
-}
-
-/**
- * Detect file language from extension for syntax highlighting.
- */
-function getLanguage(name: string): string | null {
-  const ext = name.split('.').pop()?.toLowerCase();
-  const map: Record<string, string> = {
-    ts: 'ts', tsx: 'ts', js: 'js', jsx: 'js', mjs: 'js', cjs: 'js',
-    rs: 'rs', css: 'css', json: 'json', toml: 'toml', yaml: 'yaml', yml: 'yaml',
-    html: 'html', htm: 'html', xml: 'html', svg: 'html',
-    sh: 'sh', bash: 'sh', zsh: 'sh', fish: 'sh',
-    py: 'py', rb: 'rb', go: 'go', java: 'java', c: 'c', cpp: 'c', h: 'c',
-  };
-  return ext ? (map[ext] || null) : null;
-}
-
-// Syntax token classes map to CSS classes: .syn-kw, .syn-str, .syn-cm, .syn-num, .syn-fn, .syn-op, .syn-type
-// We keep this simple: regex-based line-by-line tokenization with no parser.
-
-const KEYWORDS_JS = /\b(import|export|from|default|const|let|var|function|return|if|else|switch|case|break|for|while|do|new|this|class|extends|implements|interface|type|enum|async|await|yield|try|catch|finally|throw|typeof|instanceof|in|of|void|delete|null|undefined|true|false|super|static|get|set|as|satisfies)\b/g;
-const KEYWORDS_RS = /\b(fn|let|mut|const|pub|use|mod|struct|enum|impl|trait|type|where|match|if|else|for|while|loop|break|continue|return|self|Self|super|crate|true|false|as|in|ref|move|async|await|unsafe|extern|dyn|static|macro_rules)\b/g;
-const KEYWORDS_PY = /\b(def|class|import|from|return|if|elif|else|for|while|break|continue|pass|yield|try|except|finally|raise|with|as|lambda|True|False|None|and|or|not|in|is|del|global|nonlocal|async|await)\b/g;
-const KEYWORDS_GO = /\b(func|var|const|type|struct|interface|map|chan|go|select|case|default|if|else|for|range|return|break|continue|switch|defer|package|import|true|false|nil|make|len|cap|append|new)\b/g;
-const KEYWORDS_SH = /\b(if|then|else|elif|fi|for|while|do|done|case|esac|function|return|exit|echo|export|local|readonly|source|set|unset|shift|true|false)\b/g;
-const KEYWORDS_CSS = /\b(import|media|keyframes|font-face|supports|charset)\b/g;
-const KEYWORDS_TOML = /\b(true|false)\b/g;
-
-function getKeywordsPattern(lang: string): RegExp | null {
-  switch (lang) {
-    case 'ts': case 'js': return KEYWORDS_JS;
-    case 'rs': return KEYWORDS_RS;
-    case 'py': return KEYWORDS_PY;
-    case 'go': return KEYWORDS_GO;
-    case 'sh': return KEYWORDS_SH;
-    case 'css': return KEYWORDS_CSS;
-    case 'toml': case 'yaml': return KEYWORDS_TOML;
-    case 'java': case 'c': return KEYWORDS_JS; // close enough for basic highlighting
-    default: return null;
-  }
-}
-
-/**
- * Simple syntax highlighter: produces HTML with <span class="syn-*"> tokens.
- * Works line-by-line. Handles strings, comments, numbers, keywords, and types.
- */
-function highlightCode(code: string, lang: string): string {
-  const escaped = escapeHtml(code);
-  const lines = escaped.split('\n');
-  let inBlockComment = false;
-
-  const kwPattern = getKeywordsPattern(lang);
-
-  return lines.map(line => {
-    // Block comment handling (/* ... */)
-    if (inBlockComment) {
-      const endIdx = line.indexOf('*/');
-      if (endIdx >= 0) {
-        inBlockComment = false;
-        const commentPart = line.slice(0, endIdx + 2);
-        const rest = line.slice(endIdx + 2);
-        return `<span class="syn-cm">${commentPart}</span>${highlightLine(rest, lang, kwPattern)}`;
-      }
-      return `<span class="syn-cm">${line}</span>`;
-    }
-
-    const blockStart = line.indexOf('/*');
-    if (blockStart >= 0 && !isInsideString(line, blockStart)) {
-      const blockEnd = line.indexOf('*/', blockStart + 2);
-      if (blockEnd >= 0) {
-        // Single-line block comment
-        const before = line.slice(0, blockStart);
-        const comment = line.slice(blockStart, blockEnd + 2);
-        const after = line.slice(blockEnd + 2);
-        return `${highlightLine(before, lang, kwPattern)}<span class="syn-cm">${comment}</span>${highlightLine(after, lang, kwPattern)}`;
-      } else {
-        inBlockComment = true;
-        const before = line.slice(0, blockStart);
-        const comment = line.slice(blockStart);
-        return `${highlightLine(before, lang, kwPattern)}<span class="syn-cm">${comment}</span>`;
-      }
-    }
-
-    return highlightLine(line, lang, kwPattern);
-  }).join('\n');
-}
-
-/** Check if a position is inside a string (approximate). */
-function isInsideString(line: string, pos: number): boolean {
-  let inSingle = false, inDouble = false, inBacktick = false;
-  for (let i = 0; i < pos; i++) {
-    const ch = line[i];
-    const prev = i > 0 ? line[i - 1] : '';
-    if (ch === "'" && !inDouble && !inBacktick && prev !== '\\') inSingle = !inSingle;
-    if (ch === '&' && line.slice(i, i + 6) === '&quot;' && !inSingle && !inBacktick) { inDouble = !inDouble; i += 5; continue; }
-    if (ch === '`' && !inSingle && !inDouble && prev !== '\\') inBacktick = !inBacktick;
-  }
-  return inSingle || inDouble || inBacktick;
-}
-
-/** Highlight a single line (no block comment state). */
-function highlightLine(line: string, lang: string, kwPattern: RegExp | null): string {
-  if (!line) return line;
-
-  // Line comments
-  const commentMarkers = (lang === 'py' || lang === 'sh' || lang === 'yaml' || lang === 'toml') ? ['#'] : ['//'];
-  for (const marker of commentMarkers) {
-    const idx = line.indexOf(marker);
-    if (idx >= 0 && !isInsideString(line, idx)) {
-      const before = line.slice(0, idx);
-      const comment = line.slice(idx);
-      return `${tokenizeLine(before, lang, kwPattern)}<span class="syn-cm">${comment}</span>`;
-    }
-  }
-
-  return tokenizeLine(line, lang, kwPattern);
-}
-
-/** Tokenize a line segment: strings, numbers, keywords, types. */
-function tokenizeLine(segment: string, lang: string, kwPattern: RegExp | null): string {
-  if (!segment) return segment;
-
-  // Replace strings first (they shouldn't be keyword-highlighted)
-  // Match &quot;...&quot;, '...', `...` (escaped quotes are already HTML entities)
-  let result = segment.replace(/&quot;((?:[^&]|&(?!quot;))*)&quot;/g, '<span class="syn-str">&quot;$1&quot;</span>');
-  result = result.replace(/'([^'\\]*(?:\\.[^'\\]*)*)'/g, '<span class="syn-str">\'$1\'</span>');
-  result = result.replace(/`([^`]*)`/g, '<span class="syn-str">`$1`</span>');
-
-  // Numbers (not inside tags already)
-  result = result.replace(/(?<![a-zA-Z_"'>])(\b\d+\.?\d*(?:e[+-]?\d+)?\b)/g, '<span class="syn-num">$1</span>');
-
-  // Keywords
-  if (kwPattern) {
-    result = result.replace(kwPattern, '<span class="syn-kw">$&</span>');
-  }
-
-  // Type-like identifiers (PascalCase words not already wrapped)
-  result = result.replace(/(?<![<"'a-z])(\b[A-Z][a-zA-Z0-9]*\b)(?![^<]*>)/g, (match, p1) => {
-    // Don't re-wrap if already inside a span
-    return `<span class="syn-type">${p1}</span>`;
-  });
-
-  return result;
-}
-
-/**
- * Render file content based on type: markdown, code with highlighting, or plain text.
- */
-function renderFileContent(name: string, content: string): { html: string; isMarkdown: boolean } {
-  if (isMarkdownFile(name)) {
-    const html = marked.parse(content, { async: false }) as string;
-    return { html, isMarkdown: true };
-  }
-
-  const lang = getLanguage(name);
-  if (lang) {
-    return { html: highlightCode(content, lang), isMarkdown: false };
-  }
-
-  return { html: escapeHtml(content), isMarkdown: false };
-}
-
-export function MainPanel() {
-  // Register show-file-viewer and Escape key listeners
-  useEffect(() => {
-    function handleShowFile(e: Event) {
-      const detail = (e as CustomEvent).detail;
-      if (detail) {
-        fileName.value = detail.name || '';
-        filePath.value = detail.path || '';
-        fileContent.value = detail.content || '';
-        fileViewerVisible.value = true;
-      }
-    }
-
-    function handleKeydown(e: KeyboardEvent) {
-      if (e.key === 'Escape' && fileViewerVisible.value) {
-        e.preventDefault();
-        closeFileViewer();
-      }
-    }
-
-    document.addEventListener('show-file-viewer', handleShowFile);
-    document.addEventListener('keydown', handleKeydown);
-
-    return () => {
-      document.removeEventListener('show-file-viewer', handleShowFile);
-      document.removeEventListener('keydown', handleKeydown);
-    };
-  }, []);
-
-  const rendered = fileViewerVisible.value
-    ? renderFileContent(fileName.value, fileContent.value)
-    : { html: '', isMarkdown: false };
-
-  return (
-    <main class="main-panel relative" aria-label="Main panel">
-      <TerminalTabBar />
-      <div class="terminal-area flex-1 bg-bg-terminal overflow-hidden relative min-h-[100px]">
-        <AgentHeader />
-        <div class="terminal-containers absolute inset-0" />
-        <ActiveTabCrashOverlay />
-      </div>
-
-      {fileViewerVisible.value && (
-        <div class="absolute inset-0 flex flex-col" style={{ backgroundColor: colors.bgBase, zIndex: 10 }}>
-          <div class="flex items-center justify-between px-3 py-1.5 shrink-0" style={{ backgroundColor: colors.bgElevated, borderBottom: `1px solid ${colors.bgBorder}` }}>
-            <div class="flex items-center gap-2 min-w-0">
-              <span class="text-[10px] px-1.5 py-px rounded-sm font-semibold tracking-wider shrink-0" style={{ backgroundColor: colors.accent, color: colors.bgBase }}>READ-ONLY</span>
-              <span class="text-[13px] font-mono overflow-hidden text-ellipsis whitespace-nowrap" style={{ fontFamily: 'GeistMono', color: colors.textSecondary }}>{fileName.value}</span>
-            </div>
-            <button
-              onClick={closeFileViewer}
-              class="cursor-pointer px-2.5 py-1 rounded text-xs font-mono transition-colors duration-150"
-              style={{ fontFamily: 'GeistMono', backgroundColor: 'transparent', border: `1px solid ${colors.bgBorder}`, color: colors.textMuted }}
-              title="Close file viewer (Esc)"
-            >Close</button>
-          </div>
-          {rendered.isMarkdown ? (
-            <div
-              class="file-viewer-markdown flex-1 m-0 overflow-auto text-[14px] leading-relaxed"
-              style={{ fontFamily: 'Geist, system-ui, sans-serif', color: colors.textMuted, padding: '14px' }}
-              dangerouslySetInnerHTML={{ __html: rendered.html }}
-            />
-          ) : (
-            <pre
-              class="flex-1 m-0 overflow-auto text-[13px] font-mono leading-relaxed whitespace-pre tab-[4]"
-              style={{ fontFamily: 'GeistMono', color: colors.textMuted, padding: '14px' }}
-              dangerouslySetInnerHTML={{ __html: rendered.html }}
-            />
-          )}
-        </div>
-      )}
-
-      {serverPaneState.value === 'expanded' && (
-        <div
-          class="split-handle-h"
-          data-handle="main-h"
-          role="separator"
-          aria-orientation="horizontal"
-          aria-label="Resize server pane"
-        />
-      )}
-      <ServerPane />
-    </main>
-  );
 }
 ````
 
@@ -8621,6 +6898,466 @@ mod tests {
         assert_eq!(state.version, 1);
     }
 }
+````
+
+## File: src-tauri/tauri.conf.json
+````json
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Efxmux",
+  "version": "0.2.2",
+  "identifier": "com.efxmux.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "title": "Efxmux",
+        "width": 1400,
+        "height": 900,
+        "resizable": true,
+        "decorations": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "entitlements": "./Entitlements.plist"
+    }
+  }
+}
+````
+
+## File: .gitignore
+````
+RESEARCH
+node_modules/
+.code-review-graph
+dist
+coverage/
+repomix-output.xml
+````
+
+## File: README.md
+````markdown
+# Efxmux
+
+![Efxmux](public/img/app-ui.png)
+
+**A native macOS terminal multiplexer for AI-assisted development.**
+
+Efxmux wraps Claude Code and OpenCode terminal sessions in a structured, multi-panel workspace. It co-locates the AI agent terminal, a live GSD progress viewer with checkbox write-back, git diff, file tree, and a secondary bash terminal — all around a real PTY connected to tmux. No wrapping, no protocol hacks, just the raw binary in a native window.
+
+> Developers using Claude Code or OpenCode lose context switching between the terminal, their editor, and their planning docs. Efxmux collapses all of that into one native window with a terminal-first aesthetic — dark, fast, keyboard-driven.
+
+---
+
+## Why Efxmux
+
+- **Zero wrapping** — Claude Code and OpenCode run as native PTY processes inside tmux. Full color, full interactivity, zero compatibility issues.
+- **Persistent sessions** — Close the app, reopen it. Your layout, tabs, and tmux sessions are exactly where you left them. Processes keep running in the background.
+- **Live planning panel** — Render your GSD `PLAN.md` with progress bars and checkboxes. Click a checkbox in the panel, it writes back to the `.md` file on disk, and Claude Code sees the change. Bidirectional.
+- **Git diff at a glance** — GitHub-style unified diff viewer powered by `git2` (no shell-out). See what changed without leaving the workspace.
+- **Project-scoped workspaces** — Register multiple projects. Switch between them and the terminal session, git status, file tree, and GSD viewer all update atomically.
+- **Native performance** — Tauri 2 + Rust backend. WebGL-accelerated terminal rendering via xterm.js 6.0. Sub-20ms input latency.
+
+---
+
+## Features
+
+### Terminal
+
+- Real xterm.js 6.0 terminal connected to a live PTY via tmux
+- WebGL2 GPU-accelerated rendering with automatic DOM fallback
+- Flow control with backpressure (400KB high / 100KB low watermark)
+- PTY output streamed via Tauri IPC channels for ordered, low-latency delivery
+- Correct terminal resize (SIGWINCH) when panel splits are dragged
+- Multi-tab terminal with per-project tab isolation and persistence
+- Crash recovery overlay with "Restart Session" button
+
+### Theming
+
+- Navy-blue dark palette with layered depth and refined typography (Geist / Geist Mono)
+- User-defined terminal colors via `~/.config/efx-mux/theme.json`
+- iTerm2 `.json` profile auto-conversion
+- Hot-reload: save `theme.json` and all terminals re-theme instantly
+- Light mode with harmonized white palette
+
+### Layout
+
+- 3-zone layout: collapsible sidebar + main terminal + right panel (top/bottom split)
+- Drag-resizable splits with persisted ratios
+- Sidebar toggles between 40px icon strip and full-width (Ctrl+B)
+- Collapsible server pane at the bottom of the main panel (Ctrl+S)
+
+### Right Panel Views
+
+| Tab | Description |
+|-----|-------------|
+| **GSD** | Markdown viewer with live file watching, progress bars, and checkbox write-back |
+| **Diff** | GitHub-style unified diff with colored additions/deletions and +/- stats |
+| **File Tree** | Interactive directory tree with folder collapse, inline icons, and keyboard navigation |
+| **Bash** | Independent xterm.js terminal for ad-hoc commands |
+
+### Project System
+
+- Register projects with path, name, agent type, GSD file, and server command
+- Sidebar shows project list with git branch badges and file change counts (M/S/U)
+- Fuzzy-search project switcher (Ctrl+P)
+- Atomic project switch: terminal session, git status, file tree, GSD viewer all update together
+
+### Agent Support
+
+- Auto-detect `claude` or `opencode` binary on PATH
+- Launch directly in tmux PTY — no wrapping, no protocol interception
+- Per-project agent configuration
+- Agent header card with version info, model name, and status pill
+- Fallback to plain bash with informational banner if agent not found
+
+### Server Pane
+
+- Collapsible bottom split with strip/expanded toggle
+- Run your dev server with ANSI color output
+- Controls: Open in Browser, Restart, Stop
+- Per-project server isolation — servers keep running across project switches
+
+### Keyboard
+
+| Shortcut | Action |
+|----------|--------|
+| Ctrl+B | Toggle sidebar |
+| Ctrl+S | Toggle server pane |
+| Ctrl+T | New terminal tab |
+| Ctrl+W / Cmd+W | Close tab |
+| Ctrl+Tab | Cycle tabs |
+| Ctrl+P | Fuzzy project switcher |
+| Ctrl+, | Preferences |
+| Ctrl+/ | Keyboard cheatsheet |
+| Cmd+K | Clear terminal |
+| Ctrl+C/D/Z/L/R | Always passed through to PTY when terminal is focused |
+
+### Session Persistence
+
+- Full layout state saved to `~/.config/efx-mux/state.json`
+- On reopen: layout restored, tabs restored, tmux sessions reattached
+- Dead session detection with fresh session creation
+- Corrupted state fallback to safe defaults
+- First-run wizard for initial project setup
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Shell | [Tauri 2](https://v2.tauri.app) (Rust) |
+| Frontend | [Preact](https://preactjs.com) + [Signals](https://preactjs.com/guide/v10/signals/) |
+| Bundler | [Vite](https://vite.dev) |
+| Styling | [Tailwind CSS 4](https://tailwindcss.com) |
+| Language | TypeScript 6 |
+| Terminal | [xterm.js 6.0](https://xtermjs.org) + WebGL addon |
+| PTY | [portable-pty](https://docs.rs/portable-pty) (Rust) |
+| Sessions | tmux |
+| Git | [git2](https://docs.rs/git2) (libgit2 bindings, no shell-out) |
+| File watching | [notify](https://docs.rs/notify) (Rust) |
+| Markdown | [marked](https://marked.js.org) |
+| Icons | [Lucide](https://lucide.dev) |
+| Fonts | Geist, Geist Mono, FiraCode |
+
+---
+
+## Design System
+
+Efxmux uses a navy-blue palette with layered depth, designed for long coding sessions:
+
+| Token | Dark | Light |
+|-------|------|-------|
+| Background | `#111927` | `#FFFFFF` |
+| Elevated | `#19243A` | `#F6F8FA` |
+| Deep | `#0B1120` | `#FFFFFF` |
+| Border | `#243352` | `#D0D7DE` |
+| Surface | `#324568` | `#E8ECF0` |
+| Accent | `#258AD1` | `#258AD1` |
+| Text | `#E6EDF3` | `#1F2328` |
+| Text Muted | `#8B949E` | `#59636E` |
+
+Typography: **Geist** for UI chrome, **Geist Mono** for code and section labels, **FiraCode** inside xterm.js.
+
+---
+
+## Prerequisites
+
+- **macOS** (Monterey 12+ recommended)
+- **tmux** 3.x+ (`brew install tmux`)
+- **Rust** toolchain (`rustup`)
+- **Node.js** 18+ and **pnpm**
+- **Claude Code** or **OpenCode** (optional — falls back to plain bash)
+
+## Getting Started
+
+```bash
+# Clone the repository
+git clone https://github.com/your-username/efx-mux.git
+cd efx-mux
+
+# Install dependencies
+pnpm install
+
+# Run in development mode (Vite + Tauri hot-reload)
+pnpm tauri dev
+
+# Build for production
+pnpm tauri build
+```
+
+On first launch, the setup wizard will guide you through adding your first project and selecting your AI agent.
+
+---
+
+## Architecture
+
+```
+src/                          # Frontend (Preact + TypeScript)
+  components/                 # 16 UI components
+    sidebar.tsx               # Project list, git status, collapsible
+    main-panel.tsx            # Primary terminal + server pane
+    right-panel.tsx           # Tabbed views (GSD/Diff/FileTree/Bash)
+    terminal-tabs.tsx         # Tab lifecycle, per-project persistence
+    agent-header.tsx          # Agent info card with status
+    gsd-viewer.tsx            # Markdown viewer with write-back
+    diff-viewer.tsx           # GitHub-style unified diff
+    file-tree.tsx             # Interactive directory tree
+    server-pane.tsx           # Dev server controls
+    ...
+  terminal/                   # xterm.js management
+    terminal-manager.ts       # Create/configure xterm instances
+    pty-bridge.ts             # Tauri IPC ↔ PTY communication
+    resize-handler.ts         # SIGWINCH propagation
+  tokens.ts                   # Design system tokens
+  state-manager.ts            # App state persistence
+  main.tsx                    # Entry point + keyboard handler
+
+src-tauri/                    # Backend (Rust)
+  src/
+    terminal/pty.rs           # PTY spawning, flow control, tmux
+    theme/                    # Theme loading, hot-reload, iTerm2 import
+    state.rs                  # State persistence (state.json)
+    project.rs                # Project registration and switching
+    git_status.rs             # git2 integration
+    file_watcher.rs           # notify-based file watching
+    server.rs                 # Dev server process management
+    file_ops.rs               # File read/write for frontend
+```
+
+---
+
+## What Efxmux Is Not
+
+- **Not a text editor** — Files open in your `$EDITOR` via a terminal tab
+- **Not an AI shell copilot** — Claude Code _is_ the AI; Efxmux is the workspace around it
+- **Not cross-platform** — macOS first. No Windows/Linux support planned for v0.1
+- **Not a collaboration tool** — Solo developer workspace, no cloud sync
+- **Not a plugin platform** — Focused tool, not an extensible framework
+
+---
+
+## License
+
+MIT
+
+---
+
+Built with Tauri, Preact, xterm.js, and tmux. Designed for developers who live in the terminal.
+````
+
+## File: repomix.config.json
+````json
+{
+  "output": {
+    "filePath": "repomix-output.xml",
+    "style": "xml"
+  },
+  "ignore": {
+    "customPatterns": [
+      "src-tauri/target/**",
+      "src-tauri/icons/**",
+      "dist/**",
+      "coverage/**",
+      ".planning/**",
+      ".claude/**",
+      "RESEARCH/**",
+      ".vscode/**",
+      ".github/**",
+      "**/*.woff2",
+      "**/*.icns",
+      "**/*.ico",
+      "**/*.png",
+      "pnpm-lock.yaml",
+      "package-lock.json",
+      "**/*.test.ts",
+      "**/*.test.tsx"
+    ]
+  }
+}
+````
+
+## File: vitest.config.ts
+````typescript
+import { defineConfig } from 'vitest/config';
+import preact from '@preact/preset-vite';
+
+export default defineConfig({
+  plugins: [preact()],
+  test: {
+    environment: 'jsdom',
+    include: ['src/**/*.test.{ts,tsx}'],
+    setupFiles: ['./vitest.setup.ts'],
+    globals: true,
+    passWithNoTests: true,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json-summary', 'html'],
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: [
+        'src/vite-env.d.ts',
+        'src/**/*.test.{ts,tsx}',
+        'src/main.tsx',
+        'src/terminal/terminal-manager.ts',
+        'src/terminal/pty-bridge.ts',
+        'src/terminal/resize-handler.ts',
+        'src/drag-manager.ts',
+        'src/**/*.d.ts',
+      ],
+      thresholds: {
+        statements: 60,
+        branches: 60,
+        functions: 60,
+        lines: 60,
+      },
+    },
+  },
+});
+````
+
+## File: vitest.setup.ts
+````typescript
+// vitest.setup.ts — Global test setup for Efxmux
+// Runs before every test file via vitest.config.ts setupFiles
+import { vi, beforeEach, afterEach } from 'vitest';
+import '@testing-library/jest-dom/vitest';
+
+// ─── D-03: WebCrypto polyfill ────────────────────────────────
+// jsdom lacks crypto.getRandomValues, which Tauri mocks need at import time
+if (!globalThis.crypto?.getRandomValues) {
+  const { randomFillSync } = await import('node:crypto');
+  Object.defineProperty(globalThis, 'crypto', {
+    value: {
+      getRandomValues: (buf: Uint8Array) => randomFillSync(buf),
+      subtle: {},
+    },
+  });
+}
+
+// ─── D-01: Tauri IPC auto-mock ───────────────────────────────
+// Set __TAURI_INTERNALS__ so any module importing @tauri-apps/api/core
+// does not throw at module load time (Pitfall 1 from research)
+beforeEach(() => {
+  (globalThis as any).__TAURI_INTERNALS__ = {
+    postMessage: vi.fn(),
+    ipc: vi.fn(),
+  };
+  (globalThis as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = {};
+});
+
+afterEach(async () => {
+  try {
+    const { clearMocks } = await import('@tauri-apps/api/mocks');
+    clearMocks();
+  } catch {
+    // clearMocks may fail if mocks weren't initialized; safe to ignore
+  }
+  delete (globalThis as any).__TAURI_INTERNALS__;
+  delete (globalThis as any).__TAURI_EVENT_PLUGIN_INTERNALS__;
+});
+
+// ─── D-02: xterm.js auto-mock ────────────────────────────────
+// jsdom has no WebGL/canvas — mock all xterm packages so any module
+// that transitively imports Terminal gets a stub automatically
+vi.mock('@xterm/xterm', () => {
+  class MockTerminal {
+    options: any;
+    open = vi.fn();
+    write = vi.fn();
+    writeln = vi.fn();
+    dispose = vi.fn();
+    clear = vi.fn();
+    reset = vi.fn();
+    focus = vi.fn();
+    blur = vi.fn();
+    onData = vi.fn(() => ({ dispose: vi.fn() }));
+    onResize = vi.fn(() => ({ dispose: vi.fn() }));
+    onTitleChange = vi.fn(() => ({ dispose: vi.fn() }));
+    loadAddon = vi.fn();
+    rows = 24;
+    cols = 80;
+    element = null;
+    textarea = null;
+    unicode = { activeVersion: '11' };
+    parser = { registerOscHandler: vi.fn() };
+    constructor(opts?: any) {
+      this.options = opts || {};
+    }
+  }
+  return { Terminal: MockTerminal };
+});
+
+vi.mock('@xterm/addon-webgl', () => ({
+  WebglAddon: vi.fn().mockImplementation(() => ({
+    dispose: vi.fn(),
+    onContextLoss: vi.fn(() => ({ dispose: vi.fn() })),
+  })),
+}));
+
+vi.mock('@xterm/addon-fit', () => ({
+  FitAddon: vi.fn().mockImplementation(() => ({
+    fit: vi.fn(),
+    proposeDimensions: vi.fn(() => ({ cols: 80, rows: 24 })),
+    dispose: vi.fn(),
+  })),
+}));
+
+vi.mock('@xterm/addon-web-links', () => ({
+  WebLinksAddon: vi.fn().mockImplementation(() => ({
+    dispose: vi.fn(),
+  })),
+}));
+
+// ─── D-04: Signal reset utility ──────────────────────────────
+// Exported for test files that need to reset module-scoped signals.
+// Each test file imports and calls resetSignals() in its own beforeEach.
+// We do NOT auto-reset here to avoid importing all signal modules globally
+// (which would create circular dependency risk).
+//
+// Usage in test files:
+//   import { someSignal } from './state-manager';
+//   beforeEach(() => { someSignal.value = initialValue; });
 ````
 
 ## File: src/components/file-tree.tsx
@@ -9194,584 +7931,318 @@ export function FileTree() {
 }
 ````
 
-## File: src-tauri/src/terminal/pty.rs
-````rust
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
-use std::collections::HashMap;
-use std::io::Read;
-use std::sync::{
-    atomic::{AtomicBool, AtomicU64, Ordering},
-    Arc, Mutex,
-};
-use tauri::{Emitter, Manager};
+## File: src/components/gsd-viewer.tsx
+````typescript
+// gsd-viewer.tsx -- GSD Markdown viewer with checkbox write-back + auto-refresh
+// D-01: Checkbox write-back via write_checkbox Rust command
+// D-02: marked.js renders markdown with task checkboxes
+// D-03: Auto-refresh on md-file-changed Tauri event
 
-/// High watermark: pause PTY reads when unacknowledged bytes exceed this threshold.
-const FLOW_HIGH_WATERMARK: u64 = 400_000;
+import { useRef, useEffect } from 'preact/hooks';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { marked } from 'marked';
+import { activeProjectName, projects } from '../state-manager';
+import type { ProjectEntry } from '../state-manager';
+import { colors } from '../tokens';
 
-/// Low watermark: resume PTY reads when unacknowledged bytes drop below this threshold.
-/// Hysteresis prevents rapid pause/resume oscillation (HIGH=400KB pause, LOW=100KB resume).
-const FLOW_LOW_WATERMARK: u64 = 100_000;
-
-/// Per-session PTY state holding handles and flow control counters.
-pub struct PtyState {
-    pub writer: Arc<Mutex<Box<dyn std::io::Write + Send>>>,
-    pub master: Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>,
-    /// Tracks cumulative bytes sent to frontend (cloned into read thread before struct creation).
-    #[allow(dead_code)]
-    pub sent_bytes: Arc<AtomicU64>,
-    pub acked_bytes: Arc<AtomicU64>,
-    /// Must stay alive until child exits (portable-pty gotcha from CLAUDE.md).
-    #[allow(dead_code)]
-    pub slave: Arc<Mutex<Option<Box<dyn portable_pty::SlavePty + Send>>>>,
+/**
+ * Build a map of checkbox index -> line number (0-indexed).
+ * Scans markdown text for task list items: `- [ ]`, `- [x]`, `* [ ]`, `* [x]`.
+ */
+function buildLineMap(text: string): number[] {
+  const lines = text.split('\n');
+  const lineMap: number[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\s*[-*]\s*\[[ xX]\]/.test(lines[i])) {
+      lineMap.push(i);
+    }
+  }
+  return lineMap;
 }
 
-/// Tauri-managed wrapper for multiple named PTY sessions (D-09).
-/// Replaces single PtyState managed by app.manage().
-pub struct PtyManager(pub Mutex<HashMap<String, PtyState>>);
-
-/// Probe for tmux availability. Returns version string or error with install instructions.
-pub fn check_tmux() -> Result<String, String> {
-    let output = std::process::Command::new("tmux")
-        .arg("-V")
-        .output()
-        .map_err(|_| "tmux not found. Install with: brew install tmux".to_string())?;
-    if !output.status.success() {
-        return Err("tmux not found. Install with: brew install tmux".to_string());
+/**
+ * Inject data-line attributes into rendered HTML.
+ * Finds <input> checkboxes and wraps their parent <li> with data-line.
+ */
+function injectLineNumbers(renderedHtml: string, lineMap: number[]): string {
+  let checkboxIndex = 0;
+  return renderedHtml.replace(
+    /<input type="checkbox" class="task-checkbox"([^>]*)>/g,
+    (_match: string, attrs: string) => {
+      const line = lineMap[checkboxIndex] !== undefined ? lineMap[checkboxIndex] : -1;
+      checkboxIndex++;
+      return `<input type="checkbox" class="task-checkbox" data-line="${line}"${attrs}>`;
     }
-    String::from_utf8(output.stdout)
-        .map_err(|e| e.to_string())
-        .map(|s| s.trim().to_string())
+  );
 }
 
-/// Spawn a terminal session inside tmux via portable-pty.
-/// Streams PTY output to the frontend via a Tauri Channel.
-#[tauri::command]
-pub async fn spawn_terminal(
-    app: tauri::AppHandle,
-    on_output: tauri::ipc::Channel<Vec<u8>>,
-    session_name: String,
-    start_dir: Option<String>,
-    shell_command: Option<String>,
-    cols: Option<u16>,
-    rows: Option<u16>,
-) -> Result<(), String> {
-    // Sanitize session_name: allow only alphanumeric, hyphen, underscore (T-02-01 mitigation)
-    let sanitized: String = session_name
-        .chars()
-        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
-        .collect();
-    if sanitized.is_empty() {
-        return Err("Invalid session name: must contain at least one alphanumeric character".to_string());
+// Configure marked with custom checkbox renderer (D-02)
+marked.use({
+  renderer: {
+    checkbox({ checked }: { checked: boolean }) {
+      return `<input type="checkbox" class="task-checkbox"${checked ? ' checked' : ''}>`;
     }
+  }
+});
 
-    // If the tmux session already exists (e.g., switching back to a project),
-    // clear its screen and scrollback history BEFORE re-attaching a new PTY client.
-    // This prevents tmux from dumping stale screen content to the new client,
-    // which xterm.js would render as extra blank lines (the original newlines bug).
-    let session_exists = std::process::Command::new("tmux")
-        .args(["has-session", "-t", &sanitized])
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
-    if session_exists {
-        // Clear the visible pane content (like Ctrl+L) -- ignore errors if terminal
-        // is in a state that doesn't support it (e.g., no scrollback or tmux version mismatch)
-        let _ = std::process::Command::new("tmux")
-            .args(["send-keys", "-t", &sanitized, "C-l"])
-            .output();
-        // Clear the scrollback history buffer -- capture stderr to prevent tmux error
-        // "terminal does not support clear" from leaking into PTY output stream
-        let _ = std::process::Command::new("tmux")
-            .args(["clear-history", "-t", &sanitized])
-            .output()
-            .and_then(|o| {
-                if !o.status.success() {
-                    let stderr = String::from_utf8_lossy(&o.stderr);
-                    if !stderr.is_empty() {
-                        eprintln!("[efxmux] clear-history warning: {}", stderr.trim());
-                    }
-                }
-                Ok(o)
-            });
-    }
+/**
+ * GSD Viewer component.
+ * Renders markdown with interactive checkboxes that write back to the .md file.
+ * Auto-refreshes when the watched .md file changes externally.
+ */
+export function GSDViewer() {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const currentPathRef = useRef<string | null>(null);
 
-    let pty_system = native_pty_system();
-    let pair = pty_system
-        .openpty(PtySize {
-            rows: rows.unwrap_or(24),
-            cols: cols.unwrap_or(80),
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|e| e.to_string())?;
+  /**
+   * Get the active project from signals.
+   */
+  function getActiveProject(): ProjectEntry | undefined {
+    return projects.value.find(p => p.name === activeProjectName.value);
+  }
 
-    let mut cmd = CommandBuilder::new("tmux");
-    cmd.env("TERM", "xterm-256color");
-    cmd.env("LANG", "en_US.UTF-8");
-    cmd.env("LC_ALL", "en_US.UTF-8");
-    cmd.args(["new-session", "-A", "-s", &sanitized]);
-    // Set tmux session start directory if provided (workspace-aware sessions)
-    if let Some(ref dir) = start_dir {
-        if std::path::Path::new(dir).is_dir() {
-            cmd.args(["-c", dir]);
+  useEffect(() => {
+    /**
+     * Load and render the GSD markdown file for a project.
+     */
+    async function loadGSD(project: ProjectEntry) {
+      if (!project || !project.path) return;
+      const gsdFile = project.gsd_file || 'PLAN.md';
+      const path = project.path + '/' + gsdFile;
+      currentPathRef.current = path;
+
+      try {
+        const content = await invoke<string>('read_file_content', { path });
+        const lineMap = buildLineMap(content);
+        const rendered = marked.parse(content, { async: false }) as string;
+        const withLines = injectLineNumbers(rendered, lineMap);
+        if (contentRef.current) {
+          contentRef.current.innerHTML = withLines;
         }
-    }
-    // If shell_command is provided (e.g., agent binary), wrap it so the user's shell
-    // survives after the agent exits (Ctrl+C, /exit, etc.) — user lands in their
-    // default shell instead of the tmux session dying (AGENT-03/04)
-    if let Some(ref shell_cmd) = shell_command {
-        if !shell_cmd.is_empty() {
-            let user_shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
-            let wrapped = format!("{} -c '{}; exec {}'", user_shell, shell_cmd, user_shell);
-            cmd.arg(&wrapped);
+      } catch (err) {
+        console.warn('[efxmux] Failed to load GSD file:', err);
+        if (contentRef.current) {
+          contentRef.current.innerHTML = `<div class="p-4 text-text text-[13px]">No GSD file found (${gsdFile})</div>`;
         }
+      }
     }
 
-    let _child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+    // Listen for md-file-changed Tauri event (D-03: auto-refresh)
+    let unlistenFn: (() => void) | null = null;
+    listen('md-file-changed', () => {
+      const project = getActiveProject();
+      if (project && currentPathRef.current) {
+        loadGSD(project);
+      }
+    }).then(fn => { unlistenFn = fn; });
 
-    // Enable tmux mouse mode so mouse wheel scrolls the buffer (not sent as arrow keys)
-    std::process::Command::new("tmux")
-        .args(["set-option", "-t", &sanitized, "mouse", "on"])
-        .output()
-        .ok();
+    // Listen for project-changed DOM event (re-render when project switches)
+    function handleProjectChanged() {
+      setTimeout(() => {
+        const project = getActiveProject();
+        if (project) loadGSD(project);
+      }, 50);
+    }
+    document.addEventListener('project-changed', handleProjectChanged);
 
-    // Set remain-on-exit so we can query exit code after process dies (D-08, UX-03)
-    let _ = std::process::Command::new("tmux")
-        .args(["set-option", "-t", &sanitized, "remain-on-exit", "on"])
-        .output();
+    // Initial load when component mounts
+    const project = getActiveProject();
+    if (project) loadGSD(project);
 
-    // Hide tmux green status bar -- reclaim the row for terminal content
-    std::process::Command::new("tmux")
-        .args(["set-option", "-t", &sanitized, "status", "off"])
-        .output()
-        .ok();
-
-    // take_writer() is one-shot -- store in Arc<Mutex<>> for reuse (CLAUDE.md gotcha)
-    let writer = pair
-        .master
-        .take_writer()
-        .map_err(|e| e.to_string())?;
-
-    let mut reader = pair
-        .master
-        .try_clone_reader()
-        .map_err(|e| e.to_string())?;
-
-    let sent_bytes = Arc::new(AtomicU64::new(0));
-    let acked_bytes = Arc::new(AtomicU64::new(0));
-
-    let state = PtyState {
-        writer: Arc::new(Mutex::new(writer)),
-        master: Arc::new(Mutex::new(pair.master)),
-        sent_bytes: sent_bytes.clone(),
-        acked_bytes: acked_bytes.clone(),
-        slave: Arc::new(Mutex::new(Some(pair.slave))),
+    return () => {
+      if (unlistenFn) unlistenFn();
+      document.removeEventListener('project-changed', handleProjectChanged);
     };
+  }, []);
 
-    // Insert into PtyManager HashMap (D-09) instead of app.manage(state)
-    let manager = app.state::<PtyManager>();
-    let mut map = manager.0.lock().map_err(|e| e.to_string())?;
-    map.insert(sanitized.clone(), state);
-    drop(map);
-
-    let sent = sent_bytes;
-    let acked = acked_bytes;
-
-    // Shared stop flag: monitoring thread sets this when pane dies,
-    // read loop checks it to break out (since remain-on-exit keeps PTY alive).
-    let stopped = Arc::new(AtomicBool::new(false));
-    let stopped_for_reader = stopped.clone();
-
-    // PTY read loop on dedicated OS thread (NOT tokio::spawn -- Research Pitfall 5)
-    std::thread::spawn(move || {
-        let mut buf = vec![0u8; 4096];
-        let mut paused = false;
-        loop {
-            // Check if monitoring thread detected pane death
-            if stopped_for_reader.load(Ordering::Relaxed) {
-                break;
-            }
-
-            // Flow control: hysteresis between HIGH (400KB) and LOW (100KB) watermarks
-            let unacked = sent.load(Ordering::Relaxed)
-                .saturating_sub(acked.load(Ordering::Relaxed));
-
-            if paused {
-                // Resume only when unacked drops below LOW watermark
-                if unacked <= FLOW_LOW_WATERMARK {
-                    paused = false;
-                } else {
-                    std::thread::sleep(std::time::Duration::from_millis(10));
-                    continue;
-                }
-            } else if unacked > FLOW_HIGH_WATERMARK {
-                // Pause when unacked exceeds HIGH watermark
-                paused = true;
-                std::thread::sleep(std::time::Duration::from_millis(10));
-                continue;
-            }
-
-            match reader.read(&mut buf) {
-                Ok(0) => break, // EOF
-                Ok(n) => {
-                    let chunk = buf[..n].to_vec();
-                    sent.fetch_add(n as u64, Ordering::Relaxed);
-                    if on_output.send(chunk).is_err() {
-                        break; // Channel closed
-                    }
-                }
-                Err(_) => break,
-            }
-        }
-        // Read loop exited (EOF, error, or stopped flag). No exit detection here --
-        // the monitoring thread handles that independently.
+  /**
+   * Handle checkbox click events (D-01: write-back).
+   * Delegates from container to avoid per-checkbox listeners.
+   */
+  function handleClick(e: MouseEvent) {
+    const target = e.target as HTMLElement;
+    if (!target.classList.contains('task-checkbox')) return;
+    const input = target as HTMLInputElement;
+    const line = parseInt(input.dataset.line || '', 10);
+    if (isNaN(line) || line < 0) return;
+    const checked = input.checked;
+    if (!currentPathRef.current) return;
+    invoke('write_checkbox', { path: currentPathRef.current, line, checked }).catch((err: unknown) => {
+      console.error('[efxmux] write_checkbox failed:', err);
+      // Revert checkbox visual state on error
+      input.checked = !checked;
     });
+  }
 
-    // --- Pane-death monitoring thread (08-05, UX-03, D-08) ---
-    // remain-on-exit keeps the PTY master alive after shell exit, so the read loop
-    // never gets EOF. This separate thread polls tmux pane_dead status to detect
-    // process exit and emit pty-exited with the real exit code.
-    let app_for_monitor = app.clone();
-    let session_for_monitor = sanitized.clone();
-    std::thread::spawn(move || {
-        // Initial delay: let tmux stabilize after session creation
-        std::thread::sleep(std::time::Duration::from_secs(1));
-
-        loop {
-            // Check if session still exists at all
-            let session_exists = std::process::Command::new("tmux")
-                .args(["has-session", "-t", &session_for_monitor])
-                .output()
-                .map(|o| o.status.success())
-                .unwrap_or(false);
-
-            if !session_exists {
-                // Session gone (external kill, tmux server died) -- emit exit code 0
-                stopped.store(true, Ordering::Relaxed);
-                let payload = serde_json::json!({
-                    "session": session_for_monitor,
-                    "code": 0
-                });
-                let _ = app_for_monitor.emit("pty-exited", payload);
-                break;
-            }
-
-            // Poll pane_dead status
-            let pane_dead = std::process::Command::new("tmux")
-                .args(["display-message", "-t", &session_for_monitor, "-p", "#{pane_dead}"])
-                .output()
-                .ok()
-                .and_then(|o| {
-                    if o.status.success() {
-                        String::from_utf8(o.stdout).ok()
-                    } else {
-                        None
-                    }
-                })
-                .map(|s| s.trim() == "1")
-                .unwrap_or(false);
-
-            if pane_dead {
-                // Pane is dead -- query real exit code before killing session
-                let exit_code = std::process::Command::new("tmux")
-                    .args(["display-message", "-t", &session_for_monitor, "-p", "#{pane_dead_status}"])
-                    .output()
-                    .ok()
-                    .and_then(|o| {
-                        if o.status.success() {
-                            String::from_utf8(o.stdout).ok()
-                        } else {
-                            None
-                        }
-                    })
-                    .and_then(|s| s.trim().parse::<i32>().ok())
-                    .unwrap_or(0); // T-08-05-02: default to 0 if parsing fails
-
-                // Kill the dead session now that we have the exit code
-                let _ = std::process::Command::new("tmux")
-                    .args(["kill-session", "-t", &session_for_monitor])
-                    .output();
-
-                // Signal read loop to stop
-                stopped.store(true, Ordering::Relaxed);
-
-                // Emit pty-exited with real exit code
-                let payload = serde_json::json!({
-                    "session": session_for_monitor,
-                    "code": exit_code
-                });
-                let _ = app_for_monitor.emit("pty-exited", payload);
-                break;
-            }
-
-            // Poll every 500ms
-            std::thread::sleep(std::time::Duration::from_millis(500));
-        }
-    });
-
-    Ok(())
-}
-
-/// Write input data to the PTY master (keystrokes from xterm.js).
-#[tauri::command]
-pub fn write_pty(data: String, session_name: String, manager: tauri::State<'_, PtyManager>) -> Result<(), String> {
-    let map = manager.0.lock().map_err(|e| e.to_string())?;
-    let state = map.get(&session_name)
-        .ok_or_else(|| format!("No PTY session found: {}", session_name))?;
-    let mut writer = state.writer.lock().map_err(|e| e.to_string())?;
-    writer
-        .write_all(data.as_bytes())
-        .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-/// Resize the PTY. This is a control operation that bypasses flow control (D-14).
-#[tauri::command]
-pub fn resize_pty(cols: u16, rows: u16, session_name: String, manager: tauri::State<'_, PtyManager>) -> Result<(), String> {
-    let map = manager.0.lock().map_err(|e| e.to_string())?;
-    let state = map.get(&session_name)
-        .ok_or_else(|| format!("No PTY session found: {}", session_name))?;
-    let master = state.master.lock().map_err(|e| e.to_string())?;
-    master
-        .resize(PtySize {
-            rows,
-            cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|e| e.to_string())
-}
-
-/// Acknowledge processed bytes from the frontend for flow control (D-11).
-#[tauri::command]
-pub fn ack_bytes(count: u64, session_name: String, manager: tauri::State<'_, PtyManager>) -> Result<(), String> {
-    let map = manager.0.lock().map_err(|e| e.to_string())?;
-    let state = map.get(&session_name)
-        .ok_or_else(|| format!("No PTY session found: {}", session_name))?;
-    state.acked_bytes.fetch_add(count, Ordering::Relaxed);
-    Ok(())
-}
-
-/// Switch a tmux client from one session to another without PTY output.
-/// Creates the target session (detached) if it doesn't exist.
-/// Runs tmux commands as system processes — completely silent in the terminal.
-#[tauri::command]
-pub fn switch_tmux_session(
-    current_session: String,
-    target_session: String,
-    start_dir: Option<String>,
-    shell_command: Option<String>,
-) -> Result<(), String> {
-    // Sanitize target session name
-    let target: String = target_session
-        .chars()
-        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
-        .collect();
-    if target.is_empty() {
-        return Err("Invalid target session name".to_string());
-    }
-
-    // Create target session if it doesn't exist
-    let has = std::process::Command::new("tmux")
-        .args(["has-session", "-t", &target])
-        .output();
-    let needs_create = match has {
-        Ok(out) => !out.status.success(),
-        Err(_) => true,
-    };
-    if needs_create {
-        let mut args = vec!["new-session", "-d", "-s", &target];
-        let dir_str;
-        if let Some(ref dir) = start_dir {
-            if std::path::Path::new(dir).is_dir() {
-                dir_str = dir.clone();
-                args.push("-c");
-                args.push(&dir_str);
-            }
-        }
-        // If a shell command (agent binary) is specified, wrap it so the user's shell
-        // survives after the agent exits — same wrapping as spawn_terminal (AGENT-03, AGENT-04).
-        let shell_cmd_str;
-        if let Some(ref cmd) = shell_command {
-            if !cmd.is_empty() {
-                let user_shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
-                shell_cmd_str = format!("{} -c '{}; exec {}'", user_shell, cmd, user_shell);
-                args.push(&shell_cmd_str);
-            }
-        }
-        std::process::Command::new("tmux")
-            .args(&args)
-            .output()
-            .map_err(|e| e.to_string())?;
-    }
-
-    // Enable mouse mode on target session
-    std::process::Command::new("tmux")
-        .args(["set-option", "-t", &target, "mouse", "on"])
-        .output()
-        .ok();
-
-    // Hide tmux green status bar on switched-to session
-    std::process::Command::new("tmux")
-        .args(["set-option", "-t", &target, "status", "off"])
-        .output()
-        .ok();
-
-    // Find the client attached to the current session
-    let clients_out = std::process::Command::new("tmux")
-        .args(["list-clients", "-t", &current_session, "-F", "#{client_name}"])
-        .output();
-    let client_name = match clients_out {
-        Ok(out) => {
-            let s = String::from_utf8_lossy(&out.stdout);
-            s.lines().next().unwrap_or("").to_string()
-        }
-        Err(_) => String::new(),
-    };
-
-    if client_name.is_empty() {
-        // Fallback: try switching without specifying client (works if only one client)
-        std::process::Command::new("tmux")
-            .args(["switch-client", "-t", &target])
-            .output()
-            .map_err(|e| e.to_string())?;
-    } else {
-        std::process::Command::new("tmux")
-            .args(["switch-client", "-c", &client_name, "-t", &target])
-            .output()
-            .map_err(|e| e.to_string())?;
-    }
-
-    Ok(())
-}
-
-/// Destroy a PTY session: remove from PtyManager and drop all handles.
-/// The read thread will exit when the master PTY fd is closed.
-/// The tmux session is kept alive so tabs can be restored on project switch-back.
-/// Stale screen content is handled by clearing history before re-attach in spawn_terminal.
-#[tauri::command]
-pub fn destroy_pty_session(session_name: String, manager: tauri::State<'_, PtyManager>) -> Result<(), String> {
-    let sanitized: String = session_name
-        .chars()
-        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
-        .collect();
-    let mut map = manager.0.lock().map_err(|e| e.to_string())?;
-    // Remove drops the PtyState which closes the master PTY fd.
-    // The read thread will get EOF and exit. The tmux client will detach.
-    // The tmux session stays alive for re-attach on project switch-back.
-    map.remove(&sanitized);
-
-    Ok(())
-}
-
-/// List active PTY session names (debugging utility).
-#[tauri::command]
-pub fn get_pty_sessions(manager: tauri::State<'_, PtyManager>) -> Result<Vec<String>, String> {
-    let map = manager.0.lock().map_err(|e| e.to_string())?;
-    Ok(map.keys().cloned().collect())
-}
-
-/// Clean up dead tmux sessions left over from prior runs (08-05, UX-03).
-/// Queries all tmux sessions for pane_dead=1 and kills them.
-/// Called from JS on app startup to prevent reattaching to dead sessions.
-#[tauri::command]
-pub fn cleanup_dead_sessions() -> Result<Vec<String>, String> {
-    let output = std::process::Command::new("tmux")
-        .args(["list-sessions", "-F", "#{session_name}:#{pane_dead}"])
-        .output()
-        .map_err(|e| e.to_string())?;
-
-    if !output.status.success() {
-        // No tmux server running -- nothing to clean up
-        return Ok(vec![]);
-    }
-
-    let stdout = String::from_utf8(output.stdout).map_err(|e| e.to_string())?;
-    let mut cleaned = Vec::new();
-
-    for line in stdout.lines() {
-        let parts: Vec<&str> = line.splitn(2, ':').collect();
-        if parts.len() == 2 && parts[1] == "1" {
-            let session_name = parts[0];
-            let _ = std::process::Command::new("tmux")
-                .args(["kill-session", "-t", session_name])
-                .output();
-            cleaned.push(session_name.to_string());
-        }
-    }
-
-    Ok(cleaned)
-}
-
-/// Get the version string of an AI agent binary (claude, opencode).
-/// Validates agent name against a whitelist before executing (T-09-09 mitigation).
-#[tauri::command]
-pub async fn get_agent_version(agent: String) -> Result<String, String> {
-    let valid_agents = ["claude", "opencode"];
-    if !valid_agents.contains(&agent.as_str()) {
-        return Err(format!("Unknown agent: {}", agent));
-    }
-
-    let output = std::process::Command::new(&agent)
-        .arg("--version")
-        .output()
-        .map_err(|e| format!("Failed to run {} --version: {}", agent, e))?;
-
-    if !output.status.success() {
-        return Err(format!("{} --version exited with {}", agent, output.status));
-    }
-
-    let version_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    Ok(version_str.lines().next().unwrap_or(&version_str).to_string())
+  return (
+    <div
+      class="h-full overflow-y-auto bg-bg-terminal p-1 flex flex-col"
+      onClick={handleClick}
+    >
+      <div
+        ref={contentRef}
+        class="file-viewer-markdown flex-1 m-0 overflow-auto text-[14px] leading-relaxed"
+        style={{ fontFamily: 'Geist, system-ui, sans-serif', color: colors.textMuted, padding: '6px' }}
+      >
+        <div class="text-text text-[13px]">Loading GSD...</div>
+      </div>
+    </div>
+  );
 }
 ````
 
-## File: package.json
-````json
-{
-  "name": "gsd-mux",
-  "private": true,
-  "version": "0.1.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "tauri": "tauri",
-    "repomix": "npx repomix@latest --config repomix.config.json",
-    "repomix:skill": "npx repomix@latest --skill-generate",
-    "repomix:skill-remote": "npx repomix@latest --remote"
-  },
-  "devDependencies": {
-    "@preact/preset-vite": "^2.10.5",
-    "@tailwindcss/vite": "^4.2.2",
-    "@tauri-apps/cli": "^2",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/preact": "^3.2.4",
-    "@vitest/coverage-v8": "^4.1.4",
-    "@xterm/addon-web-links": "^0.12.0",
-    "esbuild": "^0.28.0",
-    "jsdom": "^29.0.2",
-    "tailwindcss": "^4.2.2",
-    "typescript": "^6.0.2",
-    "vite": "^8.0.7",
-    "vitest": "^4.1.4"
-  },
-  "dependencies": {
-    "@preact/signals": "^2.9.0",
-    "@tauri-apps/api": "^2.10.1",
-    "@tauri-apps/plugin-dialog": "^2.7.0",
-    "@tauri-apps/plugin-opener": "^2.5.3",
-    "@xterm/addon-fit": "0.11.0",
-    "@xterm/addon-webgl": "0.19.0",
-    "@xterm/xterm": "6.0.0",
-    "lucide-preact": "^1.8.0",
-    "marked": "^14.1.4",
-    "preact": "^10.29.1"
-  }
+## File: src/components/right-panel.tsx
+````typescript
+// right-panel.tsx -- Right panel with tabbed views and Bash Terminal
+// D-11: Tab bars for right-top (GSD/Diff/File Tree) and right-bottom (Bash)
+// D-12: Bash terminal lazy-connects via connectPty on first tab selection
+// Phase 10: Navy-blue palette rewrite (Plan 06)
+
+import { useEffect, useRef } from 'preact/hooks';
+import { invoke } from '@tauri-apps/api/core';
+import { rightTopTab, rightBottomTab, loadAppState, activeProjectName, projects } from '../state-manager';
+import { getTheme, registerTerminal } from '../theme/theme-manager';
+import { colors } from '../tokens';
+import { TabBar } from './tab-bar';
+import { GSDViewer } from './gsd-viewer';
+import { DiffViewer } from './diff-viewer';
+import { FileTree } from './file-tree';
+
+const RIGHT_TOP_TABS = ['File Tree', 'GSD', 'Diff'];
+const RIGHT_BOTTOM_TABS = ['Bash'];
+
+/**
+ * RightPanel component.
+ * Two sub-panels separated by a horizontal split handle.
+ * Right-top: GSD Viewer, Diff Viewer, File Tree (tabbed)
+ * Right-bottom: Bash Terminal (tabbed, lazy-connected)
+ */
+export function RightPanel() {
+  const bashContainerRef = useRef<HTMLDivElement>(null);
+  const bashConnected = useRef(false);
+  const bashSessionRef = useRef('');
+
+  // Auto-switch to Diff tab when a file is clicked in sidebar GIT CHANGES
+  useEffect(() => {
+    function handleOpenDiff() {
+      rightTopTab.value = 'Diff';
+    }
+    document.addEventListener('open-diff', handleOpenDiff);
+    return () => {
+      document.removeEventListener('open-diff', handleOpenDiff);
+    };
+  }, []);
+
+  // Lazy-connect bash terminal on mount
+  useEffect(() => {
+    async function connectBashTerminal() {
+      const container = bashContainerRef.current;
+      if (!container || bashConnected.current) return;
+
+      try {
+        const { createTerminal } = await import('../terminal/terminal-manager');
+        const { connectPty } = await import('../terminal/pty-bridge');
+        const { attachResizeHandler } = await import('../terminal/resize-handler');
+
+        const activeName = activeProjectName.value;
+        const appState = await loadAppState();
+        const sessionName = activeName
+          ? activeName.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase() + '-right'
+          : (appState?.session?.['right-tmux-session'] || 'efx-mux-right');
+        bashSessionRef.current = sessionName;
+
+        const theme = getTheme();
+        const { terminal, fitAddon } = createTerminal(container, {
+          theme: theme?.terminal,
+          font: theme?.chrome?.font,
+          fontSize: theme?.chrome?.fontSize || 13,
+          sessionName,
+        });
+        registerTerminal(terminal, fitAddon);
+
+        const activeProject = activeName ? projects.value.find(p => p.name === activeName) : null;
+        await connectPty(terminal, sessionName, activeProject?.path);
+        bashConnected.current = true;
+
+        setTimeout(() => {
+          fitAddon.fit();
+          attachResizeHandler(container, terminal, fitAddon, sessionName);
+        }, 100);
+      } catch (err) {
+        console.error('[efxmux] Failed to connect bash terminal:', err);
+      }
+    }
+
+    // Listen for project switch events (silent via Rust command)
+    function handleSwitchBash(e: Event) {
+      const { currentSession, targetSession, startDir } = (e as CustomEvent).detail;
+      if (!currentSession) return;
+      invoke('switch_tmux_session', {
+        currentSession,
+        targetSession,
+        startDir: startDir ?? null,
+      }).catch((err) => console.error('[efxmux] Failed to switch bash session:', err));
+    }
+
+    document.addEventListener('switch-bash-session', handleSwitchBash);
+
+    // Initial connection
+    setTimeout(() => connectBashTerminal(), 200);
+
+    return () => {
+      document.removeEventListener('switch-bash-session', handleSwitchBash);
+    };
+  }, []);
+
+  return (
+    <aside class="right-panel" aria-label="Right panel" style={{ backgroundColor: colors.bgBase, borderLeft: `1px solid ${colors.bgBorder}` }}>
+      {/* Top panel: GSD / Diff / File Tree */}
+      <div class="right-top flex flex-col min-h-0">
+        <TabBar
+          tabs={RIGHT_TOP_TABS}
+          activeTab={rightTopTab}
+          onSwitch={(tab) => { rightTopTab.value = tab; }}
+        />
+        <div class="right-top-content flex-1 min-h-0 overflow-hidden relative p-1">
+          <div style={{ height: '100%', display: rightTopTab.value === 'GSD' ? 'block' : 'none' }}>
+            <GSDViewer />
+          </div>
+          <div style={{ height: '100%', display: rightTopTab.value === 'Diff' ? 'block' : 'none' }}>
+            <DiffViewer />
+          </div>
+          <div style={{ height: '100%', display: rightTopTab.value === 'File Tree' ? 'block' : 'none' }}>
+            <FileTree />
+          </div>
+        </div>
+      </div>
+
+      {/* Split handle */}
+      <div
+        class="split-handle-h"
+        data-handle="right-h"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize right panels"
+      />
+
+      {/* Bottom panel: Bash */}
+      <div class="right-bottom flex flex-col min-h-0">
+        <TabBar
+          tabs={RIGHT_BOTTOM_TABS}
+          activeTab={rightBottomTab}
+          onSwitch={(tab) => { rightBottomTab.value = tab; }}
+        />
+        <div class="right-bottom-content flex-1 min-h-0 overflow-hidden" style={{ backgroundColor: colors.bgDeep }}>
+          <div
+            ref={bashContainerRef}
+            class="bash-terminal h-full"
+            id="bash-terminal-container"
+          />
+        </div>
+      </div>
+    </aside>
+  );
 }
 ````
 
@@ -10523,415 +8994,2123 @@ export function Sidebar() {
 }
 ````
 
-## File: src/styles/app.css
-````css
-@import "tailwindcss";
-@import "@xterm/xterm/css/xterm.css";
+## File: src/terminal/terminal-manager.ts
+````typescript
+// terminal-manager.ts -- xterm.js lifecycle: create, mount, WebGL/DOM fallback
+// Per D-06: retry WebGL once on context loss, then permanent DOM fallback
+// Per D-07: silent fallback -- no visible indicator
+// Per D-08: mount via querySelector, not Arrow.js ref
+// Migrated to TypeScript (Phase 6.1)
 
-@theme {
-  --color-bg: #111927;           /* bgBase */
-  --color-bg-raised: #19243A;    /* bgElevated */
-  --color-bg-terminal: #111927;  /* bgDeep — harmonized with bgBase per user preference */
-  --color-border: #243352;       /* bgBorder */
-  --color-border-interactive: #324568; /* bgSurface */
-  --color-text: #8B949E;         /* textMuted */
-  --color-text-bright: #E6EDF3;  /* textPrimary */
-  --color-text-secondary: #C9D1D9; /* textSecondary (NEW — for GSD content subheadings) */
-  --color-text-muted: #556A85;   /* textDim */
-  --color-accent: #258AD1;       /* unchanged from Phase 9 */
-  --color-success: #3FB950;
-  --color-warning: #D29922;
-  --color-danger: #F85149;
+import { Terminal } from '@xterm/xterm';
+import { WebglAddon } from '@xterm/addon-webgl';
+import { FitAddon } from '@xterm/addon-fit';
+import { invoke } from '@tauri-apps/api/core';
 
-  /* Light mode values — harmonized per D-14 */
-  --color-bg-light: #FFFFFF;
-  --color-bg-raised-light: #FFFFFF;
-  --color-bg-terminal-light: #FFFFFF;
-  --color-border-light: #D0D7DE;
-  --color-border-interactive-light: #D0D7DE;
-  --color-text-light: #656D76;
-  --color-text-bright-light: #1F2328;
-  --color-accent-light: #0969DA;
-  --color-success-light: #1A7F37;
-  --color-warning-light: #9A6700;
-  --color-danger-light: #CF222E;
-
-  --font-family-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
-  --font-family-mono: 'GeistMono', 'FiraCode', 'SF Mono', 'Monaco', 'Menlo', monospace;
+export interface TerminalOptions {
+  theme?: Record<string, string>;
+  font?: string;
+  fontSize?: number;
+  /** tmux session name — required for Shift+Enter newline injection via send_literal_sequence */
+  sessionName?: string;
 }
 
-@font-face {
-  font-family: 'FiraCode';
-  src: url('/fonts/FiraCode-Light.woff2') format('woff2');
-  font-weight: 300;
-  font-style: normal;
-  font-display: block;
+export interface TerminalInstance {
+  terminal: Terminal;
+  fitAddon: FitAddon;
+  dispose: () => void;
 }
 
-@font-face {
-  font-family: 'Geist';
-  src: url('/fonts/Geist-Variable.woff2') format('woff2');
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: block;
+/**
+ * Create and mount an xterm.js Terminal instance.
+ */
+export function createTerminal(container: HTMLElement, options: TerminalOptions = {}): TerminalInstance {
+  const terminal = new Terminal({
+    cursorBlink: true,
+    cursorStyle: 'bar',
+    scrollback: 10000,
+    fontSize: options.fontSize || 14,
+    fontFamily: options.font ? `'${options.font}', monospace` : "'FiraCode Light', 'Fira Code', monospace",
+    theme: options.theme || {
+      background: '#111927',
+      foreground: '#92a0a0',
+      cursor: '#258ad1',
+      selectionBackground: '#3e454a',
+    },
+    overviewRuler: { width: 10 },
+    allowProposedApi: true,
+  });
+
+  // Word/line navigation: convert macOS shortcuts to terminal escape codes
+  terminal.attachCustomKeyEventHandler((ev: KeyboardEvent): boolean => {
+    if (ev.type !== 'keydown') return true;
+
+    // Shift+Enter -> ESC+CR sequence for newline insert (Claude Code multi-line input)
+    // By default xterm.js sends \r for both Enter and Shift+Enter. Claude Code recognises
+    // \x1b\r (ESC followed by CR) as "meta+return" = insert newline. This is the same
+    // sequence Claude Code's own /terminal-setup writes for non-native terminals (VS Code,
+    // Alacritty, Warp). CSI u (\x1b[13;2u) requires the kitty keyboard protocol handshake
+    // which efx-mux never initiates, so Claude Code ignores it.
+    //
+    // WHY NOT terminal.input(): terminal.input() routes through onData → write_pty →
+    // PTY master → tmux client keyboard-input path. tmux with extended-keys=off does
+    // NOT recognise extended sequences from the PTY and silently discards them.
+    //
+    // FIX: invoke send_literal_sequence which runs `tmux send-keys -l -t {session}`.
+    // send-keys -l bypasses tmux's key-parsing table entirely and writes the raw bytes
+    // directly to the pane's stdin. Claude Code receives \x1b\r and inserts a newline.
+    if (ev.key === 'Enter' && ev.shiftKey && !ev.metaKey && !ev.ctrlKey && !ev.altKey) {
+      ev.preventDefault();
+      const sn = options.sessionName;
+      if (sn) {
+        invoke('send_literal_sequence', {
+          sessionName: sn,
+          sequence: '\x1b[13;2u',
+        }).catch(() => {});
+      }
+      return false;
+    }
+
+    // Cmd+K -> clear terminal scrollback (standard macOS shortcut)
+    if (ev.metaKey && !ev.ctrlKey && !ev.altKey && (ev.key === 'k' || ev.key === 'K')) {
+      ev.preventDefault();
+      terminal.clear();
+      return false;
+    }
+
+    // Cmd+Left -> beginning of line (Ctrl+A)
+    if (ev.metaKey && ev.key === 'ArrowLeft') {
+      ev.preventDefault();
+      terminal.write('\x01'); // Ctrl+A - beginning of line
+      return false;
+    }
+    // Cmd+Right -> end of line (Ctrl+E)
+    if (ev.metaKey && ev.key === 'ArrowRight') {
+      ev.preventDefault();
+      terminal.write('\x05'); // Ctrl+E - end of line
+      return false;
+    }
+    // Alt+Left -> word left (ESC b)
+    if (ev.altKey && ev.key === 'ArrowLeft') {
+      ev.preventDefault();
+      terminal.write('\x1bb'); // ESC b - word backward
+      return false;
+    }
+    // Alt+Right -> word right (ESC f)
+    if (ev.altKey && ev.key === 'ArrowRight') {
+      ev.preventDefault();
+      terminal.write('\x1bf'); // ESC f - word forward
+      return false;
+    }
+    // Block all Ctrl+key app shortcuts from reaching terminal (D-01, UX-01)
+    if (ev.ctrlKey && !ev.metaKey) {
+      const k = ev.key.toLowerCase();
+      // App-claimed non-shift keys
+      if (!ev.shiftKey && !ev.altKey && ['t', 'w', 'b', 's', 'p', 'k'].includes(k)) return false;
+      // Ctrl+Tab
+      if (ev.key === 'Tab' && !ev.shiftKey) return false;
+      // Ctrl+? (Ctrl+Shift+/) and Ctrl+/
+      if (k === '/' || ev.key === '?') return false;
+      // Ctrl+Shift+T (theme toggle)
+      if (k === 't' && ev.shiftKey) return false;
+    }
+    return true;
+  });
+
+  const fitAddon = new FitAddon();
+  terminal.loadAddon(fitAddon);
+
+  // Mount to DOM
+  terminal.open(container);
+
+  // Attempt WebGL renderer (D-06: retry once on context loss)
+  let webglAttempts = 0;
+  function tryWebGL(): void {
+    try {
+      const webgl = new WebglAddon();
+      webgl.onContextLoss(() => {
+        webgl.dispose();
+        webglAttempts++;
+        if (webglAttempts < 2) {
+          // Retry once (D-06)
+          tryWebGL();
+        }
+        // If second attempt fails, DOM renderer stays active (D-07: silent, no indicator)
+      });
+      terminal.loadAddon(webgl);
+    } catch (e: unknown) {
+      // WebGL2 not available -- DOM renderer is the default, nothing to do (D-07)
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn('[efxmux] WebGL not available, using DOM renderer:', msg);
+    }
+  }
+  tryWebGL();
+
+  // Initial fit after mount
+  fitAddon.fit();
+
+  return {
+    terminal,
+    fitAddon,
+    dispose(): void {
+      terminal.dispose();
+    },
+  };
+}
+````
+
+## File: src-tauri/src/lib.rs
+````rust
+// src-tauri/src/lib.rs
+pub mod file_ops;
+pub mod file_watcher;
+pub mod git_status;
+pub mod project;
+pub mod server;
+mod state;
+mod terminal;
+mod theme;
+
+use std::collections::HashMap;
+use tauri::Manager;
+use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
+use terminal::pty::{ack_bytes, check_tmux, cleanup_dead_sessions, destroy_pty_session, get_agent_version, get_pty_sessions, resize_pty, send_literal_sequence, spawn_terminal, write_pty, PtyManager};
+use theme::iterm2::import_iterm2_theme;
+use server::{detect_agent, kill_all_servers, restart_server, start_server, stop_server, ServerProcesses};
+use state::{get_config_dir, load_state, save_state, ManagedAppState};
+use theme::types::load_theme;
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .setup(|app| {
+            // ── macOS Application menu (first submenu = app name menu on macOS) ──
+            let app_menu = SubmenuBuilder::new(app, "Efxmux")
+                .item(&PredefinedMenuItem::about(app, None, None)?)
+                .separator()
+                .item(&PredefinedMenuItem::quit(app, None)?)
+                .build()?;
+
+            // ── Edit menu — wires Cmd+C/V/X/A to WKWebView clipboard (per D-16) ──
+            // PredefinedMenuItem maps to OS-level accelerators; WKWebView inherits.
+            // @tauri-apps/plugin-clipboard-manager NOT needed for Cmd+C/V.
+            let edit_menu = SubmenuBuilder::new(app, "Edit")
+                .item(&PredefinedMenuItem::undo(app, None)?)
+                .item(&PredefinedMenuItem::redo(app, None)?)
+                .separator()
+                .item(&PredefinedMenuItem::cut(app, None)?)
+                .item(&PredefinedMenuItem::copy(app, None)?)
+                .item(&PredefinedMenuItem::paste(app, None)?)
+                .separator()
+                .item(&PredefinedMenuItem::select_all(app, None)?)
+                .build()?;
+
+            // ── Window menu ───────────────────────────────────────────────────────
+            let window_menu = SubmenuBuilder::new(app, "Window")
+                .item(&PredefinedMenuItem::minimize(app, None)?)
+                .build()?;
+
+            // Build and set the full menu
+            let menu = MenuBuilder::new(app)
+                .items(&[&app_menu, &edit_menu, &window_menu])
+                .build()?;
+            app.set_menu(menu)?;
+
+            // Augment PATH for bundled app: macOS .app bundles inherit a minimal PATH
+            // (/usr/bin:/bin:/usr/sbin:/sbin) that excludes Homebrew. Prepend known
+            // Homebrew and user-local bin directories so tmux (and agent CLIs like
+            // claude, opencode) are found regardless of launch method.
+            {
+                let current_path = std::env::var("PATH").unwrap_or_default();
+                let extra = "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin";
+                if !current_path.contains("/opt/homebrew/bin") {
+                    let augmented = format!("{}:{}", extra, current_path);
+                    std::env::set_var("PATH", &augmented);
+                    println!("[efx-mux] Augmented PATH for bundle: {}", augmented);
+                }
+            }
+
+            // Ensure ~/.config/efx-mux/ exists before anything reads it
+            state::ensure_config_dir();
+            theme::types::ensure_config_dir();
+
+            // Load initial state into Tauri managed state (for close handler, WR-03)
+            let initial_state = state::load_state_sync();
+            app.manage(ManagedAppState(std::sync::Mutex::new(initial_state)));
+
+            // Initialize PtyManager for multi-session PTY support (D-09)
+            app.manage(PtyManager(std::sync::Mutex::new(HashMap::new())));
+
+            // Initialize ServerProcesses managed state for per-project server management (Phase 7, 07-06)
+            app.manage(ServerProcesses(std::sync::Mutex::new(HashMap::new())));
+
+            // Start theme file watcher (D-09: watch theme.json for changes)
+            let app_handle = app.handle().clone();
+            theme::watcher::start_theme_watcher(app_handle);
+
+            // Probe for tmux availability (D-01)
+            // If tmux is missing, the frontend will show a modal.
+            match check_tmux() {
+                Ok(version) => println!("[efx-mux] tmux found: {}", version),
+                Err(e) => eprintln!("[efx-mux] WARNING: {}", e),
+            }
+
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            // PTY commands (D-09: session-aware via PtyManager)
+            spawn_terminal,
+            write_pty,
+            resize_pty,
+            ack_bytes,
+            get_pty_sessions,
+            destroy_pty_session,
+            cleanup_dead_sessions,
+
+            // Theme
+            load_theme,
+            import_iterm2_theme,
+
+            // State
+            load_state,
+            save_state,
+            get_config_dir,
+
+            // Git
+            git_status::get_git_status,
+            git_status::get_git_files,
+
+            // Projects
+            project::add_project,
+            project::update_project,
+            project::remove_project,
+            project::switch_project,
+            project::get_projects,
+            project::get_active_project,
+
+            // Phase 6: File operations (D-04, D-06, D-01)
+            file_ops::get_file_diff,
+            file_ops::list_directory,
+            file_ops::read_file_content,
+            file_ops::read_file,
+            file_ops::write_checkbox,
+
+            // Phase 6: File watcher (D-02)
+            file_watcher::set_project_path,
+
+            // Workspace switching
+            terminal::pty::switch_tmux_session,
+
+            // Shift+Enter newline: send literal sequence directly to tmux pane stdin
+            send_literal_sequence,
+
+            // Agent version detection (D-17)
+            get_agent_version,
+
+            // Phase 7: Server process management
+            start_server,
+            stop_server,
+            restart_server,
+            detect_agent,
+        ])
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                // Kill ALL server processes on close (07-06: per-project HashMap, T-07-10)
+                kill_all_servers(&window.app_handle());
+
+                // Synchronously save the latest in-memory state to disk.
+                // This guarantees state.json is written even if the JS
+                // beforeunload async invoke did not complete (WR-03 fix).
+                let managed = window.state::<ManagedAppState>();
+                let snapshot = managed.0.lock().ok().map(|g| g.clone());
+                if let Some(ref s) = snapshot {
+                    if let Err(e) = state::save_state_sync(s) {
+                        eprintln!("[efxmux] WARNING: Failed to save state on close: {}", e);
+                    }
+                }
+            }
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            match &event {
+                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+                    // Kill ALL server processes on Cmd+Q / app quit (07-09: T-07-10)
+                    // Both ExitRequested and Exit are handled to cover all exit paths:
+                    // - ExitRequested fires when last window closes naturally
+                    // - Exit fires unconditionally on app termination (Cmd+Q, menu quit)
+                    kill_all_servers(app_handle);
+
+                    // Synchronously save the latest in-memory state to disk.
+                    let managed = app_handle.state::<ManagedAppState>();
+                    let snapshot = managed.0.lock().ok().map(|g| g.clone());
+                    if let Some(ref s) = snapshot {
+                        if let Err(e) = state::save_state_sync(s) {
+                            eprintln!("[efxmux] WARNING: Failed to save state on quit: {}", e);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        });
+}
+````
+
+## File: src-tauri/Cargo.toml
+````toml
+[package]
+name = "gsd-mux"
+version = "0.2.2"
+description = "Terminal Multiplexer for AI-Assisted Development"
+authors = ["Laurent Marques"]
+edition = "2021"
+
+[lib]
+name = "gsd_mux_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+portable-pty = "0.9.0"
+notify = { version = "8.2", features = ["serde"] }
+notify-debouncer-mini = "0.7"
+git2 = "0.20.4"
+regex = "1"
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3"
+````
+
+## File: src-tauri/src/terminal/pty.rs
+````rust
+use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use std::collections::HashMap;
+use std::io::Read;
+use std::sync::{
+    atomic::{AtomicBool, AtomicU64, Ordering},
+    Arc, Mutex,
+};
+use tauri::{Emitter, Manager};
+
+/// High watermark: pause PTY reads when unacknowledged bytes exceed this threshold.
+const FLOW_HIGH_WATERMARK: u64 = 400_000;
+
+/// Low watermark: resume PTY reads when unacknowledged bytes drop below this threshold.
+/// Hysteresis prevents rapid pause/resume oscillation (HIGH=400KB pause, LOW=100KB resume).
+const FLOW_LOW_WATERMARK: u64 = 100_000;
+
+/// Per-session PTY state holding handles and flow control counters.
+pub struct PtyState {
+    pub writer: Arc<Mutex<Box<dyn std::io::Write + Send>>>,
+    pub master: Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>,
+    /// Tracks cumulative bytes sent to frontend (cloned into read thread before struct creation).
+    #[allow(dead_code)]
+    pub sent_bytes: Arc<AtomicU64>,
+    pub acked_bytes: Arc<AtomicU64>,
+    /// Must stay alive until child exits (portable-pty gotcha from CLAUDE.md).
+    #[allow(dead_code)]
+    pub slave: Arc<Mutex<Option<Box<dyn portable_pty::SlavePty + Send>>>>,
 }
 
-@font-face {
-  font-family: 'GeistMono';
-  src: url('/fonts/GeistMono-Variable.woff2') format('woff2');
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: block;
+/// Tauri-managed wrapper for multiple named PTY sessions (D-09).
+/// Replaces single PtyState managed by app.manage().
+pub struct PtyManager(pub Mutex<HashMap<String, PtyState>>);
+
+/// Probe for tmux availability. Returns version string or error with install instructions.
+pub fn check_tmux() -> Result<String, String> {
+    let output = std::process::Command::new("tmux")
+        .arg("-V")
+        .output()
+        .map_err(|_| "tmux not found. Install with: brew install tmux".to_string())?;
+    if !output.status.success() {
+        return Err("tmux not found. Install with: brew install tmux".to_string());
+    }
+    String::from_utf8(output.stdout)
+        .map_err(|e| e.to_string())
+        .map(|s| s.trim().to_string())
 }
 
-/* Light mode override (data-theme attribute on :root) */
-[data-theme="light"] {
-  --color-bg: var(--color-bg-light);
-  --color-bg-raised: var(--color-bg-raised-light);
-  --color-bg-terminal: var(--color-bg-terminal-light);
-  --color-border: var(--color-border-light);
-  --color-border-interactive: var(--color-border-interactive-light);
-  --color-text: var(--color-text-light);
-  --color-text-bright: var(--color-text-bright-light);
-  --color-accent: var(--color-accent-light);
-  --color-success: var(--color-success-light);
-  --color-warning: var(--color-warning-light);
-  --color-danger: var(--color-danger-light);
+/// Spawn a terminal session inside tmux via portable-pty.
+/// Streams PTY output to the frontend via a Tauri Channel.
+#[tauri::command]
+pub async fn spawn_terminal(
+    app: tauri::AppHandle,
+    on_output: tauri::ipc::Channel<Vec<u8>>,
+    session_name: String,
+    start_dir: Option<String>,
+    shell_command: Option<String>,
+    cols: Option<u16>,
+    rows: Option<u16>,
+) -> Result<(), String> {
+    // Sanitize session_name: allow only alphanumeric, hyphen, underscore (T-02-01 mitigation)
+    let sanitized: String = session_name
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
+    if sanitized.is_empty() {
+        return Err("Invalid session name: must contain at least one alphanumeric character".to_string());
+    }
+
+    // If the tmux session already exists, behaviour differs by tab type:
+    //
+    // AGENT TABS (shell_command is Some, e.g. "claude"):
+    //   Kill the existing session so that `tmux new-session` below creates a FRESH one
+    //   and runs the inline-export shell wrapper:
+    //     export CLAUDE_CODE_NO_FLICKER=1 ...; claude; exec zsh
+    //   Without killing first, `tmux new-session -A` merely RE-ATTACHES to the running
+    //   session and the initial-command argument is silently ignored by tmux. The already-
+    //   running claude process retains whatever environment it had when first launched,
+    //   which may not include CLAUDE_CODE_NO_FLICKER=1 (e.g. sessions started before this
+    //   fix was deployed). Only a fresh session guarantees the env var reaches claude.
+    //
+    // PLAIN SHELL TABS (shell_command is None):
+    //   Re-attach to the existing session (preserve user shell state). Clear scrollback
+    //   history to prevent stale content from being dumped to the new PTY client.
+    let session_exists = std::process::Command::new("tmux")
+        .args(["has-session", "-t", &sanitized])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    if session_exists {
+        if shell_command.as_deref().map(|s| !s.is_empty()).unwrap_or(false) {
+            // Agent tab: kill the old session so the new-session command below creates
+            // a fresh one with the correct environment (CLAUDE_CODE_NO_FLICKER=1 etc.)
+            // baked into the inline-export shell wrapper. Ignoring the kill error is safe
+            // -- if the session is already gone we still proceed to create a new one.
+            let _ = std::process::Command::new("tmux")
+                .args(["kill-session", "-t", &sanitized])
+                .output();
+        } else {
+            // Plain shell tab: re-attach to the existing session.
+            // Clear the scrollback history buffer ONLY -- do NOT send Ctrl+L.
+            //
+            // Sending `send-keys C-l` to an existing session fires a Ctrl+L keystroke
+            // into whatever process is currently running (e.g., Claude Code's Ink TUI)
+            // BEFORE the new PTY client attaches and establishes its window dimensions.
+            // Ink interprets Ctrl+L as a clear-screen + full redraw. At that moment tmux
+            // still has the stale dimensions from the previously detached client, so Ink
+            // measures the wrong window size, its alternate-screen entry fails, and it
+            // falls back to the "tmux detected · scroll with PgUp/PgDn" inline mode.
+            //
+            // clear-history alone is sufficient to prevent stale scrollback from being
+            // dumped to the new client on attach.
+            let _ = std::process::Command::new("tmux")
+                .args(["clear-history", "-t", &sanitized])
+                .output()
+                .and_then(|o| {
+                    if !o.status.success() {
+                        let stderr = String::from_utf8_lossy(&o.stderr);
+                        if !stderr.is_empty() {
+                            eprintln!("[efxmux] clear-history warning: {}", stderr.trim());
+                        }
+                    }
+                    Ok(o)
+                });
+        }
+    }
+
+    let pty_system = native_pty_system();
+    let pair = pty_system
+        .openpty(PtySize {
+            rows: rows.unwrap_or(24),
+            cols: cols.unwrap_or(80),
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut cmd = CommandBuilder::new("tmux");
+    cmd.env("TERM", "xterm-256color");
+    cmd.env("LANG", "en_US.UTF-8");
+    cmd.env("LC_ALL", "en_US.UTF-8");
+    // Inject Claude Code env vars directly into the PTY process environment.
+    // macOS .app bundles launched by launchd receive a minimal environment —
+    // user shell profile scripts (e.g. ~/.zshrc, custom wrapper scripts) are
+    // NOT sourced. Any env vars the agent binary needs must be set explicitly here.
+    //
+    // CLAUDE_CODE_NO_FLICKER=1 suppresses the "tmux detected" fallback mode:
+    // without it, Claude Code detects tmux and renders inline (non-fullscreen)
+    // instead of using the alternate screen buffer (fullscreen TUI).
+    cmd.env("CLAUDE_CODE_NO_FLICKER", "1");
+    cmd.env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1");
+    cmd.env("ENABLE_LSP_TOOL", "1");
+    cmd.args(["new-session", "-A", "-s", &sanitized]);
+    // Set tmux session start directory if provided (workspace-aware sessions)
+    if let Some(ref dir) = start_dir {
+        if std::path::Path::new(dir).is_dir() {
+            cmd.args(["-c", dir]);
+        }
+    }
+    // If shell_command is provided (e.g., agent binary), wrap it so the user
+    // drops into an interactive shell after the agent exits (AGENT-03/04).
+    // Plain `-c` is correct here — no login shell needed.
+    // NOTE: cmd.env() calls above set vars on the tmux CLIENT process only.
+    // tmux spawns the shell from the SERVER's environment, not the client's,
+    // so those vars do NOT reach the shell. Env vars must be exported inline
+    // inside the shell wrapper command (see format! below).
+    if let Some(ref shell_cmd) = shell_command {
+        if !shell_cmd.is_empty() {
+            let user_shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+            // Inline export is required because tmux spawns shells from the SERVER's
+            // environment, not the connecting client's. cmd.env() above sets vars on
+            // the tmux CLIENT process only — those do NOT propagate into the shell that
+            // tmux creates inside the session. Only inline export in the shell command
+            // itself (or tmux -e flag) reliably delivers env vars to the spawned process.
+            // This mirrors the approach already used in switch_tmux_session().
+            let wrapped = format!(
+                "{} -c 'export CLAUDE_CODE_NO_FLICKER=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 ENABLE_LSP_TOOL=1; {}; exec {}'",
+                user_shell, shell_cmd, user_shell
+            );
+            cmd.arg(&wrapped);
+        }
+    }
+
+    let _child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+
+    // Enable tmux mouse mode so mouse wheel scrolls the buffer (not sent as arrow keys)
+    std::process::Command::new("tmux")
+        .args(["set-option", "-t", &sanitized, "mouse", "on"])
+        .output()
+        .ok();
+
+    // Set remain-on-exit so we can query exit code after process dies (D-08, UX-03)
+    let _ = std::process::Command::new("tmux")
+        .args(["set-option", "-t", &sanitized, "remain-on-exit", "on"])
+        .output();
+
+    // Hide tmux green status bar -- reclaim the row for terminal content
+    std::process::Command::new("tmux")
+        .args(["set-option", "-t", &sanitized, "status", "off"])
+        .output()
+        .ok();
+
+    // take_writer() is one-shot -- store in Arc<Mutex<>> for reuse (CLAUDE.md gotcha)
+    let writer = pair
+        .master
+        .take_writer()
+        .map_err(|e| e.to_string())?;
+
+    let mut reader = pair
+        .master
+        .try_clone_reader()
+        .map_err(|e| e.to_string())?;
+
+    let sent_bytes = Arc::new(AtomicU64::new(0));
+    let acked_bytes = Arc::new(AtomicU64::new(0));
+
+    let state = PtyState {
+        writer: Arc::new(Mutex::new(writer)),
+        master: Arc::new(Mutex::new(pair.master)),
+        sent_bytes: sent_bytes.clone(),
+        acked_bytes: acked_bytes.clone(),
+        slave: Arc::new(Mutex::new(Some(pair.slave))),
+    };
+
+    // Insert into PtyManager HashMap (D-09) instead of app.manage(state)
+    let manager = app.state::<PtyManager>();
+    let mut map = manager.0.lock().map_err(|e| e.to_string())?;
+    map.insert(sanitized.clone(), state);
+    drop(map);
+
+    let sent = sent_bytes;
+    let acked = acked_bytes;
+
+    // Shared stop flag: monitoring thread sets this when pane dies,
+    // read loop checks it to break out (since remain-on-exit keeps PTY alive).
+    let stopped = Arc::new(AtomicBool::new(false));
+    let stopped_for_reader = stopped.clone();
+
+    // PTY read loop on dedicated OS thread (NOT tokio::spawn -- Research Pitfall 5)
+    std::thread::spawn(move || {
+        let mut buf = vec![0u8; 4096];
+        let mut paused = false;
+        loop {
+            // Check if monitoring thread detected pane death
+            if stopped_for_reader.load(Ordering::Relaxed) {
+                break;
+            }
+
+            // Flow control: hysteresis between HIGH (400KB) and LOW (100KB) watermarks
+            let unacked = sent.load(Ordering::Relaxed)
+                .saturating_sub(acked.load(Ordering::Relaxed));
+
+            if paused {
+                // Resume only when unacked drops below LOW watermark
+                if unacked <= FLOW_LOW_WATERMARK {
+                    paused = false;
+                } else {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                    continue;
+                }
+            } else if unacked > FLOW_HIGH_WATERMARK {
+                // Pause when unacked exceeds HIGH watermark
+                paused = true;
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                continue;
+            }
+
+            match reader.read(&mut buf) {
+                Ok(0) => break, // EOF
+                Ok(n) => {
+                    let chunk = buf[..n].to_vec();
+                    sent.fetch_add(n as u64, Ordering::Relaxed);
+                    if on_output.send(chunk).is_err() {
+                        break; // Channel closed
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+        // Read loop exited (EOF, error, or stopped flag). No exit detection here --
+        // the monitoring thread handles that independently.
+    });
+
+    // --- Pane-death monitoring thread (08-05, UX-03, D-08) ---
+    // remain-on-exit keeps the PTY master alive after shell exit, so the read loop
+    // never gets EOF. This separate thread polls tmux pane_dead status to detect
+    // process exit and emit pty-exited with the real exit code.
+    let app_for_monitor = app.clone();
+    let session_for_monitor = sanitized.clone();
+    std::thread::spawn(move || {
+        // Initial delay: let tmux stabilize after session creation
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
+        loop {
+            // Check if session still exists at all
+            let session_exists = std::process::Command::new("tmux")
+                .args(["has-session", "-t", &session_for_monitor])
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+
+            if !session_exists {
+                // Session gone (external kill, tmux server died) -- emit exit code 0
+                stopped.store(true, Ordering::Relaxed);
+                let payload = serde_json::json!({
+                    "session": session_for_monitor,
+                    "code": 0
+                });
+                let _ = app_for_monitor.emit("pty-exited", payload);
+                break;
+            }
+
+            // Poll pane_dead status
+            let pane_dead = std::process::Command::new("tmux")
+                .args(["display-message", "-t", &session_for_monitor, "-p", "#{pane_dead}"])
+                .output()
+                .ok()
+                .and_then(|o| {
+                    if o.status.success() {
+                        String::from_utf8(o.stdout).ok()
+                    } else {
+                        None
+                    }
+                })
+                .map(|s| s.trim() == "1")
+                .unwrap_or(false);
+
+            if pane_dead {
+                // Pane is dead -- query real exit code before killing session
+                let exit_code = std::process::Command::new("tmux")
+                    .args(["display-message", "-t", &session_for_monitor, "-p", "#{pane_dead_status}"])
+                    .output()
+                    .ok()
+                    .and_then(|o| {
+                        if o.status.success() {
+                            String::from_utf8(o.stdout).ok()
+                        } else {
+                            None
+                        }
+                    })
+                    .and_then(|s| s.trim().parse::<i32>().ok())
+                    .unwrap_or(0); // T-08-05-02: default to 0 if parsing fails
+
+                // Kill the dead session now that we have the exit code
+                let _ = std::process::Command::new("tmux")
+                    .args(["kill-session", "-t", &session_for_monitor])
+                    .output();
+
+                // Signal read loop to stop
+                stopped.store(true, Ordering::Relaxed);
+
+                // Emit pty-exited with real exit code
+                let payload = serde_json::json!({
+                    "session": session_for_monitor,
+                    "code": exit_code
+                });
+                let _ = app_for_monitor.emit("pty-exited", payload);
+                break;
+            }
+
+            // Poll every 500ms
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+    });
+
+    Ok(())
 }
 
-/* Section label utility (D-08): uppercase Geist Mono section headers */
-.section-label {
-  font-family: 'GeistMono', monospace;
-  font-weight: 500;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 1.2px;
-  color: var(--color-text-muted);
+/// Write input data to the PTY master (keystrokes from xterm.js).
+#[tauri::command]
+pub fn write_pty(data: String, session_name: String, manager: tauri::State<'_, PtyManager>) -> Result<(), String> {
+    let map = manager.0.lock().map_err(|e| e.to_string())?;
+    let state = map.get(&session_name)
+        .ok_or_else(|| format!("No PTY session found: {}", session_name))?;
+    let mut writer = state.writer.lock().map_err(|e| e.to_string())?;
+    writer
+        .write_all(data.as_bytes())
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
-/* Dynamic layout properties (set by JS drag-manager) */
-:root {
-  --sidebar-w: 200px;
-  --right-w: 25%;
-  --handle-size: 1px;
-  --handle-hit: 8px;
+/// Resize the PTY. This is a control operation that bypasses flow control (D-14).
+#[tauri::command]
+pub fn resize_pty(cols: u16, rows: u16, session_name: String, manager: tauri::State<'_, PtyManager>) -> Result<(), String> {
+    let map = manager.0.lock().map_err(|e| e.to_string())?;
+    let state = map.get(&session_name)
+        .ok_or_else(|| format!("No PTY session found: {}", session_name))?;
+    let master = state.master.lock().map_err(|e| e.to_string())?;
+    master
+        .resize(PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|e| e.to_string())
 }
 
-/* ─── Panel layout (consumed by drag-manager CSS vars) ─── */
-.sidebar {
-  width: var(--sidebar-w);
-  min-width: 40px;
-  height: 100%;
-  overflow: hidden;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--color-bg);
-  border-right: 1px solid var(--color-border);
+/// Acknowledge processed bytes from the frontend for flow control (D-11).
+#[tauri::command]
+pub fn ack_bytes(count: u64, session_name: String, manager: tauri::State<'_, PtyManager>) -> Result<(), String> {
+    let map = manager.0.lock().map_err(|e| e.to_string())?;
+    let state = map.get(&session_name)
+        .ok_or_else(|| format!("No PTY session found: {}", session_name))?;
+    state.acked_bytes.fetch_add(count, Ordering::Relaxed);
+    Ok(())
 }
 
-.sidebar.collapsed {
-  width: 40px;
-  min-width: 40px;
+/// Switch a tmux client from one session to another without PTY output.
+/// Creates the target session (detached) if it doesn't exist.
+/// Runs tmux commands as system processes — completely silent in the terminal.
+#[tauri::command]
+pub fn switch_tmux_session(
+    current_session: String,
+    target_session: String,
+    start_dir: Option<String>,
+    shell_command: Option<String>,
+) -> Result<(), String> {
+    // Sanitize target session name
+    let target: String = target_session
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
+    if target.is_empty() {
+        return Err("Invalid target session name".to_string());
+    }
+
+    // Create target session if it doesn't exist
+    let has = std::process::Command::new("tmux")
+        .args(["has-session", "-t", &target])
+        .output();
+    let needs_create = match has {
+        Ok(out) => !out.status.success(),
+        Err(_) => true,
+    };
+    if needs_create {
+        let mut args = vec!["new-session", "-d", "-s", &target];
+        let dir_str;
+        if let Some(ref dir) = start_dir {
+            if std::path::Path::new(dir).is_dir() {
+                dir_str = dir.clone();
+                args.push("-c");
+                args.push(&dir_str);
+            }
+        }
+        // If a shell command (agent binary) is specified, wrap it so the user
+        // drops into an interactive shell after the agent exits (AGENT-03/04).
+        // Env vars (CLAUDE_CODE_NO_FLICKER etc.) are already in the environment
+        // inherited from the Tauri process via CommandBuilder in spawn_terminal.
+        // switch_tmux_session creates sessions via std::process::Command (system
+        // tmux) rather than a PTY CommandBuilder, so the env var must be passed
+        // explicitly through the shell wrapper when needed.
+        let shell_cmd_str;
+        if let Some(ref cmd) = shell_command {
+            if !cmd.is_empty() {
+                let user_shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+                shell_cmd_str = format!(
+                    "{} -c 'export CLAUDE_CODE_NO_FLICKER=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 ENABLE_LSP_TOOL=1; {}; exec {}'",
+                    user_shell, cmd, user_shell
+                );
+                args.push(&shell_cmd_str);
+            }
+        }
+        std::process::Command::new("tmux")
+            .args(&args)
+            .output()
+            .map_err(|e| e.to_string())?;
+    }
+
+    // Enable mouse mode on target session
+    std::process::Command::new("tmux")
+        .args(["set-option", "-t", &target, "mouse", "on"])
+        .output()
+        .ok();
+
+    // Hide tmux green status bar on switched-to session
+    std::process::Command::new("tmux")
+        .args(["set-option", "-t", &target, "status", "off"])
+        .output()
+        .ok();
+
+    // Find the client attached to the current session
+    let clients_out = std::process::Command::new("tmux")
+        .args(["list-clients", "-t", &current_session, "-F", "#{client_name}"])
+        .output();
+    let client_name = match clients_out {
+        Ok(out) => {
+            let s = String::from_utf8_lossy(&out.stdout);
+            s.lines().next().unwrap_or("").to_string()
+        }
+        Err(_) => String::new(),
+    };
+
+    if client_name.is_empty() {
+        // Fallback: try switching without specifying client (works if only one client)
+        std::process::Command::new("tmux")
+            .args(["switch-client", "-t", &target])
+            .output()
+            .map_err(|e| e.to_string())?;
+    } else {
+        std::process::Command::new("tmux")
+            .args(["switch-client", "-c", &client_name, "-t", &target])
+            .output()
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
 }
 
-.sidebar-content {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 8px;
+/// Destroy a PTY session: remove from PtyManager and drop all handles.
+/// The read thread will exit when the master PTY fd is closed.
+/// The tmux session is kept alive so tabs can be restored on project switch-back.
+/// Stale screen content is handled by clearing history before re-attach in spawn_terminal.
+#[tauri::command]
+pub fn destroy_pty_session(session_name: String, manager: tauri::State<'_, PtyManager>) -> Result<(), String> {
+    let sanitized: String = session_name
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
+    let mut map = manager.0.lock().map_err(|e| e.to_string())?;
+    // Remove drops the PtyState which closes the master PTY fd.
+    // The read thread will get EOF and exit. The tmux client will detach.
+    // The tmux session stays alive for re-attach on project switch-back.
+    map.remove(&sanitized);
+
+    Ok(())
 }
 
-.main-panel {
-  flex: 1;
-  min-width: 200px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+/// List active PTY session names (debugging utility).
+#[tauri::command]
+pub fn get_pty_sessions(manager: tauri::State<'_, PtyManager>) -> Result<Vec<String>, String> {
+    let map = manager.0.lock().map_err(|e| e.to_string())?;
+    Ok(map.keys().cloned().collect())
 }
 
-.right-panel {
-  width: var(--right-w);
-  min-width: 180px;
-  height: 100%;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border-left: 1px solid var(--color-border);
+/// Clean up dead tmux sessions left over from prior runs (08-05, UX-03).
+/// Queries all tmux sessions for pane_dead=1 and kills them.
+/// Called from JS on app startup to prevent reattaching to dead sessions.
+#[tauri::command]
+pub fn cleanup_dead_sessions() -> Result<Vec<String>, String> {
+    let output = std::process::Command::new("tmux")
+        .args(["list-sessions", "-F", "#{session_name}:#{pane_dead}"])
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if !output.status.success() {
+        // No tmux server running -- nothing to clean up
+        return Ok(vec![]);
+    }
+
+    let stdout = String::from_utf8(output.stdout).map_err(|e| e.to_string())?;
+    let mut cleaned = Vec::new();
+
+    for line in stdout.lines() {
+        let parts: Vec<&str> = line.splitn(2, ':').collect();
+        if parts.len() == 2 && parts[1] == "1" {
+            let session_name = parts[0];
+            let _ = std::process::Command::new("tmux")
+                .args(["kill-session", "-t", session_name])
+                .output();
+            cleaned.push(session_name.to_string());
+        }
+    }
+
+    Ok(cleaned)
 }
 
-.right-top {
-  flex: 1 1 60%;
-  min-height: 80px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+/// Send a literal byte sequence directly to a tmux pane's stdin.
+/// Uses `tmux send-keys -l` which bypasses tmux's key-parsing table entirely,
+/// so sequences like \x1b[13;2u (CSI u / kitty keyboard protocol) reach the
+/// inner program (e.g. Claude Code) without being eaten by tmux's key parser.
+/// This is necessary because extended-keys=off means tmux does not recognise
+/// CSI u when it arrives via the PTY master (keyboard-input path).
+#[tauri::command]
+pub fn send_literal_sequence(session_name: String, sequence: String) -> Result<(), String> {
+    let sanitized: String = session_name
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
+    if sanitized.is_empty() {
+        return Err("Invalid session name".to_string());
+    }
+    std::process::Command::new("tmux")
+        .args(["send-keys", "-t", &sanitized, "-l", &sequence])
+        .output()
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
-.right-bottom {
-  flex: 1 1 40%;
-  min-height: 80px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+/// Get the version string of an AI agent binary (claude, opencode).
+/// Validates agent name against a whitelist before executing (T-09-09 mitigation).
+#[tauri::command]
+pub async fn get_agent_version(agent: String) -> Result<String, String> {
+    let valid_agents = ["claude", "opencode"];
+    if !valid_agents.contains(&agent.as_str()) {
+        return Err(format!("Unknown agent: {}", agent));
+    }
+
+    let output = std::process::Command::new(&agent)
+        .arg("--version")
+        .output()
+        .map_err(|e| format!("Failed to run {} --version: {}", agent, e))?;
+
+    if !output.status.success() {
+        return Err(format!("{} --version exited with {}", agent, output.status));
+    }
+
+    let version_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok(version_str.lines().next().unwrap_or(&version_str).to_string())
+}
+````
+
+## File: package.json
+````json
+{
+  "name": "gsd-mux",
+  "private": true,
+  "version": "0.2.2",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "tauri": "tauri",
+    "repomix": "npx repomix@latest --config repomix.config.json",
+    "repomix:skill": "npx repomix@latest --skill-generate",
+    "repomix:skill-remote": "npx repomix@latest --remote"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.5",
+    "@tailwindcss/vite": "^4.2.2",
+    "@tauri-apps/cli": "^2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/preact": "^3.2.4",
+    "@vitest/coverage-v8": "^4.1.4",
+    "@xterm/addon-web-links": "^0.12.0",
+    "esbuild": "^0.28.0",
+    "jsdom": "^29.0.2",
+    "tailwindcss": "^4.2.2",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.7",
+    "vitest": "^4.1.4"
+  },
+  "dependencies": {
+    "@preact/signals": "^2.9.0",
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-dialog": "^2.7.0",
+    "@tauri-apps/plugin-opener": "^2.5.3",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/addon-webgl": "0.19.0",
+    "@xterm/xterm": "6.0.0",
+    "lucide-preact": "^1.8.0",
+    "marked": "^14.1.4",
+    "preact": "^10.29.1"
+  }
+}
+````
+
+## File: src/components/terminal-tabs.tsx
+````typescript
+// terminal-tabs.tsx -- Multi-tab terminal management for main panel (UX-02, D-04/D-05/D-06/D-07)
+// Each tab is its own tmux session backed by a separate PTY.
+// Tab state persists to state.json via updateSession (Pitfall 6).
+// display:none/block preserves xterm.js scrollback + WebGL context.
+
+import { signal } from '@preact/signals';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import type { Terminal } from '@xterm/xterm';
+import type { FitAddon } from '@xterm/addon-fit';
+import { createTerminal, type TerminalOptions } from '../terminal/terminal-manager';
+import { connectPty } from '../terminal/pty-bridge';
+import { attachResizeHandler } from '../terminal/resize-handler';
+import { registerTerminal, getTheme } from '../theme/theme-manager';
+import { updateSession, activeProjectName, projects, getCurrentState } from '../state-manager';
+import { detectAgent } from '../server/server-bridge';
+import { colors, fonts } from '../tokens';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface TerminalTab {
+  id: string;
+  sessionName: string;
+  label: string;
+  terminal: Terminal;
+  fitAddon: FitAddon;
+  container: HTMLDivElement;
+  ptyConnected: boolean;
+  disconnectPty?: () => void;
+  detachResize?: () => void;
+  exitCode?: number | null;  // undefined = running, number = exited
 }
 
-.right-top-content {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 4px;
+// ---------------------------------------------------------------------------
+// Signals
+// ---------------------------------------------------------------------------
+
+export const terminalTabs = signal<TerminalTab[]>([]);
+export const activeTabId = signal<string>('');
+let tabCounter = 0;
+
+/**
+ * In-memory cache of tab metadata per project name.
+ * Used to restore tabs when switching back to a previously visited project.
+ * Key: project name, Value: array of { sessionName, label } for each tab.
+ */
+const projectTabCache = new Map<string, Array<{ sessionName: string; label: string }>>();
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Derive a tmux session name from a project name.
+ * Sanitizes to alphanumeric + hyphen + underscore (matching pty.rs sanitization).
+ */
+function projectSessionName(projectName: string | null, suffix?: string): string {
+  if (!projectName) return suffix ? `efx-mux-${suffix}` : 'efx-mux';
+  const base = projectName.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
+  return suffix ? `${base}-${suffix}` : base;
 }
 
-.right-bottom-content {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
+function getTerminalContainersEl(): HTMLElement | null {
+  return document.querySelector('.terminal-containers');
 }
 
-.terminal-area {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  background: var(--color-bg-terminal);
-  position: relative;
+/**
+ * Wait for the next animation frame so the browser has laid out newly-appended
+ * elements before FitAddon measures them. Without this, fitAddon.fit() reads
+ * a zero-sized or default-sized (80-col) container and the PTY is spawned at
+ * the wrong column count, causing paste truncation at col 80.
+ */
+function nextFrame(): Promise<void> {
+  return new Promise(resolve => requestAnimationFrame(() => resolve()));
 }
 
-.terminal-area .xterm {
-  height: 100%;
+function getThemeOptions(): TerminalOptions {
+  const theme = getTheme();
+  return {
+    theme: theme?.terminal,
+    font: theme?.chrome?.font,
+    fontSize: theme?.chrome?.fontSize,
+  };
 }
 
-.terminal-area .xterm-viewport {
-  background-color: var(--color-bg-terminal) !important;
+async function getActiveProjectInfo(): Promise<{ path?: string; agent?: string } | null> {
+  const activeName = activeProjectName.value;
+  if (!activeName) return null;
+  const project = projects.value.find(p => p.name === activeName);
+  return project ? { path: project.path, agent: project.agent } : null;
 }
 
-.terminal-area .xterm-screen {
-  background-color: var(--color-bg-terminal);
+async function resolveAgentBinary(agent?: string): Promise<string | undefined> {
+  if (!agent || agent === 'bash') return undefined;
+  try {
+    return await detectAgent(agent);
+  } catch {
+    return undefined;
+  }
 }
 
-.server-pane {
-  flex-shrink: 0;
-  border-top: 1px solid var(--color-border);
-  transition: height 0.15s ease;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+// ---------------------------------------------------------------------------
+// Tab management functions (exported for keyboard handler)
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a new terminal tab with its own tmux session.
+ */
+export async function createNewTab(): Promise<TerminalTab | null> {
+  const wrapper = getTerminalContainersEl();
+  if (!wrapper) {
+    console.error('[efxmux] .terminal-containers not found');
+    return null;
+  }
+
+  tabCounter++;
+  const id = `tab-${Date.now()}-${tabCounter}`;
+
+  // Derive session name
+  const activeName = activeProjectName.value;
+  const sessionSuffix = tabCounter > 1 ? String(tabCounter) : undefined;
+  const sessionName = projectSessionName(activeName, sessionSuffix);
+
+  // Label: first tab gets agent name if configured
+  const projectInfo = await getActiveProjectInfo();
+  const isFirstTab = terminalTabs.value.length === 0;
+  let label: string;
+  if (isFirstTab && projectInfo?.agent && projectInfo.agent !== 'bash') {
+    label = projectInfo.agent === 'claude' ? 'Claude' : projectInfo.agent === 'opencode' ? 'OpenCode' : `Terminal ${tabCounter}`;
+  } else {
+    label = `Terminal ${tabCounter}`;
+  }
+
+  // Create container
+  const container = document.createElement('div');
+  container.className = 'absolute inset-0';
+  container.style.display = 'none'; // Will be shown by switchToTab
+  wrapper.appendChild(container);
+
+  // Create terminal
+  const themeOpts = getThemeOptions();
+  const { terminal, fitAddon } = createTerminal(container, { ...themeOpts, sessionName });
+  registerTerminal(terminal, fitAddon);
+
+  // Show the tab and register it before connecting PTY so switchToTab makes
+  // the container visible and the browser can lay it out before we measure.
+  const partialTab: TerminalTab = {
+    id,
+    sessionName,
+    label,
+    terminal,
+    fitAddon,
+    container,
+    ptyConnected: false,
+    disconnectPty: undefined,
+    detachResize: undefined,
+    exitCode: undefined,
+  };
+  terminalTabs.value = [...terminalTabs.value, partialTab];
+  activeTabId.value = id;
+  switchToTab(id);
+
+  // Wait for browser layout so fitAddon.fit() reads the real container dimensions.
+  // Without this, terminal.cols is the xterm.js default (80) and the PTY opens at
+  // 80 cols — causing paste text to wrap at col 80 regardless of the visible width.
+  await nextFrame();
+  fitAddon.fit();
+
+  // Connect PTY -- Ctrl+T tabs are always plain shell (UAT gap 1)
+  const agentBinary = undefined;
+  let disconnectPty: (() => void) | undefined;
+  let ptyConnected = false;
+
+  try {
+    const conn = await connectPty(terminal, sessionName, projectInfo?.path, agentBinary);
+    disconnectPty = conn.disconnect;
+    ptyConnected = true;
+  } catch (err) {
+    console.error('[efxmux] Failed to connect PTY for tab:', err);
+    terminal.writeln(`\x1b[33mFailed to connect PTY: ${err}\x1b[0m`);
+  }
+
+  // Attach resize handler
+  const resizeHandle = attachResizeHandler(container, terminal, fitAddon, sessionName);
+
+  // Update the partial tab in-place with PTY connection results
+  partialTab.ptyConnected = ptyConnected;
+  partialTab.disconnectPty = disconnectPty;
+  partialTab.detachResize = resizeHandle.detach;
+  // Trigger reactivity
+  terminalTabs.value = [...terminalTabs.value];
+
+  persistTabState();
+
+  return partialTab;
 }
 
-.server-pane.state-strip {
-  height: 28px;
-  overflow: hidden;
+/**
+ * Close the active terminal tab. If last tab, auto-creates a fresh one (D-07).
+ */
+export async function closeActiveTab(): Promise<void> {
+  const tabs = terminalTabs.value;
+  const currentId = activeTabId.value;
+  const idx = tabs.findIndex(t => t.id === currentId);
+  if (idx === -1) return;
+
+  const tab = tabs[idx];
+  // Destroy PTY session in Rust before disposing JS-side resources
+  try { await invoke('destroy_pty_session', { sessionName: tab.sessionName }); } catch {}
+  disposeTab(tab);
+
+  const remaining = tabs.filter(t => t.id !== currentId);
+  terminalTabs.value = remaining;
+
+  if (remaining.length === 0) {
+    // D-07: closing last tab auto-creates fresh default
+    await createNewTab();
+  } else {
+    // Switch to previous tab (or first)
+    const newIdx = Math.min(idx, remaining.length - 1);
+    activeTabId.value = remaining[newIdx].id;
+    switchToTab(remaining[newIdx].id);
+  }
+
+  persistTabState();
 }
 
-.server-pane.state-expanded {
-  height: var(--server-pane-h, 200px);
+/**
+ * Close a specific tab by ID.
+ */
+export async function closeTab(tabId: string): Promise<void> {
+  const tabs = terminalTabs.value;
+  const idx = tabs.findIndex(t => t.id === tabId);
+  if (idx === -1) return;
+
+  // If this is the active tab, use closeActiveTab logic
+  if (tabId === activeTabId.value) {
+    await closeActiveTab();
+    return;
+  }
+
+  const tab = tabs[idx];
+  try { await invoke('destroy_pty_session', { sessionName: tab.sessionName }); } catch {}
+  disposeTab(tab);
+  terminalTabs.value = tabs.filter(t => t.id !== tabId);
+  persistTabState();
 }
 
-.server-pane-toolbar {
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 8px;
-  background: var(--color-bg-raised);
-  border-bottom: 1px solid var(--color-border);
-  flex-shrink: 0;
+/**
+ * Cycle to the next tab (wraps around).
+ */
+export function cycleToNextTab(): void {
+  const tabs = terminalTabs.value;
+  if (tabs.length <= 1) return;
+
+  const idx = tabs.findIndex(t => t.id === activeTabId.value);
+  const nextIdx = (idx + 1) % tabs.length;
+  activeTabId.value = tabs[nextIdx].id;
+  switchToTab(tabs[nextIdx].id);
 }
 
-.server-pane-logs {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 4px 16px;
-  font-family: var(--font-family-mono);
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--color-text);
-  white-space: pre-wrap;
-  word-break: break-all;
-  background: var(--color-bg-raised);
+/**
+ * Get the active terminal + fitAddon, or null if no tabs.
+ */
+export function getActiveTerminal(): { terminal: Terminal; fitAddon: FitAddon } | null {
+  const tab = terminalTabs.value.find(t => t.id === activeTabId.value);
+  if (!tab) return null;
+  return { terminal: tab.terminal, fitAddon: tab.fitAddon };
 }
 
-.server-btn {
-  background: var(--color-bg-raised);
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
-  padding: 4px 8px;
-  border-radius: 2px;
-  font-size: 11px;
-  font-weight: 600;
-  font-family: var(--font-family-sans);
-  cursor: pointer;
-  transition: all 0.15s ease;
+// ---------------------------------------------------------------------------
+// Init first tab (called from main.tsx bootstrap)
+// ---------------------------------------------------------------------------
+
+/**
+ * Initialize the first terminal tab during app bootstrap.
+ * Replaces inline createTerminal + connectPty in main.tsx.
+ */
+export async function initFirstTab(
+  themeOptions: TerminalOptions,
+  sessionName: string,
+  projectPath?: string,
+  agentBinary?: string,
+): Promise<{ terminal: Terminal; fitAddon: FitAddon } | null> {
+  const wrapper = getTerminalContainersEl();
+  if (!wrapper) {
+    console.error('[efxmux] .terminal-containers not found');
+    return null;
+  }
+
+  tabCounter++;
+  const id = `tab-${Date.now()}-${tabCounter}`;
+
+  // Label: use agent name if configured
+  const activeName = activeProjectName.value;
+  const activeProject = activeName ? projects.value.find(p => p.name === activeName) : null;
+  let label: string;
+  if (activeProject?.agent && activeProject.agent !== 'bash') {
+    label = activeProject.agent === 'claude' ? 'Claude' : activeProject.agent === 'opencode' ? 'OpenCode' : 'Terminal 1';
+  } else {
+    label = 'Terminal 1';
+  }
+
+  // Create container
+  const container = document.createElement('div');
+  container.className = 'absolute inset-0';
+  wrapper.appendChild(container);
+
+  // Create terminal
+  const { terminal, fitAddon } = createTerminal(container, { ...themeOptions, sessionName });
+
+  // Wait for browser layout before measuring. createTerminal calls fitAddon.fit()
+  // synchronously, but the container was just appended — no layout has occurred yet.
+  // Without this frame, terminal.cols stays at the xterm.js default (80) and the PTY
+  // opens at 80 cols, causing paste text to wrap at col 80 regardless of visible width.
+  await nextFrame();
+  fitAddon.fit();
+
+  // Connect PTY
+  let disconnectPty: (() => void) | undefined;
+  let ptyConnected = false;
+
+  try {
+    const conn = await connectPty(terminal, sessionName, projectPath, agentBinary);
+    disconnectPty = conn.disconnect;
+    ptyConnected = true;
+  } catch (err) {
+    console.error('[efxmux] Failed to connect PTY:', err);
+    terminal.writeln('\x1b[33mWarning: Could not attach to tmux session "' + sessionName + '":\x1b[0m ' + err);
+    terminal.writeln('\x1b[33mIf tmux is not installed, run: brew install tmux\x1b[0m');
+  }
+
+  // Attach resize handler
+  const resizeHandle = attachResizeHandler(container, terminal, fitAddon, sessionName);
+
+  const tab: TerminalTab = {
+    id,
+    sessionName,
+    label,
+    terminal,
+    fitAddon,
+    container,
+    ptyConnected,
+    disconnectPty,
+    detachResize: resizeHandle.detach,
+    exitCode: undefined,
+  };
+
+  terminalTabs.value = [tab];
+  activeTabId.value = id;
+  // Container is already visible (no display:none needed for first tab)
+
+  persistTabState();
+
+  return { terminal, fitAddon };
 }
 
-.server-btn:hover:not(:disabled) {
-  border-color: var(--color-accent);
-  color: var(--color-text-bright);
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+function switchToTab(tabId: string): void {
+  const tabs = terminalTabs.value;
+  for (const tab of tabs) {
+    if (tab.id === tabId) {
+      tab.container.style.display = 'block';
+    } else {
+      tab.container.style.display = 'none';
+    }
+  }
+  // Defer focus+fit until after browser reflow (UAT gap 3)
+  requestAnimationFrame(() => {
+    const active = tabs.find(t => t.id === tabId);
+    if (active) {
+      active.fitAddon.fit();
+      active.terminal.focus();
+    }
+  });
 }
 
-.server-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+function disposeTab(tab: TerminalTab): void {
+  tab.disconnectPty?.();
+  tab.detachResize?.();
+  tab.terminal.dispose();
+  tab.container.remove();
 }
 
-/* Global reset */
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+// ---------------------------------------------------------------------------
+// Tab persistence (Pitfall 6)
+// ---------------------------------------------------------------------------
+
+function persistTabState(): void {
+  const activeName = activeProjectName.value;
+  const tabs = terminalTabs.value.map(t => ({
+    sessionName: t.sessionName,
+    label: t.label,
+  }));
+  const data = JSON.stringify({ tabs, activeTabId: activeTabId.value });
+  // Save under per-project key (and legacy flat key for backward compat)
+  const patch: Record<string, string> = { 'terminal-tabs': data };
+  if (activeName) {
+    patch[`terminal-tabs:${activeName}`] = data;
+  }
+  updateSession(patch);
 }
 
-html, body {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
+// ---------------------------------------------------------------------------
+// Restart a tab's PTY session (for crash overlay)
+// ---------------------------------------------------------------------------
+
+export async function restartTabSession(tabId: string): Promise<void> {
+  const tabs = terminalTabs.value;
+  const tab = tabs.find(t => t.id === tabId);
+  if (!tab) return;
+
+  // Disconnect old PTY
+  tab.disconnectPty?.();
+  tab.detachResize?.();
+  tab.terminal.dispose();
+
+  // Clear exit code
+  tab.exitCode = undefined;
+
+  // New session name (increment suffix) — must be computed before createTerminal
+  // so the key handler's sessionName closure captures the correct value.
+  const projectInfo = await getActiveProjectInfo();
+  tabCounter++;
+  const newSessionSuffix = `r${tabCounter}`;
+  const newSessionName = projectSessionName(activeProjectName.value, newSessionSuffix);
+
+  // Create new terminal in same container
+  tab.container.innerHTML = '';
+  const themeOpts = getThemeOptions();
+  const { terminal, fitAddon } = createTerminal(tab.container, { ...themeOpts, sessionName: newSessionName });
+  registerTerminal(terminal, fitAddon);
+
+  // Wait for browser layout before measuring, then fit — ensures the PTY opens
+  // at the real container width instead of the 80-col xterm.js default.
+  await nextFrame();
+  fitAddon.fit();
+
+  // Connect PTY
+  const agentBinary = await resolveAgentBinary(projectInfo?.agent);
+  try {
+    const conn = await connectPty(terminal, newSessionName, projectInfo?.path, agentBinary);
+    tab.disconnectPty = conn.disconnect;
+    tab.ptyConnected = true;
+  } catch (err) {
+    console.error('[efxmux] Failed to restart PTY:', err);
+    terminal.writeln(`\x1b[33mFailed to restart: ${err}\x1b[0m`);
+    tab.ptyConnected = false;
+  }
+
+  // Attach resize handler
+  const resizeHandle = attachResizeHandler(tab.container, terminal, fitAddon, newSessionName);
+  tab.detachResize = resizeHandle.detach;
+
+  tab.terminal = terminal;
+  tab.fitAddon = fitAddon;
+  tab.sessionName = newSessionName;
+
+  // Trigger re-render
+  terminalTabs.value = [...tabs];
+  terminal.focus();
+  fitAddon.fit();
+  persistTabState();
 }
 
-/* ─── xterm.js scrollbar overrides (cannot be Tailwind-ized) ─── */
-.xterm-viewport::-webkit-scrollbar { width: 8px; }
-.xterm-viewport::-webkit-scrollbar-track { background: var(--color-bg); }
-.xterm-viewport::-webkit-scrollbar-thumb { background: var(--color-border-interactive); border-radius: 4px; }
-.xterm-viewport::-webkit-scrollbar-thumb:hover { background: var(--color-text); }
+// ---------------------------------------------------------------------------
+// Clear all tabs (for project switch)
+// ---------------------------------------------------------------------------
 
-/* ─── Global custom scrollbars (match xterm style) ─── */
-*::-webkit-scrollbar { width: 8px; height: 8px; }
-*::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb { background: var(--color-border-interactive); border-radius: 4px; }
-*::-webkit-scrollbar-thumb:hover { background: var(--color-text); }
-
-/* ─── Drag state overlay (applied by drag-manager) ─── */
-.app-dragging .sidebar,
-.app-dragging .main-panel,
-.app-dragging .right-panel {
-  pointer-events: none;
-  user-select: none;
+/**
+ * Save current tabs to the per-project cache before clearing.
+ * Call this with the OLD project name before switching away.
+ */
+export function saveProjectTabs(projectName: string): void {
+  const tabs = terminalTabs.value;
+  if (tabs.length > 0) {
+    const tabMeta = tabs.map(t => ({
+      sessionName: t.sessionName,
+      label: t.label,
+    }));
+    projectTabCache.set(projectName, tabMeta);
+    // Persist to disk so tabs survive app restart
+    updateSession({
+      [`terminal-tabs:${projectName}`]: JSON.stringify({ tabs: tabMeta, activeTabId: activeTabId.value }),
+    });
+  }
 }
 
-/* ─── GSD Viewer uses .file-viewer-markdown (shared with file preview) ─── */
-
-/* ─── Diff Viewer color classes ─── */
-.diff-add { border-left: 3px solid var(--color-success); }
-.diff-del { border-left: 3px solid var(--color-danger); }
-
-/* ─── File Tree focus ─── */
-.file-tree:focus { outline: 1px solid var(--color-accent); outline-offset: -1px; }
-
-/* ─── Vertical split handle (sidebar<->main, main<->right) ─── */
-.split-handle-v {
-  width: var(--handle-size);
-  min-width: var(--handle-size);
-  height: 100%;
-  cursor: col-resize;
-  background: var(--color-border);
-  background-clip: content-box;
-  flex-shrink: 0;
-  /* Widen hit target with negative margin + transparent padding trick */
-  margin: 0 calc((var(--handle-hit) - var(--handle-size)) / -2);
-  padding: 0 calc((var(--handle-hit) - var(--handle-size)) / 2);
-  z-index: 10;
-  transition: background 0.1s ease;
+/**
+ * Check if cached tabs exist for a project (in-memory or persisted on disk).
+ */
+export function hasProjectTabs(projectName: string): boolean {
+  const cached = projectTabCache.get(projectName);
+  if (cached && cached.length > 0) return true;
+  // Also check persisted state on disk
+  const state = getCurrentState();
+  const persisted = state?.session?.[`terminal-tabs:${projectName}`];
+  if (persisted) {
+    try {
+      const parsed = JSON.parse(persisted);
+      return parsed?.tabs?.length > 0;
+    } catch { return false; }
+  }
+  return false;
 }
 
-.split-handle-v:hover,
-.split-handle-v.dragging {
-  background: var(--color-accent);
-  background-clip: content-box;
+/**
+ * Restore tabs from the per-project cache (in-memory first, then disk).
+ * Re-attaches to existing tmux sessions (whose history was cleared by
+ * spawn_terminal in pty.rs to prevent stale content dump).
+ * Returns true if tabs were restored, false if no cache exists.
+ */
+export async function restoreProjectTabs(
+  projectName: string,
+  projectPath?: string,
+  agentBinary?: string,
+): Promise<boolean> {
+  let tabData: Array<{ sessionName: string; label: string }> | null = null;
+
+  // Try in-memory cache first (from same-session project switch)
+  const cached = projectTabCache.get(projectName);
+  if (cached && cached.length > 0) {
+    tabData = cached;
+  }
+
+  // Fall back to persisted state on disk (survives app restart)
+  if (!tabData) {
+    const state = getCurrentState();
+    const persisted = state?.session?.[`terminal-tabs:${projectName}`];
+    if (persisted) {
+      try {
+        const parsed = JSON.parse(persisted);
+        if (parsed?.tabs?.length > 0) {
+          tabData = parsed.tabs;
+        }
+      } catch { /* ignore parse errors */ }
+    }
+  }
+
+  if (!tabData || tabData.length === 0) return false;
+
+  const restored = await restoreTabs(
+    { tabs: tabData, activeTabId: '' },
+    projectPath,
+    agentBinary,
+  );
+
+  if (restored) {
+    // Clear the in-memory cache entry since tabs are now live again
+    projectTabCache.delete(projectName);
+  }
+
+  return restored;
 }
 
-/* ─── Horizontal split handle between right sub-panels ─── */
-.split-handle-h {
-  width: 100%;
-  height: var(--handle-size);
-  min-height: var(--handle-size);
-  cursor: row-resize;
-  background: var(--color-border);
-  background-clip: content-box;
-  flex-shrink: 0;
-  /* Widen vertical hit target */
-  margin: calc((var(--handle-hit) - var(--handle-size)) / -2) 0;
-  padding: calc((var(--handle-hit) - var(--handle-size)) / 2) 0;
-  z-index: 10;
-  transition: background 0.1s ease;
+export async function clearAllTabs(): Promise<void> {
+  // Destroy PTY sessions in Rust so old PTY clients disconnect.
+  // The tmux sessions are kept alive (not killed) so tabs can be restored
+  // when switching back to this project. Stale screen content is cleared
+  // by spawn_terminal before re-attaching.
+  for (const tab of terminalTabs.value) {
+    try {
+      await invoke('destroy_pty_session', { sessionName: tab.sessionName });
+    } catch {
+      // Session may already be gone -- safe to ignore
+    }
+    disposeTab(tab);
+  }
+  terminalTabs.value = [];
+  activeTabId.value = '';
+  tabCounter = 0;
 }
 
-.split-handle-h:hover,
-.split-handle-h.dragging {
-  background: var(--color-accent);
-  background-clip: content-box;
+// ---------------------------------------------------------------------------
+// Tab restoration (called from main.tsx bootstrap for session persistence)
+// ---------------------------------------------------------------------------
+
+/**
+ * Restore tabs from persisted state.json data on app startup.
+ * Returns true if at least 1 tab was restored, false otherwise.
+ */
+export async function restoreTabs(
+  savedData: { tabs: Array<{ sessionName: string; label: string }>; activeTabId: string },
+  projectPath?: string,
+  agentBinary?: string,
+): Promise<boolean> {
+  if (!savedData?.tabs?.length) return false;
+
+  const wrapper = getTerminalContainersEl();
+  if (!wrapper) return false;
+
+  const restoredTabs: TerminalTab[] = [];
+
+  for (let i = 0; i < savedData.tabs.length; i++) {
+    const saved = savedData.tabs[i];
+    tabCounter++;
+    const id = `tab-${Date.now()}-${tabCounter}`;
+
+    // Create container — make it visible so the browser can lay it out and
+    // fitAddon.fit() reads real dimensions. switchToTab will hide non-active tabs.
+    const container = document.createElement('div');
+    container.className = 'absolute inset-0';
+    // Intentionally NOT setting display:none here — container must be visible for
+    // fitAddon to measure the real column count before PTY spawn.
+    wrapper.appendChild(container);
+
+    // Create terminal — pass sessionName so the Shift+Enter key handler can invoke
+    // send_literal_sequence with the correct tmux target.
+    const themeOpts = getThemeOptions();
+    const { terminal, fitAddon } = createTerminal(container, { ...themeOpts, sessionName: saved.sessionName });
+    registerTerminal(terminal, fitAddon);
+
+    // Wait for browser layout so fitAddon.fit() reads the real container width.
+    // Without this, terminal.cols is 80 (xterm.js default) and the PTY opens at
+    // 80 cols — causing paste text to wrap at col 80 regardless of visible width.
+    await nextFrame();
+    fitAddon.fit();
+
+    // Hide after measuring — switchToTab will reveal the active tab.
+    container.style.display = 'none';
+
+    // Connect PTY -- first tab gets agent binary (it's the agent tab), rest are plain shell
+    const shellCmd = (i === 0 && agentBinary) ? agentBinary : undefined;
+    let disconnectPty: (() => void) | undefined;
+    let ptyConnected = false;
+
+    try {
+      const conn = await connectPty(terminal, saved.sessionName, projectPath, shellCmd);
+      disconnectPty = conn.disconnect;
+      ptyConnected = true;
+    } catch (err) {
+      console.error('[efxmux] Failed to restore PTY for tab:', saved.sessionName, err);
+      terminal.writeln(`\x1b[33mFailed to restore session "${saved.sessionName}": ${err}\x1b[0m`);
+    }
+
+    // Attach resize handler
+    const resizeHandle = attachResizeHandler(container, terminal, fitAddon, saved.sessionName);
+
+    restoredTabs.push({
+      id,
+      sessionName: saved.sessionName,
+      label: saved.label,
+      terminal,
+      fitAddon,
+      container,
+      ptyConnected,
+      disconnectPty,
+      detachResize: resizeHandle.detach,
+      exitCode: undefined,
+    });
+  }
+
+  if (restoredTabs.length === 0) return false;
+
+  terminalTabs.value = restoredTabs;
+
+  // Activate the saved active tab (or first if saved ID no longer maps)
+  // Since we generate new IDs, activate by index -- savedData.activeTabId won't match
+  // Default to first tab
+  activeTabId.value = restoredTabs[0].id;
+  switchToTab(restoredTabs[0].id);
+
+  persistTabState();
+  return true;
 }
 
-/* ─── Project row hover actions ─── */
-.group:hover .project-row-actions {
-  opacity: 1 !important;
+// ---------------------------------------------------------------------------
+// PTY exit event listener
+// ---------------------------------------------------------------------------
+
+listen<{ session: string; code: number }>('pty-exited', (event) => {
+  const { session, code } = event.payload;
+  const tabs = terminalTabs.value;
+  const tab = tabs.find(t => t.sessionName === session);
+  if (tab) {
+    tab.exitCode = code;
+    terminalTabs.value = [...tabs]; // trigger re-render
+  }
+});
+
+// ---------------------------------------------------------------------------
+// TerminalTabBar component (UI-SPEC Component 1)
+// ---------------------------------------------------------------------------
+
+import { CrashOverlay } from './crash-overlay';
+
+export function TerminalTabBar() {
+  const tabs = terminalTabs.value;
+  const currentId = activeTabId.value;
+
+  return (
+    <div
+      class="flex gap-1 px-2 py-2 shrink-0 items-center border-b"
+      role="tablist"
+      style={{ backgroundColor: colors.bgBase, borderColor: colors.bgBorder }}
+    >
+      {tabs.map(tab => {
+        const isActive = tab.id === currentId;
+        return (
+          <button
+            key={tab.id}
+            role="tab"
+            aria-selected={isActive}
+            class="flex items-center gap-2 cursor-pointer transition-all duration-150"
+            style={{
+              backgroundColor: isActive ? colors.bgElevated : 'transparent',
+              border: isActive ? `1px solid ${colors.bgSurface}` : '1px solid transparent',
+              borderRadius: 6,
+              padding: '9px 16px',
+              fontFamily: fonts.sans,
+              fontSize: 13,
+              fontWeight: isActive ? 500 : 400,
+              color: isActive ? colors.textPrimary : colors.textDim,
+            }}
+            onClick={() => {
+              activeTabId.value = tab.id;
+              switchToTab(tab.id);
+            }}
+            title={tab.sessionName}
+          >
+            {isActive && <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: colors.statusGreen, flexShrink: 0 }} />}
+            <span>{tab.label}</span>
+            <span
+              class="ml-1 flex items-center justify-center"
+              style={{ color: colors.textDim, fontSize: 14 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                closeTab(tab.id);
+              }}
+              onMouseEnter={(e) => { (e.target as HTMLElement).style.color = colors.textPrimary; }}
+              onMouseLeave={(e) => { (e.target as HTMLElement).style.color = colors.textDim; }}
+              title="Close tab"
+            >{'\u00D7'}</span>
+          </button>
+        );
+      })}
+      {/* New tab button */}
+      <button
+        class="w-7 h-7 rounded flex items-center justify-center text-base cursor-pointer"
+        style={{ color: colors.textDim, fontFamily: fonts.sans }}
+        onMouseEnter={(e) => { const t = e.target as HTMLElement; t.style.color = colors.textPrimary; t.style.backgroundColor = colors.bgElevated; }}
+        onMouseLeave={(e) => { const t = e.target as HTMLElement; t.style.color = colors.textDim; t.style.backgroundColor = 'transparent'; }}
+        onClick={() => createNewTab()}
+        title="New terminal tab (Ctrl+T)"
+      >+</button>
+    </div>
+  );
 }
 
-/* Agent icon gradient utility (D-17: replaces inline style={{ background: 'linear-gradient(180deg, #A855F7, #6366F1)' }}) */
-.agent-icon-gradient {
-  background: linear-gradient(180deg, #A855F7, #6366F1);
+// ---------------------------------------------------------------------------
+// Active tab crash overlay rendering (used in main-panel.tsx)
+// ---------------------------------------------------------------------------
+
+export function ActiveTabCrashOverlay() {
+  const tab = terminalTabs.value.find(t => t.id === activeTabId.value);
+  if (!tab || tab.exitCode === undefined || tab.exitCode === null) return null;
+
+  return (
+    <CrashOverlay
+      tab={tab}
+      onRestart={() => restartTabSession(tab.id)}
+    />
+  );
+}
+````
+
+## File: src/components/main-panel.tsx
+````typescript
+// main-panel.tsx -- Main panel with terminal-area + file viewer overlay + server-pane
+// Phase 2: terminal-area is empty -- xterm.js mounts via querySelector (D-08)
+
+import { signal } from '@preact/signals';
+import { useEffect } from 'preact/hooks';
+import { marked } from 'marked';
+import { ServerPane, serverPaneState } from './server-pane';
+import { TerminalTabBar, ActiveTabCrashOverlay } from './terminal-tabs';
+import { AgentHeader } from './agent-header';
+import { colors } from '../tokens';
+
+// Module-level signals for file viewer state
+const fileViewerVisible = signal(false);
+const fileName = signal('');
+const filePath = signal('');
+const fileContent = signal('');
+
+function closeFileViewer(): void {
+  fileViewerVisible.value = false;
+  fileContent.value = '';
 }
 
-/* ─── Syntax highlighting tokens (file viewer) ─── */
-.syn-kw { color: #c792ea; }           /* keywords: purple */
-.syn-str { color: #c3e88d; }          /* strings: green */
-.syn-cm { color: #546e7a; }           /* comments: dim gray */
-.syn-num { color: #f78c6c; }          /* numbers: orange */
-.syn-fn { color: #82aaff; }           /* functions: blue */
-.syn-op { color: #89ddff; }           /* operators: cyan */
-.syn-type { color: #ffcb6b; }         /* types/classes: yellow */
+/**
+ * Escape HTML entities for safe rendering in pre block.
+ */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
-/* ─── File viewer markdown rendering ─── */
-.file-viewer-markdown h1,
-.file-viewer-markdown h2,
-.file-viewer-markdown h3,
-.file-viewer-markdown h4 {
-  color: var(--color-text-bright);
-  margin: 20px 0 10px;
-  font-weight: 600;
+/**
+ * Detect if a filename is a markdown file.
+ */
+function isMarkdownFile(name: string): boolean {
+  return /\.(md|markdown|mdx)$/i.test(name);
 }
-.file-viewer-markdown h1 { font-size: 24px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px; }
-.file-viewer-markdown h2 { font-size: 20px; border-bottom: 1px solid var(--color-border); padding-bottom: 6px; }
-.file-viewer-markdown h3 { font-size: 16px; }
-.file-viewer-markdown h4 { font-size: 14px; }
-.file-viewer-markdown p { margin: 10px 0; line-height: 1.7; }
-.file-viewer-markdown a { color: var(--color-accent); text-decoration: underline; }
-.file-viewer-markdown code {
-  background: var(--color-bg-raised);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 13px;
-  font-family: var(--font-family-mono);
+
+/**
+ * Detect file language from extension for syntax highlighting.
+ */
+function getLanguage(name: string): string | null {
+  const ext = name.split('.').pop()?.toLowerCase();
+  const map: Record<string, string> = {
+    ts: 'ts', tsx: 'ts', js: 'js', jsx: 'js', mjs: 'js', cjs: 'js',
+    rs: 'rs', css: 'css', json: 'json', toml: 'toml', yaml: 'yaml', yml: 'yaml',
+    html: 'html', htm: 'html', xml: 'html', svg: 'html',
+    sh: 'sh', bash: 'sh', zsh: 'sh', fish: 'sh',
+    py: 'py', rb: 'rb', go: 'go', java: 'java', c: 'c', cpp: 'c', h: 'c',
+  };
+  return ext ? (map[ext] || null) : null;
 }
-.file-viewer-markdown pre {
-  background: var(--color-bg-raised);
-  padding: 14px;
-  border-radius: 6px;
-  overflow-x: auto;
-  margin: 12px 0;
+
+// Syntax token classes map to CSS classes: .syn-kw, .syn-str, .syn-cm, .syn-num, .syn-fn, .syn-op, .syn-type
+// We keep this simple: regex-based line-by-line tokenization with no parser.
+
+const KEYWORDS_JS = /\b(import|export|from|default|const|let|var|function|return|if|else|switch|case|break|for|while|do|new|this|class|extends|implements|interface|type|enum|async|await|yield|try|catch|finally|throw|typeof|instanceof|in|of|void|delete|null|undefined|true|false|super|static|get|set|as|satisfies)\b/g;
+const KEYWORDS_RS = /\b(fn|let|mut|const|pub|use|mod|struct|enum|impl|trait|type|where|match|if|else|for|while|loop|break|continue|return|self|Self|super|crate|true|false|as|in|ref|move|async|await|unsafe|extern|dyn|static|macro_rules)\b/g;
+const KEYWORDS_PY = /\b(def|class|import|from|return|if|elif|else|for|while|break|continue|pass|yield|try|except|finally|raise|with|as|lambda|True|False|None|and|or|not|in|is|del|global|nonlocal|async|await)\b/g;
+const KEYWORDS_GO = /\b(func|var|const|type|struct|interface|map|chan|go|select|case|default|if|else|for|range|return|break|continue|switch|defer|package|import|true|false|nil|make|len|cap|append|new)\b/g;
+const KEYWORDS_SH = /\b(if|then|else|elif|fi|for|while|do|done|case|esac|function|return|exit|echo|export|local|readonly|source|set|unset|shift|true|false)\b/g;
+const KEYWORDS_CSS = /\b(import|media|keyframes|font-face|supports|charset)\b/g;
+const KEYWORDS_TOML = /\b(true|false)\b/g;
+
+function getKeywordsPattern(lang: string): RegExp | null {
+  switch (lang) {
+    case 'ts': case 'js': return KEYWORDS_JS;
+    case 'rs': return KEYWORDS_RS;
+    case 'py': return KEYWORDS_PY;
+    case 'go': return KEYWORDS_GO;
+    case 'sh': return KEYWORDS_SH;
+    case 'css': return KEYWORDS_CSS;
+    case 'toml': case 'yaml': return KEYWORDS_TOML;
+    case 'java': case 'c': return KEYWORDS_JS; // close enough for basic highlighting
+    default: return null;
+  }
 }
-.file-viewer-markdown pre code { background: none; padding: 0; }
-.file-viewer-markdown ul, .file-viewer-markdown ol { padding-left: 24px; margin: 8px 0; }
-.file-viewer-markdown li { margin: 4px 0; line-height: 1.6; }
-.file-viewer-markdown blockquote {
-  border-left: 3px solid var(--color-accent);
-  padding: 4px 16px;
-  margin: 12px 0;
-  color: var(--color-text);
-  background: var(--color-bg-raised);
-  border-radius: 0 4px 4px 0;
+
+/**
+ * Simple syntax highlighter: produces HTML with <span class="syn-*"> tokens.
+ * Works line-by-line. Handles strings, comments, numbers, keywords, and types.
+ */
+function highlightCode(code: string, lang: string): string {
+  const escaped = escapeHtml(code);
+  const lines = escaped.split('\n');
+  let inBlockComment = false;
+
+  const kwPattern = getKeywordsPattern(lang);
+
+  return lines.map(line => {
+    // Block comment handling (/* ... */)
+    if (inBlockComment) {
+      const endIdx = line.indexOf('*/');
+      if (endIdx >= 0) {
+        inBlockComment = false;
+        const commentPart = line.slice(0, endIdx + 2);
+        const rest = line.slice(endIdx + 2);
+        return `<span class="syn-cm">${commentPart}</span>${highlightLine(rest, lang, kwPattern)}`;
+      }
+      return `<span class="syn-cm">${line}</span>`;
+    }
+
+    const blockStart = line.indexOf('/*');
+    if (blockStart >= 0 && !isInsideString(line, blockStart)) {
+      const blockEnd = line.indexOf('*/', blockStart + 2);
+      if (blockEnd >= 0) {
+        // Single-line block comment
+        const before = line.slice(0, blockStart);
+        const comment = line.slice(blockStart, blockEnd + 2);
+        const after = line.slice(blockEnd + 2);
+        return `${highlightLine(before, lang, kwPattern)}<span class="syn-cm">${comment}</span>${highlightLine(after, lang, kwPattern)}`;
+      } else {
+        inBlockComment = true;
+        const before = line.slice(0, blockStart);
+        const comment = line.slice(blockStart);
+        return `${highlightLine(before, lang, kwPattern)}<span class="syn-cm">${comment}</span>`;
+      }
+    }
+
+    return highlightLine(line, lang, kwPattern);
+  }).join('\n');
 }
-.file-viewer-markdown hr { border: none; border-top: 1px solid var(--color-border); margin: 20px 0; }
-.file-viewer-markdown table { border-collapse: collapse; margin: 12px 0; width: 100%; }
-.file-viewer-markdown th, .file-viewer-markdown td {
-  border: 1px solid var(--color-border);
-  padding: 8px 12px;
-  text-align: left;
-  font-size: 13px;
+
+/** Check if a position is inside a string (approximate). */
+function isInsideString(line: string, pos: number): boolean {
+  let inSingle = false, inDouble = false, inBacktick = false;
+  for (let i = 0; i < pos; i++) {
+    const ch = line[i];
+    const prev = i > 0 ? line[i - 1] : '';
+    if (ch === "'" && !inDouble && !inBacktick && prev !== '\\') inSingle = !inSingle;
+    if (ch === '&' && line.slice(i, i + 6) === '&quot;' && !inSingle && !inBacktick) { inDouble = !inDouble; i += 5; continue; }
+    if (ch === '`' && !inSingle && !inDouble && prev !== '\\') inBacktick = !inBacktick;
+  }
+  return inSingle || inDouble || inBacktick;
 }
-.file-viewer-markdown th { background: var(--color-bg-raised); font-weight: 600; color: var(--color-text-bright); }
-.file-viewer-markdown img { max-width: 100%; border-radius: 4px; }
-.file-viewer-markdown .task-checkbox { margin-right: 8px; cursor: pointer; accent-color: var(--color-accent); }
+
+/** Highlight a single line (no block comment state). */
+function highlightLine(line: string, lang: string, kwPattern: RegExp | null): string {
+  if (!line) return line;
+
+  // Line comments
+  const commentMarkers = (lang === 'py' || lang === 'sh' || lang === 'yaml' || lang === 'toml') ? ['#'] : ['//'];
+  for (const marker of commentMarkers) {
+    const idx = line.indexOf(marker);
+    if (idx >= 0 && !isInsideString(line, idx)) {
+      const before = line.slice(0, idx);
+      const comment = line.slice(idx);
+      return `${tokenizeLine(before, lang, kwPattern)}<span class="syn-cm">${comment}</span>`;
+    }
+  }
+
+  return tokenizeLine(line, lang, kwPattern);
+}
+
+/** Tokenize a line segment: strings, numbers, keywords, types. */
+function tokenizeLine(segment: string, lang: string, kwPattern: RegExp | null): string {
+  if (!segment) return segment;
+
+  // Replace strings first (they shouldn't be keyword-highlighted)
+  // Match &quot;...&quot;, '...', `...` (escaped quotes are already HTML entities)
+  let result = segment.replace(/&quot;((?:[^&]|&(?!quot;))*)&quot;/g, '<span class="syn-str">&quot;$1&quot;</span>');
+  result = result.replace(/'([^'\\]*(?:\\.[^'\\]*)*)'/g, '<span class="syn-str">\'$1\'</span>');
+  result = result.replace(/`([^`]*)`/g, '<span class="syn-str">`$1`</span>');
+
+  // Numbers (not inside tags already)
+  result = result.replace(/(?<![a-zA-Z_"'>])(\b\d+\.?\d*(?:e[+-]?\d+)?\b)/g, '<span class="syn-num">$1</span>');
+
+  // Keywords
+  if (kwPattern) {
+    result = result.replace(kwPattern, '<span class="syn-kw">$&</span>');
+  }
+
+  // Type-like identifiers (PascalCase words not already wrapped)
+  result = result.replace(/(?<![<"'a-z])(\b[A-Z][a-zA-Z0-9]*\b)(?![^<]*>)/g, (match, p1) => {
+    // Don't re-wrap if already inside a span
+    return `<span class="syn-type">${p1}</span>`;
+  });
+
+  return result;
+}
+
+/**
+ * Render file content based on type: markdown, code with highlighting, or plain text.
+ */
+function renderFileContent(name: string, content: string): { html: string; isMarkdown: boolean } {
+  if (isMarkdownFile(name)) {
+    const html = marked.parse(content, { async: false }) as string;
+    return { html, isMarkdown: true };
+  }
+
+  const lang = getLanguage(name);
+  if (lang) {
+    return { html: highlightCode(content, lang), isMarkdown: false };
+  }
+
+  return { html: escapeHtml(content), isMarkdown: false };
+}
+
+export function MainPanel() {
+  // Register show-file-viewer and Escape key listeners
+  useEffect(() => {
+    function handleShowFile(e: Event) {
+      const detail = (e as CustomEvent).detail;
+      if (detail) {
+        fileName.value = detail.name || '';
+        filePath.value = detail.path || '';
+        fileContent.value = detail.content || '';
+        fileViewerVisible.value = true;
+      }
+    }
+
+    function handleKeydown(e: KeyboardEvent) {
+      if (e.key === 'Escape' && fileViewerVisible.value) {
+        e.preventDefault();
+        closeFileViewer();
+      }
+    }
+
+    document.addEventListener('show-file-viewer', handleShowFile);
+    document.addEventListener('keydown', handleKeydown);
+
+    return () => {
+      document.removeEventListener('show-file-viewer', handleShowFile);
+      document.removeEventListener('keydown', handleKeydown);
+    };
+  }, []);
+
+  const rendered = fileViewerVisible.value
+    ? renderFileContent(fileName.value, fileContent.value)
+    : { html: '', isMarkdown: false };
+
+  return (
+    <main class="main-panel relative" aria-label="Main panel">
+      <TerminalTabBar />
+      <div class="terminal-area flex-1 bg-bg-terminal overflow-hidden relative min-h-[100px]">
+        <AgentHeader />
+        <div class="terminal-containers absolute inset-0" />
+        <ActiveTabCrashOverlay />
+      </div>
+
+      {fileViewerVisible.value && (
+        <div class="absolute inset-0 flex flex-col" style={{ backgroundColor: colors.bgBase, zIndex: 10 }}>
+          <div class="flex items-center justify-between px-6 shrink-0" style={{ backgroundColor: colors.bgElevated, borderBottom: `1px solid ${colors.bgBorder}`, height: 56 }}>
+            <div class="flex items-center gap-4 min-w-0">
+              <span class="text-[12px] px-3 py-1.5 rounded font-semibold tracking-wider shrink-0" style={{ backgroundColor: colors.accent, color: colors.bgBase }}>READ-ONLY</span>
+              <span class="text-[14px] font-mono overflow-hidden text-ellipsis whitespace-nowrap" style={{ fontFamily: 'GeistMono', color: colors.textSecondary }}>{fileName.value}</span>
+            </div>
+            <button
+              onClick={closeFileViewer}
+              class="cursor-pointer px-5 py-2.5 rounded-md text-sm font-medium transition-all duration-150 ml-6 shrink-0 hover:brightness-110"
+              style={{ fontFamily: 'GeistMono', backgroundColor: colors.bgSurface, border: `1px solid ${colors.bgBorder}`, color: colors.textPrimary }}
+              title="Close file viewer (Esc)"
+            >Close</button>
+          </div>
+          {rendered.isMarkdown ? (
+            <div
+              class="file-viewer-markdown flex-1 m-0 overflow-auto text-[14px] leading-relaxed"
+              style={{ fontFamily: 'Geist, system-ui, sans-serif', color: colors.textMuted, padding: '14px' }}
+              dangerouslySetInnerHTML={{ __html: rendered.html }}
+            />
+          ) : (
+            <pre
+              class="flex-1 m-0 overflow-auto text-[13px] font-mono leading-relaxed whitespace-pre tab-[4]"
+              style={{ fontFamily: 'GeistMono', color: colors.textMuted, padding: '14px' }}
+              dangerouslySetInnerHTML={{ __html: rendered.html }}
+            />
+          )}
+        </div>
+      )}
+
+      {serverPaneState.value === 'expanded' && (
+        <div
+          class="split-handle-h"
+          data-handle="main-h"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize server pane"
+        />
+      )}
+      <ServerPane />
+    </main>
+  );
+}
 ````
