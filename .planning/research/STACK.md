@@ -1,131 +1,326 @@
-# Stack Research: Testing & Consolidation
+# Stack Research: v0.3.0 Workspace Evolution
 
-**Domain:** Unit testing infrastructure for Tauri 2 + Preact + Vite desktop app
-**Researched:** 2026-04-12
+**Domain:** File editing, git control, drag/drop, and UI enhancements for Tauri 2 desktop app
+**Researched:** 2026-04-14
 **Confidence:** HIGH
 
 ## Current State
 
-The project already has Vitest 4.1.3, jsdom 29.0.2, and a `vitest.config.ts` with Preact preset and jsdom environment configured. No tests exist yet. The `test` script in package.json runs `vitest run`. This research focuses on what to **add** to complete the testing infrastructure.
+The project has a validated stack:
+- **Tauri 2.10.x** (Rust) for desktop shell, IPC, PTY
+- **Preact + @preact/signals** for UI
+- **xterm.js 6.0 + WebGL** for terminal
+- **git2 0.20.4** (Rust) for status/diff (read-only)
+- **notify 8.2** (Rust) for file watching
+- **Tailwind 4** for styling
+
+This research focuses on **additions** needed for v0.3.0 features:
+1. File editing in tabs (code editor)
+2. Git control pane (stage, commit, push)
+3. Drag/drop file operations
+4. Custom scrollbar for terminals
+5. File watcher improvements
 
 ## Recommended Stack Additions
 
-### Core Testing Libraries (NEW)
+### Code Editor (NEW)
 
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| `@testing-library/preact` | ^3.2.4 | DOM testing utilities for Preact components | The Testing Library approach (query by role/text, not implementation) produces durable tests. This is the official Preact adapter -- same API as `@testing-library/react` but wired to Preact's `act()`. Peer dep: `preact >= 10` (we have 10.29.1). |
-| `@testing-library/jest-dom` | ^6.6.3 | Custom DOM matchers (`toBeInTheDocument`, `toHaveClass`, etc.) | Extends Vitest assertions with 20+ DOM-specific matchers. Has first-class Vitest support via `@testing-library/jest-dom/vitest` import. Eliminates brittle `querySelector` + manual assertions. |
-| `@vitest/coverage-v8` | ^4.1.3 | Code coverage via V8 engine | Must match Vitest major version (both 4.x). V8 provider is faster than Istanbul and since Vitest 3.2.0 uses AST-based remapping for Istanbul-equivalent accuracy. No separate install of `c8` needed. |
+| `codemirror` | ^6.0.2 | Code editor core + basicSetup bundle | Lightweight (vs Monaco's 3MB+), modular architecture, no framework lock-in. Direct DOM integration works with Preact. Built-in language support, syntax highlighting, undo/redo. Used by VS Code web and many Tauri apps. |
+| `@codemirror/lang-javascript` | ^6.2.x | JS/TS syntax highlighting | Official language pack. Includes JSX/TSX support. |
+| `@codemirror/lang-html` | ^6.4.x | HTML syntax highlighting | Required for .html files in the project. |
+| `@codemirror/lang-css` | ^6.3.x | CSS syntax highlighting | Required for .css files and Tailwind classes. |
+| `@codemirror/lang-json` | ^6.0.x | JSON syntax highlighting | Required for config files (package.json, tsconfig, etc.). |
+| `@codemirror/lang-rust` | ^6.0.x | Rust syntax highlighting | Required for src-tauri/*.rs files. |
+| `@codemirror/lang-markdown` | ^6.3.x | Markdown syntax highlighting | Required for .md files (GSD docs, README). |
 
-### Tauri Mocking (ALREADY AVAILABLE)
+**Why NOT Monaco Editor:**
+- Monaco is 3MB+ minified vs CodeMirror 6's ~400KB for a full setup
+- Monaco requires webpack or specific bundler config; CodeMirror works with Vite out of the box
+- Monaco is React-centric; CodeMirror is framework-agnostic
+- Monaco's VS Code heritage brings complexity we don't need
+
+### File System Plugin (NEW)
 
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| `@tauri-apps/api/mocks` | (bundled with @tauri-apps/api 2.10.1) | Mock `invoke()`, windows, and events in frontend tests | Built into the existing `@tauri-apps/api` package -- **no new install needed**. Provides `mockIPC()`, `mockWindows()`, `clearMocks()`. Since Tauri 2.7.0, `shouldMockEvents: true` enables event system mocking. |
+| `@tauri-apps/plugin-fs` | ^2.2.0 | File system operations (delete, copy, move) | Official Tauri 2 plugin. Provides `remove()`, `copyFile()`, `rename()` APIs. Handles permission scopes via tauri.conf.json. Already have `@tauri-apps/plugin-dialog` and `@tauri-apps/plugin-opener` so this follows the same pattern. |
+| `tauri-plugin-fs` (Rust) | ^2 | Rust-side fs plugin | Companion crate. Add to Cargo.toml and register in main.rs. |
 
-### Rust Testing (NO NEW CRATES)
+**Why NOT use existing Rust file_ops:**
+- Current `file_ops.rs` handles read/list but not delete/move
+- Plugin provides consistent API between frontend and backend
+- Handles macOS permission dialogs automatically
+
+### Git Operations (EXTEND EXISTING)
 
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| `tauri` with `test` feature | 2.10.3 | Mock runtime for Rust-side command testing | Tauri ships a `tauri::test` module behind the `test` feature flag. Provides `mock_builder()`, `mock_context()`, `noop_assets()`, `mock_app()`, `get_ipc_response()`, `assert_ipc_response()`. Add `tauri = { version = "2", features = ["test"] }` under `[dev-dependencies]`. |
-| `tokio` with `test` feature | 1.x | Async test runtime | Already a transitive dependency via Tauri. Add `tokio = { version = "1", features = ["macros", "rt-multi-thread"] }` under `[dev-dependencies]` to enable `#[tokio::test]`. |
-| `serde_json` | 1.x | Constructing test payloads | Already in dependencies. No change needed. |
+| `git2` | 0.20.4 (existing) | Stage, commit operations | Already installed. Add stage (`Index::add_path`) and commit (`Repository::commit`) commands. No new crate needed. |
+| `git2` with `ssh` feature | 0.20.4 | Push to remote | **Optional** for push support. Requires `cargo add git2 --features ssh` to enable SSH authentication. HTTPS push works without extra features. |
 
-### Development Tools (NEW)
+**Important: Push complexity**
+- SSH push requires system SSH keys and agent
+- HTTPS push requires credential storage (git-credential-helper)
+- Recommendation: Shell out to `git push` via PTY for v0.3.0 (simpler auth handling), consider native push in future milestone
 
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| Vitest setup file (`vitest.setup.ts`) | Global test configuration | Import `@testing-library/jest-dom/vitest` and `@tauri-apps/api/mocks` cleanup. Wire `clearMocks()` in `afterEach`. |
-| Coverage reporter config | CI-ready coverage output | Use `['text', 'json-summary', 'html']` reporters. Text for terminal, json-summary for CI thresholds, html for local inspection. |
+### Drag and Drop (NO NEW PACKAGES)
+
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| HTML5 Drag and Drop API | Native | Internal tree reordering | Browser-native, zero bundle size. Already have DOM event patterns in `drag-manager.ts`. |
+| Tauri DragDrop events | Built-in (2.x) | External file drops from Finder | Built into Tauri 2. Events: `tauri://drag-enter`, `tauri://drag-over`, `tauri://drag-drop`, `tauri://drag-leave`. Config: `app.window.dragDropEnabled: true`. |
+
+**Why NOT SortableJS/dnd-kit:**
+- File tree is simple linear/hierarchical list, not complex grid
+- Native API is sufficient and adds 0KB
+- Existing `drag-manager.ts` patterns can be extended
+
+### Custom Scrollbar (NO NEW PACKAGES)
+
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| xterm.js 6.0 scrollbar API | 6.0.0 (existing) | Terminal scrollbar styling | xterm.js 6.0 adopted VS Code's scrollbar infrastructure. CSS targets: `.xterm .xterm-scrollable-element > .scrollbar`, `.scrollbar > .slider`. Theme colors via `scrollbarSliderBackground`. |
+| CSS custom scrollbar | Native | Non-terminal scrollbars | Use `scrollbar-width`, `scrollbar-color` (Firefox) and `::-webkit-scrollbar` (WebKit/Chrome). Tauri uses WKWebView on macOS which supports webkit prefixed scrollbar CSS. |
 
 ## Installation
 
 ```bash
-# Frontend test utilities (NEW packages only)
-pnpm add -D @testing-library/preact @testing-library/jest-dom @vitest/coverage-v8
+# Code editor (NEW)
+pnpm add codemirror @codemirror/lang-javascript @codemirror/lang-html @codemirror/lang-css @codemirror/lang-json @codemirror/lang-rust @codemirror/lang-markdown
+
+# File system plugin (NEW)
+pnpm add @tauri-apps/plugin-fs
 ```
 
-No Rust crates to install -- just feature flags in `Cargo.toml`:
+Rust additions in `Cargo.toml`:
 
 ```toml
-[dev-dependencies]
-tauri = { version = "2", features = ["test"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+[dependencies]
+# Existing
+git2 = "0.20.4"  # No change needed for stage/commit
+
+# NEW plugin
+tauri-plugin-fs = "2"
+
+# OPTIONAL: For native git push (if not shelling out)
+# git2 = { version = "0.20.4", features = ["ssh", "https"] }
+```
+
+Register plugin in `src-tauri/src/main.rs`:
+
+```rust
+fn main() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())  // ADD
+        // ... existing plugins
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
+```
+
+Update `tauri.conf.json` capabilities:
+
+```json
+{
+  "app": {
+    "windows": [{
+      "dragDropEnabled": true
+    }]
+  },
+  "plugins": {
+    "fs": {
+      "scope": {
+        "allow": ["$HOME/**", "$RESOURCE/**"],
+        "deny": ["$HOME/.ssh/**"]
+      }
+    }
+  }
+}
 ```
 
 ## Configuration Changes
 
-### vitest.config.ts (update existing)
+### CodeMirror Integration Pattern
 
 ```typescript
-import { defineConfig } from 'vitest/config';
-import preact from '@preact/preset-vite';
+// src/components/editor-tab.tsx
+import { EditorView, basicSetup } from 'codemirror';
+import { javascript } from '@codemirror/lang-javascript';
+import { rust } from '@codemirror/lang-rust';
+import { markdown } from '@codemirror/lang-markdown';
+import { oneDark } from '@codemirror/theme-one-dark';
 
-export default defineConfig({
-  plugins: [preact()],
-  test: {
-    environment: 'jsdom',
-    include: ['src/**/*.test.{ts,tsx}'],
-    globals: true,
-    setupFiles: ['./vitest.setup.ts'],
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json-summary', 'html'],
-      include: ['src/**/*.{ts,tsx}'],
-      exclude: [
-        'src/vite-env.d.ts',
-        'src/**/*.test.{ts,tsx}',
-        'src/main.tsx',        // Entry point, minimal logic
-      ],
-    },
-  },
-});
-```
-
-### vitest.setup.ts (NEW)
-
-```typescript
-import '@testing-library/jest-dom/vitest';
-import { afterEach } from 'vitest';
-import { cleanup } from '@testing-library/preact';
-import { clearMocks } from '@tauri-apps/api/mocks';
-
-// Cleanup DOM after each test (Testing Library best practice)
-afterEach(() => {
-  cleanup();
-  clearMocks();
-});
-
-// jsdom lacks crypto.getRandomValues (needed by Tauri mocks)
-if (typeof globalThis.crypto === 'undefined') {
-  const { randomFillSync } = await import('node:crypto');
-  Object.defineProperty(globalThis, 'crypto', {
-    value: { getRandomValues: (buf: any) => randomFillSync(buf) },
+function createEditor(parent: HTMLElement, content: string, filename: string) {
+  const lang = getLanguageExtension(filename);
+  return new EditorView({
+    doc: content,
+    extensions: [
+      basicSetup,
+      lang,
+      oneDark,  // Or custom theme matching Solarized Dark
+      EditorView.updateListener.of((update) => {
+        if (update.docChanged) {
+          // Track dirty state
+        }
+      }),
+    ],
+    parent,
   });
 }
-```
 
-### tsconfig.json (update)
-
-Add to `compilerOptions.types`:
-```json
-{
-  "compilerOptions": {
-    "types": ["vitest/globals", "@testing-library/jest-dom/vitest"]
+function getLanguageExtension(filename: string) {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'ts': case 'tsx': case 'js': case 'jsx': return javascript({ typescript: true, jsx: true });
+    case 'rs': return rust();
+    case 'md': return markdown();
+    case 'json': return json();
+    case 'html': return html();
+    case 'css': return css();
+    default: return [];
   }
 }
 ```
 
-### package.json scripts (update)
+### Git Stage/Commit Commands
 
-```json
-{
-  "scripts": {
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+```rust
+// src-tauri/src/git_status.rs (extend existing)
+
+#[tauri::command]
+pub async fn git_stage_file(repo_path: String, file_path: String) -> Result<(), String> {
+    spawn_blocking(move || {
+        let repo = Repository::open(&repo_path).map_err(|e| e.to_string())?;
+        let mut index = repo.index().map_err(|e| e.to_string())?;
+        
+        // file_path is relative to repo root
+        index.add_path(std::path::Path::new(&file_path)).map_err(|e| e.to_string())?;
+        index.write().map_err(|e| e.to_string())?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_stage_all(repo_path: String) -> Result<(), String> {
+    spawn_blocking(move || {
+        let repo = Repository::open(&repo_path).map_err(|e| e.to_string())?;
+        let mut index = repo.index().map_err(|e| e.to_string())?;
+        
+        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
+            .map_err(|e| e.to_string())?;
+        index.write().map_err(|e| e.to_string())?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_commit(repo_path: String, message: String) -> Result<String, String> {
+    spawn_blocking(move || {
+        let repo = Repository::open(&repo_path).map_err(|e| e.to_string())?;
+        
+        let sig = repo.signature()
+            .or_else(|_| git2::Signature::now("Unknown", "unknown@example.com"))
+            .map_err(|e| e.to_string())?;
+        
+        let mut index = repo.index().map_err(|e| e.to_string())?;
+        let tree_id = index.write_tree().map_err(|e| e.to_string())?;
+        let tree = repo.find_tree(tree_id).map_err(|e| e.to_string())?;
+        
+        let parent = repo.head()
+            .and_then(|h| h.peel_to_commit())
+            .ok();  // Initial commit has no parent
+        
+        let parents: Vec<&git2::Commit> = parent.iter().collect();
+        
+        let oid = repo.commit(Some("HEAD"), &sig, &sig, &message, &tree, &parents)
+            .map_err(|e| e.to_string())?;
+        
+        Ok(oid.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+```
+
+### Drag/Drop Event Handling
+
+```typescript
+// src/components/file-tree.tsx (extend existing)
+import { listen } from '@tauri-apps/api/event';
+
+// External drops from Finder
+listen('tauri://drag-drop', (event) => {
+  const paths = event.payload as { paths: string[] };
+  // Copy files to selected directory
+  handleExternalFileDrop(paths.paths);
+});
+
+// Internal tree reordering (native HTML5)
+function handleDragStart(e: DragEvent, entry: FileEntry) {
+  e.dataTransfer?.setData('application/x-efxmux-file', JSON.stringify(entry));
+  e.dataTransfer!.effectAllowed = 'move';
+}
+
+function handleDrop(e: DragEvent, targetFolder: FileEntry) {
+  e.preventDefault();
+  const data = e.dataTransfer?.getData('application/x-efxmux-file');
+  if (data) {
+    const sourceEntry = JSON.parse(data) as FileEntry;
+    // Move file via Rust command
+    invoke('move_file', { from: sourceEntry.path, to: `${targetFolder.path}/${sourceEntry.name}` });
   }
+}
+```
+
+### Custom Scrollbar CSS
+
+```css
+/* src/styles/scrollbar.css */
+
+/* xterm.js 6.0 scrollbar (VS Code infrastructure) */
+.xterm .xterm-scrollable-element > .scrollbar {
+  width: 8px !important;
+  background: transparent;
+}
+
+.xterm .xterm-scrollable-element > .scrollbar > .slider {
+  background: var(--color-scroll-thumb, rgba(255, 255, 255, 0.2));
+  border-radius: 4px;
+  min-height: 20px;
+}
+
+.xterm .xterm-scrollable-element > .scrollbar > .slider:hover {
+  background: var(--color-scroll-thumb-hover, rgba(255, 255, 255, 0.35));
+}
+
+/* Non-terminal panels (file tree, editor, etc.) */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-scroll-thumb) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-scroll-thumb);
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-scroll-thumb-hover);
 }
 ```
 
@@ -133,111 +328,62 @@ Add to `compilerOptions.types`:
 
 | Recommended | Alternative | When to Use Alternative |
 |-------------|-------------|-------------------------|
-| `@testing-library/preact` | Enzyme | Never -- Enzyme is unmaintained, doesn't support Preact natively, and tests implementation details. |
-| `@testing-library/preact` | `preact-render-to-string` + snapshot tests | Only for SSR output validation. Not applicable here (Tauri webview, no SSR). |
-| `@vitest/coverage-v8` | `@vitest/coverage-istanbul` | Only if V8 coverage has bugs with specific transforms. V8 is faster and now equally accurate since Vitest 3.2.0 AST remapping. |
-| `@testing-library/jest-dom` | Raw Vitest `expect()` | Only if you want zero extra dependencies. Jest-dom matchers produce much better error messages for DOM assertions. |
-| Rust `tauri::test` | Full E2E with WebDriver | Only for integration testing the complete app. Unit testing commands is faster and more targeted. E2E is out of scope for this milestone. |
+| CodeMirror 6 | Monaco Editor | Only if you need full VS Code feature parity (IntelliSense, debugging). Overkill for basic editing. |
+| CodeMirror 6 | Ace Editor | Only for legacy browser support (IE11). Ace is older, less modular. |
+| @tauri-apps/plugin-fs | Custom Rust commands | Only if you need operations not covered by the plugin. Plugin handles permissions better. |
+| Native git2 stage/commit | Shell out to git CLI | Only for push operations (credential handling). Native is faster for stage/commit. |
+| Shell git push | Native git2 push | Use shell for v0.3.0 (simpler auth). Consider native for v0.4.0+. |
+| HTML5 Drag and Drop | SortableJS | Only if you need complex multi-container sorting. File tree is simple. |
+| CSS scrollbar styling | Custom scrollbar library | Only if CSS doesn't provide enough control. Native CSS works in WKWebView. |
 
 ## What NOT to Use
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| `jest` | Vitest is already configured, faster, and Vite-native. Adding Jest creates duplicate config and slower tests. | Vitest (already installed) |
-| `enzyme` | Unmaintained since 2022, no Preact adapter, tests implementation details (setState, instance). | `@testing-library/preact` |
-| `@testing-library/react` | Wrong library -- this is a Preact project. React Testing Library expects `react-dom`. | `@testing-library/preact` |
-| `happy-dom` | While faster than jsdom, it has known gaps with `MutationObserver` and `ResizeObserver` that xterm.js and Preact signals rely on. jsdom 29.x is stable and already installed. | `jsdom` (already installed) |
-| `vitest-dom` | Community fork of jest-dom for Vitest. Unnecessary since `@testing-library/jest-dom` has native Vitest support via the `/vitest` sub-import. | `@testing-library/jest-dom` |
-| `@xterm/xterm` in unit tests | xterm.js requires a real DOM with canvas/WebGL. Unit testing xterm interactions is fragile and slow. | Mock the terminal interface; test the state/logic layer around it. |
-| Tauri E2E / WebDriver | Heavy setup, requires building the full app, flaky on CI. Not needed for a consolidation milestone. | Rust-side `tauri::test` for command logic; frontend mocks for IPC. |
+| Monaco Editor | 3MB+ bundle, complex setup, React-centric, overkill for basic editing | CodeMirror 6 |
+| Ace Editor | Legacy architecture, less modular, larger bundle than CM6 | CodeMirror 6 |
+| `@tauri-apps/plugin-shell` for git | Already have PTY infrastructure via portable-pty. Plugin adds redundant code. | Existing PTY system |
+| Native git2 push | SSH/HTTPS credential handling is complex. System git handles this better. | Shell out via PTY |
+| react-dnd / dnd-kit | React-specific, adds dependency. Native API sufficient for file tree. | HTML5 Drag and Drop |
+| perfect-scrollbar / simplebar | JavaScript scrollbar libraries add weight. CSS-only works in WebKit. | CSS scrollbar styling |
+| `codemirror` v5.x | Legacy version. v6 is a complete rewrite with better architecture. | `codemirror` v6.0.2 |
 
-## Testing Boundaries
+## Feature-to-Stack Mapping
 
-### What to Unit Test (Frontend)
-
-| Layer | Testable? | Approach |
-|-------|-----------|----------|
-| State manager (`state-manager.ts`) | YES | Import directly, test signal mutations and derived state. Mock `invoke()` with `mockIPC()`. |
-| Drag manager (`drag-manager.ts`) | YES | Test resize calculations and constraint logic. Mock DOM measurements. |
-| Theme tokens (`tokens.ts`) | YES | Pure data -- test token structure and values. |
-| UI components (`components/`) | YES | Render with Testing Library, assert DOM output. Mock Tauri IPC. |
-| Terminal wrapper (`terminal/`) | PARTIALLY | Test the state/config layer. Do NOT test xterm.js rendering -- mock the Terminal instance. |
-| Server detection (`server/`) | PARTIALLY | Test detection logic with mocked IPC responses. |
-| `main.tsx` | NO | Entry point with side effects. Test the modules it imports instead. |
-
-### What to Unit Test (Rust)
-
-| Module | Testable? | Approach |
-|--------|-----------|----------|
-| `state.rs` | YES | Pure Rust state logic. Standard `#[cfg(test)]` module. |
-| `project.rs` | YES | File path logic, project detection. Mock filesystem paths. |
-| `file_ops.rs` | YES | File operations with temp directories. |
-| `theme/types.rs` | YES | Theme parsing, serde deserialization. |
-| `theme/iterm2.rs` | YES | iTerm2 color scheme parsing. Provide fixture XML. |
-| `git_status.rs` | PARTIALLY | Test with `tauri::test` mock runtime. Complex git2 interactions may need a temp git repo. |
-| `terminal/pty.rs` | NO | PTY operations require a real terminal. Test at integration level only. |
-| `file_watcher.rs` | NO | Relies on OS-level file events. Test at integration level. |
-| `server.rs` | NO | Process spawning. Not suitable for unit tests. |
+| Feature | Stack Addition | Integration Point |
+|---------|---------------|-------------------|
+| File editing in tabs | CodeMirror 6 | New `EditorTab` component, existing tab system |
+| Git staging | git2 (extend) | New `git_stage_file`, `git_stage_all` commands |
+| Git commit | git2 (extend) | New `git_commit` command |
+| Git push | PTY shell-out | Existing PTY infrastructure, `git push` command |
+| File delete | @tauri-apps/plugin-fs | `remove()` API in file tree context menu |
+| File copy/move | @tauri-apps/plugin-fs | `copyFile()`, `rename()` APIs |
+| Internal drag/drop | HTML5 native | Extend file-tree.tsx with drag events |
+| External drag/drop | Tauri DragDrop | `tauri://drag-drop` event listener |
+| Custom scrollbar | CSS only | New scrollbar.css, xterm.js theme colors |
 
 ## Version Compatibility
 
 | Package A | Compatible With | Notes |
 |-----------|-----------------|-------|
-| `vitest@4.1.3` | `@vitest/coverage-v8@4.x` | Major versions must match. Pin to `^4.1.3`. |
-| `vitest@4.1.3` | `vite@8.0.7` | Vitest 4.x is built for Vite 6+. Compatible with Vite 8. |
-| `@testing-library/preact@3.2.4` | `preact@10.29.1` | Peer dep is `preact >= 10`. Compatible. |
-| `@testing-library/jest-dom@6.6.3` | `vitest@4.x` | Works via `@testing-library/jest-dom/vitest` import path. |
-| `@tauri-apps/api@2.10.1` mocks | `jsdom@29.x` | Requires `crypto.getRandomValues` polyfill in jsdom (see setup file). |
-| `tauri` Rust `test` feature | `tauri@2.10.3` | Feature flag available since Tauri 2.0. Well-established. |
-
-## Rust Test Pattern
-
-```rust
-// In src-tauri/src/state.rs (or any command module)
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_pure_logic() {
-        // Test pure functions directly -- no Tauri runtime needed
-        let result = some_pure_function(input);
-        assert_eq!(result, expected);
-    }
-}
-```
-
-For commands that need `AppHandle` or `State`:
-
-```rust
-// In src-tauri/tests/commands.rs (integration test)
-#[cfg(test)]
-mod tests {
-    use tauri::test::{mock_builder, mock_context, noop_assets};
-
-    #[test]
-    fn test_command_with_state() {
-        let app = mock_builder()
-            .build(mock_context(noop_assets()))
-            .expect("failed to build mock app");
-
-        app.manage(MyState::default());
-        // invoke command via app handle or get_ipc_response
-    }
-}
-```
+| `codemirror@6.0.2` | `vite@8.x` | ESM-native, works out of the box |
+| `codemirror@6.0.2` | `preact@10.x` | Framework-agnostic, direct DOM |
+| `@tauri-apps/plugin-fs@2.2.0` | `tauri@2.10.x` | Major version 2 matches |
+| `git2@0.20.4` | Existing Cargo.toml | No version change needed |
+| xterm.js 6.0 scrollbar CSS | WKWebView (macOS) | WebKit supports all CSS scrollbar selectors |
 
 ## Sources
 
-- [Vitest documentation](https://vitest.dev/) -- config, coverage, globals (Context7 verified, HIGH confidence)
-- [Preact Testing Library](https://preactjs.com/guide/v10/preact-testing-library/) -- component testing patterns (Context7 verified, HIGH confidence)
-- [Tauri 2 Mock APIs](https://v2.tauri.app/develop/tests/mocking/) -- mockIPC, mockWindows, clearMocks (official docs, HIGH confidence)
-- [Tauri Rust test module](https://docs.rs/tauri/2.10.2/tauri/test/index.html) -- mock_builder, mock_context, get_ipc_response (docs.rs, HIGH confidence)
-- [@vitest/coverage-v8 npm](https://www.npmjs.com/package/@vitest/coverage-v8) -- version 4.1.4 available (npm, HIGH confidence)
-- [@testing-library/preact npm](https://www.npmjs.com/package/@testing-library/preact) -- version 3.2.4, peer dep preact >= 10 (npm, HIGH confidence)
-- [Testing Library jest-dom with Vitest](https://markus.oberlehner.net/blog/using-testing-library-jest-dom-with-vitest/) -- setup pattern (blog, MEDIUM confidence)
-- [Tauri GitHub Discussion #11717](https://github.com/tauri-apps/tauri/discussions/11717) -- testing commands with State (community, MEDIUM confidence)
+- [CodeMirror 6 npm](https://www.npmjs.com/package/codemirror) -- version 6.0.2 confirmed (HIGH confidence)
+- [CodeMirror 6 docs](https://codemirror.net/docs/) -- basicSetup, language packs (Context7 verified, HIGH confidence)
+- [git2-rs docs](https://docs.rs/git2/0.20.4/git2/) -- Index::add_path, Repository::commit, push (Context7 verified, HIGH confidence)
+- [git2-rs GitHub](https://github.com/rust-lang/git2-rs) -- features: ssh, https (HIGH confidence)
+- [Tauri 2 plugin-fs](https://v2.tauri.app/plugin/file-system/) -- remove, copyFile, rename (Context7 verified, HIGH confidence)
+- [Tauri 2 drag-drop events](https://github.com/tauri-apps/tauri/discussions/9696) -- tauri://drag-drop (community verified, MEDIUM confidence)
+- [xterm.js 6.0 scrollbar](https://github.com/xtermjs/xterm.js/pull/5096) -- VS Code scrollbar integration (GitHub, HIGH confidence)
+- [HTML5 Drag and Drop API](https://developer.mozilla.org/en-US/docs/Web/API/HTML_Drag_and_Drop_API) -- native browser API (MDN, HIGH confidence)
+- [CSS Scrollbar Styling](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_scrollbars_styling) -- scrollbar-width, ::-webkit-scrollbar (MDN, HIGH confidence)
 
 ---
-*Stack research for: Efxmux v0.2.0 Testing & Consolidation*
-*Researched: 2026-04-12*
+*Stack research for: Efxmux v0.3.0 Workspace Evolution*
+*Researched: 2026-04-14*

@@ -1,512 +1,383 @@
-# Architecture Research: Testing & Consolidation
+# Architecture Research: v0.3.0 Workspace Evolution
 
-**Domain:** Unit testing integration for Tauri 2 + Preact + xterm.js desktop app
-**Researched:** 2026-04-12
-**Confidence:** HIGH
+**Domain:** Tauri desktop application extending existing MVP
+**Researched:** 2026-04-14
+**Confidence:** HIGH (based on existing codebase analysis)
 
-## System Overview
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     TEST INFRASTRUCTURE                         │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌──────────────┐  ┌────────────────────────┐ │
-│  │  Vitest     │  │  jsdom env   │  │  @tauri-apps/api/mocks │ │
-│  │  (runner)   │  │  (DOM shim)  │  │  (IPC mock layer)      │ │
-│  └──────┬──────┘  └──────┬───────┘  └────────────┬───────────┘ │
-│         │               │                       │              │
-├─────────┴───────────────┴───────────────────────┴──────────────┤
-│                    FRONTEND (TypeScript)                        │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌────────────┐  ┌─────────────┐  ┌─────────────┐             │
-│  │ Pure logic │  │ Tauri bridge│  │  Components  │             │
-│  │ (testable) │  │ (mock IPC)  │  │  (optional)  │             │
-│  └────────────┘  └─────────────┘  └─────────────┘             │
-│   ansi-html.ts    state-manager    sidebar.tsx                  │
-│   tokens.ts       server-bridge    file-tree.tsx                │
-│   color256()      theme-manager    gsd-viewer.tsx               │
-├─────────────────────────────────────────────────────────────────┤
-│                    BACKEND (Rust)                               │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌────────────┐  ┌─────────────┐  ┌─────────────┐             │
-│  │ Pure fns   │  │ State mgmt  │  │ System I/O   │             │
-│  │ (unit test)│  │ (#[cfg(test)]│  │ (skip)       │             │
-│  └────────────┘  └─────────────┘  └─────────────┘             │
-│   is_safe_path    state serde      pty, tmux                   │
-│   color256        project CRUD     git2 ops                    │
-│   GitStatus       AppState         file watcher                │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Component Responsibilities
-
-| Component | Responsibility | Test Strategy |
-|-----------|----------------|---------------|
-| `ansi-html.ts` | ANSI escape -> HTML conversion | Pure function, direct unit tests |
-| `tokens.ts` | Design token constants | Contract/property tests |
-| `state-manager.ts` | App state bridge to Rust | Mock `invoke`, test signal updates |
-| `server-bridge.ts` | Server command wrappers | Mock `invoke` + `listen`, verify args |
-| `theme-manager.ts` | Theme application + hot-reload | Mock `invoke`/`listen`, test CSS var logic |
-| `terminal-manager.ts` | xterm.js lifecycle | Skip -- WebGL/DOM heavy, untestable in jsdom |
-| `drag-manager.ts` | Split handle drag | Skip -- DOM manipulation, low test value |
-| `state.rs` | State serialization/persistence | `#[cfg(test)]` with tempdir |
-| `project.rs` | Project CRUD operations | Extract pure methods, test directly |
-| `git_status.rs` | Git status via git2 | Integration tests with temp git repos |
-| `file_ops.rs` | File operations + path validation | `is_safe_path` pure tests; tempdir for I/O |
-
-## Recommended Test File Structure
+## Existing Architecture Overview
 
 ```
-src/
-├── server/
-│   ├── ansi-html.ts
-│   ├── ansi-html.test.ts          # NEW: Pure function tests
-│   ├── server-bridge.ts
-│   └── server-bridge.test.ts      # NEW: Mock invoke/listen
-├── terminal/
-│   ├── terminal-manager.ts        # SKIP: WebGL/DOM heavy
-│   ├── pty-bridge.ts              # SKIP: Heavy Tauri IPC + binary streams
-│   └── resize-handler.ts          # SKIP: DOM measurement
-├── theme/
-│   ├── theme-manager.ts
-│   └── theme-manager.test.ts      # NEW: Mock invoke, test CSS var logic
-├── components/                    # DEFER: component tests are low priority
-├── state-manager.ts
-├── state-manager.test.ts          # NEW: Mock invoke, test signal logic
-├── tokens.ts
-├── tokens.test.ts                 # NEW: Token contract assertions
-├── drag-manager.ts                # SKIP: Pure DOM manipulation
-├── __test__/
-│   └── setup.ts                   # NEW: Global test setup (mocks, crypto)
-└── ...
-
-src-tauri/src/
-├── state.rs                       # MODIFY: add #[cfg(test)] mod tests
-├── project.rs                     # MODIFY: extract pure fns + add tests
-├── git_status.rs                  # MODIFY: add #[cfg(test)] mod tests
-├── file_ops.rs                    # MODIFY: add #[cfg(test)] mod tests
-├── server.rs                      # SKIP: process spawning, system calls
-├── terminal/
-│   ├── pty.rs                     # SKIP: PTY + tmux system calls
-│   └── mod.rs
-└── theme/
-    ├── iterm2.rs                  # SKIP: plist parsing, low priority
-    ├── types.rs                   # MODIFY: add serde tests
-    └── watcher.rs                 # SKIP: notify/filesystem
++-----------------------------------------------------------------------------+
+|                           TAURI SHELL (Rust)                                |
++-----------------------------------------------------------------------------+
+|  lib.rs          | Entrypoint, menu setup, managed state init, invoke       |
+|  terminal/pty.rs | PTY spawn, read loop, flow control, tmux integration    |
+|  server.rs       | Agent process management (start/stop/restart)            |
+|  git_status.rs   | git2 read ops: status, branch, file list                 |
+|  file_ops.rs     | File read, directory list, checkbox write-back           |
+|  file_watcher.rs | notify crate watching .planning/*.md                     |
+|  state.rs        | state.json persistence (AppState struct)                 |
+|  project.rs      | Project registry CRUD                                    |
++-----------------------------------------------------------------------------+
+                              |
+                    Tauri IPC (invoke / Channel)
+                              |
++-----------------------------------------------------------------------------+
+|                         PREACT FRONTEND                                      |
++-----------------------------------------------------------------------------+
+|                                                                             |
+|  state-manager.ts          | Signals + Rust state bridge                    |
+|  theme-manager.ts          | Theme loading, terminal/chrome registration    |
+|  terminal-manager.ts       | xterm.js instance creation                     |
+|  pty-bridge.ts             | spawn_terminal + Channel listener              |
+|                                                                             |
+|  +-- components/ ---------------------------------------------------+       |
+|  | sidebar.tsx        | Projects list, git changes, project switch  |       |
+|  | main-panel.tsx     | Terminal tabs area, file viewer overlay     |       |
+|  | terminal-tabs.tsx  | Multi-tab PTY management, tab bar UI        |       |
+|  | right-panel.tsx    | GSD/Diff/FileTree tabs + Bash terminal      |       |
+|  | file-tree.tsx      | Directory listing, tree/flat modes          |       |
+|  | gsd-viewer.tsx     | Markdown render + checkbox write-back       |       |
+|  | diff-viewer.tsx    | git diff display                            |       |
+|  | server-pane.tsx    | Agent server output                         |       |
+|  +------------------------------------------------------------------+       |
++-----------------------------------------------------------------------------+
 ```
 
-### Structure Rationale
+## New Features Integration Map
 
-- **Co-located test files** (`*.test.ts` next to source): Vitest config already uses `src/**/*.test.{ts,tsx}`. Co-location keeps tests discoverable and imports simple.
-- **Shared setup in `__test__/setup.ts`**: Tauri mock initialization (`mockIPC`, `clearMocks`, crypto polyfill) goes here, referenced from vitest.config.ts `setupFiles`.
-- **Rust tests inline** (`#[cfg(test)] mod tests`): Standard Rust convention. No separate test directory needed for unit tests.
-- **Explicit skip list**: terminal-manager, drag-manager, pty-bridge, resize-handler all depend heavily on DOM/WebGL/system calls. Testing them provides minimal value vs. effort.
+### 1. File Editing in Main Panel Tabs (NEW)
 
-## Architectural Patterns
+**Current state:** MainPanel has read-only file viewer overlay (show-file-viewer event)
+**Required:** Editable file tabs alongside terminal tabs
 
-### Pattern 1: Tauri IPC Mocking with `@tauri-apps/api/mocks`
+**Integration Points:**
+- **New component:** `file-tab.tsx` - CodeMirror/Monaco editor wrapper
+- **New signals:** `fileTabs: Signal<FileTab[]>`, `activeFileTabId: Signal<string>`
+- **Modify:** `main-panel.tsx` - Render file tabs when present
+- **Modify:** `terminal-tabs.tsx` - Extract TabBar into shared component or extend to support file tabs
+- **New Rust command:** `write_file_content(path: String, content: String)` in `file_ops.rs`
+- **Data flow:** 
+  ```
+  FileTree double-click -> file-opened event -> openFileTab() 
+                        -> read_file_content IPC -> FileTab mount
+  FileTab save (Cmd+S) -> write_file_content IPC -> file written
+  ```
 
-**What:** Use Tauri's built-in `mockIPC` to intercept `invoke()` calls in tests. This replaces the Rust backend with a JS handler that returns canned responses.
-**When to use:** Any test that imports a module calling `invoke()` from `@tauri-apps/api/core`.
-**Trade-offs:** Realistic IPC simulation (+), but mock handlers must be kept in sync with Rust command signatures manually (-). No type checking between mock and real backend.
+**Architecture decision:** Keep terminal tabs and file tabs in separate signal arrays but render in same TabBar UI. Reason: Different lifecycle (terminal tabs have PTY state, file tabs have dirty/clean state).
 
-**Example:**
-```typescript
-// state-manager.test.ts
-import { beforeEach, afterEach, describe, it, expect } from 'vitest';
-import { mockIPC, clearMocks } from '@tauri-apps/api/mocks';
+### 2. Git Control Pane - Sidebar Tab (NEW)
 
-beforeEach(() => {
-  mockIPC((cmd, args) => {
-    if (cmd === 'load_state') {
-      return {
-        version: 1,
-        layout: { 'sidebar-w': '200px', 'right-w': '25%',
-                  'right-h-pct': '50', 'sidebar-collapsed': false },
-        theme: { mode: 'dark' },
-        session: { 'main-tmux-session': 'efx-mux',
-                   'right-tmux-session': 'efx-mux-right' },
-        project: { active: null, projects: [] },
-        panels: { 'right-top-tab': 'File Tree', 'right-bottom-tab': 'git' },
-      };
-    }
-    if (cmd === 'save_state') return undefined;
-    if (cmd === 'get_projects') return [];
-    if (cmd === 'get_active_project') return null;
-  });
-});
+**Current state:** Sidebar shows read-only git status/file list
+**Required:** Stage, unstage, commit, push actions
 
-afterEach(() => {
-  clearMocks();
-});
+**Integration Points:**
+- **New component:** `git-control.tsx` - Stage checkboxes, commit message input, push button
+- **New Rust commands in git_status.rs:**
+  - `stage_file(path: String)` - git add single file
+  - `unstage_file(path: String)` - git reset HEAD single file
+  - `stage_all()` - git add -A
+  - `commit(message: String)` - git commit -m
+  - `push()` - git push (with SSH key handling via git2)
+- **Modify:** `sidebar.tsx` - Add tab switcher (Projects | File tree | Git control)
+- **New signal:** `sidebarActiveTab: Signal<'projects' | 'filetree' | 'git'>`
+- **Data flow:**
+  ```
+  User checks file checkbox -> stage_file IPC -> git2::add
+  User clicks Commit -> commit IPC -> git2::commit
+  User clicks Push -> push IPC -> git2::push (needs credential callback)
+  ```
+
+**Architecture decision:** git2 supports staging/commit directly. For push, git2 requires credential handling - use system SSH agent via `CredentialType::SshKeyFromAgent`. If push fails (no SSH key), show error dialog suggesting `git push` in terminal.
+
+### 3. Left Sidebar Tab Switching (MODIFY)
+
+**Current state:** Single-mode sidebar with Projects + Git Changes sections
+**Required:** 3 tabs: Projects, File Tree (full sidebar), Git Control
+
+**Integration Points:**
+- **Modify:** `sidebar.tsx` - Add TabBar at top, conditionally render content
+- **Move:** FileTree import from right-panel to sidebar (when in File Tree tab)
+- **Data flow:**
+  ```
+  Tab click -> sidebarActiveTab.value = 'filetree'
+            -> Conditional render: Projects | FileTree | GitControl
+  ```
+
+**Component Responsibilities:**
+
+| Tab | Content | Behavior |
+|-----|---------|----------|
+| Projects | Current sidebar content (project list + git changes summary) | Project switching |
+| File Tree | Full FileTree component (currently in right panel) | Navigate + open files |
+| Git Control | New GitControl component | Stage/commit/push |
+
+### 4. File Tree Enhancements (MODIFY)
+
+**Current state:** View-only, click opens file viewer
+**Required:** Delete, drag/drop, Finder drop, external editor
+
+**Integration Points:**
+- **New Rust commands in file_ops.rs:**
+  - `delete_file(path: String)` - fs::remove_file / fs::remove_dir_all
+  - `move_file(src: String, dest: String)` - fs::rename
+  - `copy_file(src: String, dest: String)` - fs::copy
+  - `create_file(dir: String, name: String)` - fs::write empty
+  - `open_in_external_editor(path: String, editor: String)` - Command::new(editor).arg(path)
+- **Modify:** `file-tree.tsx`:
+  - Add context menu (right-click) with Delete, Open in Editor options
+  - Add drag handlers (`draggable`, `onDragStart`, `onDragOver`, `onDrop`)
+  - Add Finder drop zone (`onDrop` for `event.dataTransfer.files`)
+- **New component:** `context-menu.tsx` - Reusable right-click menu
+- **Modify:** `file_watcher.rs` - Add file change detection (currently watches .md only)
+
+**Data flow for drag/drop:**
+```
+Internal drag: onDragStart stores path -> onDrop calls move_file IPC
+Finder drop:   onDrop reads event.dataTransfer.files 
+            -> for each file: read + write_file_content IPC (copy)
 ```
 
-### Pattern 2: Tauri Event Mocking for `listen()`
+**Architecture decision:** For external editor, store preference in state.json under `preferences.externalEditor`. Default to `code` (VS Code). Validate binary exists before calling.
 
-**What:** When `mockIPC` is called with `{ shouldMockEvents: true }`, the `listen()` and `emit()` functions from `@tauri-apps/api/event` are also intercepted. This lets tests simulate Tauri backend events like `theme-changed` or `server-output`.
-**When to use:** Testing `server-bridge.ts` (listens for `server-output`, `server-stopped`) and `theme-manager.ts` (listens for `theme-changed`).
-**Trade-offs:** Enables event-driven test scenarios (+), but the event mock API has had reported bugs (GitHub issue #14281) (-). Keep event tests simple.
+### 5. GSD Sub-Tabs (MODIFY)
 
-**Example:**
-```typescript
-import { mockIPC, clearMocks } from '@tauri-apps/api/mocks';
-import { emit } from '@tauri-apps/api/event';
+**Current state:** Single GSD viewer rendering one .md file
+**Required:** 5 sub-tabs parsing ROADMAP.md sections + MILESTONES.md + STATE.md
 
-beforeEach(() => {
-  mockIPC(() => {}, { shouldMockEvents: true });
-});
+**Integration Points:**
+- **Modify:** `gsd-viewer.tsx` - Add internal TabBar, parse ROADMAP.md by section
+- **New helper:** `parseRoadmapSection(content: string, section: string): string`
+- **New signal:** `gsdSubTab: Signal<'milestones' | 'phases' | 'progress' | 'milestones-full' | 'state'>`
 
-it('receives server output events', async () => {
-  const outputs: string[] = [];
-  const unlisten = await listenServerOutput((_proj, text) => {
-    outputs.push(text);
-  });
-  await emit('server-output', { project: 'test', text: 'Started on :3000' });
-  expect(outputs).toContain('Started on :3000');
-  unlisten();
-});
+**File mapping:**
+| Sub-tab | Source file | Parse method |
+|---------|-------------|--------------|
+| Milestones | ROADMAP.md | Extract `## Milestones` section |
+| Phases | ROADMAP.md | Extract `## Phases` section |
+| Progress | ROADMAP.md | Extract `## Progress` section |
+| Milestones (full) | MILESTONES.md | Full file |
+| State | STATE.md | Full file |
+
+**Architecture decision:** Parse on load, cache per file. Re-parse on md-file-changed event.
+
+### 6. Main Panel Tab Dropdown (MODIFY)
+
+**Current state:** TabBar with `+` button creates terminal
+**Required:** Dropdown menu: Terminal, Agent, Git Changes
+
+**Integration Points:**
+- **Modify:** `terminal-tabs.tsx` - Replace `+` button with dropdown trigger
+- **New component:** `dropdown-menu.tsx` - Reusable dropdown (or use existing pattern)
+- **New component:** `git-changes-tab.tsx` - Accordion diff viewer per file
+- **Data flow:**
+  ```
+  Click + -> Dropdown: Terminal | Agent | Git Changes | Create File
+  Select Terminal -> createNewTab() (existing)
+  Select Agent -> createNewTab() with agentBinary
+  Select Git Changes -> createGitChangesTab() (new)
+  Select Create File -> prompt for filename -> create in selected folder
+  ```
+
+**Git Changes tab architecture:**
+- Query `get_git_files` for file list
+- Render each file as accordion header
+- Lazy-load `get_file_diff` on accordion expand
+- Store in new `gitChangesTabs: Signal<GitChangesTab[]>` (separate from terminals)
+
+### 7. Sidebar Bash Pane Enhancement (MODIFY)
+
+**Current state:** Right panel has single Bash terminal in bottom pane
+**Required:** Plus menu to add Terminal or Agent sub-terminals
+
+**Integration Points:**
+- **Modify:** `right-panel.tsx` - Add dropdown next to Bash tab
+- **New signal:** `rightBottomTabs: Signal<{id: string, type: 'terminal' | 'agent', sessionName: string}[]>`
+- **Reuse:** `terminal-tabs.tsx` patterns for multi-tab management in right panel
+
+## Component Boundaries
+
+| Component | Current Responsibility | v0.3.0 Changes |
+|-----------|----------------------|----------------|
+| `sidebar.tsx` | Project list + git summary | Add tab switcher, host FileTree/GitControl tabs |
+| `main-panel.tsx` | Terminal area + file overlay | Add file tabs alongside terminal tabs |
+| `terminal-tabs.tsx` | Terminal tab management | Add dropdown for tab types, support git-changes tabs |
+| `file-tree.tsx` | Directory browse | Add delete, drag/drop, context menu, Finder drop |
+| `gsd-viewer.tsx` | Markdown render | Add sub-tabs, multi-file support |
+| `right-panel.tsx` | GSD/Diff/FileTree + Bash | Multi-terminal support in bottom pane |
+| **NEW** `git-control.tsx` | - | Stage/unstage/commit/push UI |
+| **NEW** `file-tab.tsx` | - | Code editor for open files |
+| **NEW** `git-changes-tab.tsx` | - | Accordion diff viewer |
+| **NEW** `context-menu.tsx` | - | Reusable right-click menu |
+| **NEW** `dropdown-menu.tsx` | - | Reusable dropdown trigger |
+
+## New Rust Commands Summary
+
+| Command | Module | Purpose |
+|---------|--------|---------|
+| `write_file_content` | file_ops.rs | Save edited file |
+| `delete_file` | file_ops.rs | Delete file/folder |
+| `move_file` | file_ops.rs | Rename/move file |
+| `copy_file` | file_ops.rs | Copy file |
+| `create_file` | file_ops.rs | Create new file |
+| `open_external_editor` | file_ops.rs | Launch external editor |
+| `stage_file` | git_status.rs | git add single file |
+| `unstage_file` | git_status.rs | git reset HEAD file |
+| `stage_all` | git_status.rs | git add -A |
+| `commit` | git_status.rs | git commit -m |
+| `push` | git_status.rs | git push |
+
+## Data Flow Changes
+
+### File Editing Flow (NEW)
+```
+FileTree double-click
+    |
+    v
+file-opened event (detail: {path, name})
+    |
+    v
+main-panel.tsx: openFileTab()
+    |
+    +-> read_file_content IPC
+    |
+    v
+FileTab mount (content loaded)
+    |
+User edits...
+    |
+Cmd+S
+    |
+    v
+write_file_content IPC
+    |
+    v
+Rust: atomic write (tmp + rename)
 ```
 
-### Pattern 3: Pure Function Extraction for Testability
-
-**What:** Extract logic that doesn't depend on Tauri IPC, DOM, or system calls into pure functions. Test those directly without mocks.
-**When to use:** Whenever a module mixes pure logic with side effects. `ansi-html.ts` is the ideal example -- `ansiToHtml()` and `extractServerUrl()` are pure functions.
-**Trade-offs:** Best test value per effort (+). May require refactoring coupled code (-).
-
-**Example (already testable, no changes needed):**
-```typescript
-// ansi-html.test.ts
-import { ansiToHtml, extractServerUrl } from './ansi-html';
-
-it('converts basic ANSI red to HTML span', () => {
-  const result = ansiToHtml('\x1b[31mError\x1b[0m');
-  expect(result).toContain('color:#dc322f');
-  expect(result).toContain('Error');
-});
-
-it('HTML-escapes before ANSI processing (XSS prevention)', () => {
-  const result = ansiToHtml('<script>alert("xss")</script>');
-  expect(result).toContain('&lt;script&gt;');
-  expect(result).not.toContain('<script>');
-});
-
-it('extracts localhost URL from server output', () => {
-  expect(extractServerUrl('Listening on http://localhost:3000'))
-    .toBe('http://localhost:3000');
-  expect(extractServerUrl('No URL here')).toBeNull();
-});
+### Git Commit Flow (NEW)
+```
+GitControl: User selects files to stage
+    |
+    v
+stage_file IPC (per file) or stage_all IPC
+    |
+    v
+Rust: git2::Index::add_path / add_all
+    |
+User enters commit message, clicks Commit
+    |
+    v
+commit IPC (message)
+    |
+    v
+Rust: git2::Commit::create
+    |
+    v
+[Optional] User clicks Push
+    |
+    v
+push IPC
+    |
+    v
+Rust: git2::Remote::push (SSH agent credentials)
 ```
 
-### Pattern 4: Rust Unit Tests with `#[cfg(test)]`
+### Drag/Drop Flow (NEW)
+```
+Internal drag:
+    FileTree item -> onDragStart (store source path in dataTransfer)
+    FileTree folder -> onDragOver (highlight target)
+                    -> onDrop (call move_file IPC)
 
-**What:** Standard Rust inline test modules. For state/project logic, create an `AppState` in-memory and test mutations. For file operations, use `tempfile` crate for isolated filesystem tests.
-**When to use:** Any Rust function that has testable logic separable from Tauri's runtime.
-**Trade-offs:** Fast, reliable, no external deps (+). Cannot test `#[tauri::command]` wrappers directly since they need Tauri's State extractor (-). Test the inner functions instead.
-
-**Example:**
-```rust
-// In state.rs
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn default_state_has_version_1() {
-        let state = AppState::default();
-        assert_eq!(state.version, 1);
-    }
-
-    #[test]
-    fn state_roundtrip_serde() {
-        let state = AppState::default();
-        let json = serde_json::to_string(&state).unwrap();
-        let deserialized: AppState = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized.version, state.version);
-        assert_eq!(deserialized.layout.sidebar_w, "200px");
-    }
-
-    #[test]
-    fn corrupt_json_falls_back_to_default() {
-        let result: Result<AppState, _> = serde_json::from_str("not json");
-        assert!(result.is_err());
-        // load_state_sync handles this by returning AppState::default()
-    }
-}
+Finder drop:
+    Finder files -> FileTree onDrop
+                 -> event.dataTransfer.files
+                 -> for each: read + copy_file IPC
 ```
 
-### Pattern 5: Extract Methods from Tauri Command Wrappers
+## Suggested Build Order
 
-**What:** The `project.rs` CRUD functions use `tauri::State<ManagedAppState>` which requires the Tauri runtime. To test the business logic, extract pure methods onto `AppState`.
-**When to use:** `project.rs` add/remove/switch/update logic.
-**Trade-offs:** Tests actual business logic (+). Requires minor refactoring (-).
+Based on dependencies and risk:
 
-**Recommended refactor:**
-```rust
-// project.rs - extract testable inner functions
-impl AppState {
-    pub fn add_project(&mut self, entry: ProjectEntry) -> Result<(), String> {
-        if self.project.projects.iter().any(|p| p.name == entry.name) {
-            return Err(format!("Project '{}' already exists", entry.name));
-        }
-        self.project.projects.push(entry);
-        Ok(())
-    }
+**Phase 1: Foundation Components**
+1. `context-menu.tsx` + `dropdown-menu.tsx` - Reused by multiple features
+2. File write command (`write_file_content`) - Required for editing
+3. Git write commands (`stage_file`, `unstage_file`, `commit`) - Required for git control
 
-    pub fn remove_project(&mut self, name: &str) {
-        self.project.projects.retain(|p| p.name != name);
-        if self.project.active.as_deref() == Some(name) {
-            self.project.active = None;
-        }
-    }
+**Phase 2: Sidebar Evolution**
+4. `sidebarActiveTab` signal + tab switcher UI
+5. Move FileTree to sidebar (when in File Tree tab)
+6. `git-control.tsx` component
+7. Push command with credential handling
 
-    pub fn switch_project(&mut self, name: &str) -> Result<(), String> {
-        if !self.project.projects.iter().any(|p| p.name == name) {
-            return Err(format!("Project '{}' not found", name));
-        }
-        self.project.active = Some(name.to_string());
-        Ok(())
-    }
-}
+**Phase 3: Main Panel Tabs**
+8. Tab dropdown component
+9. `file-tab.tsx` with basic editor (textarea first, upgrade to CodeMirror later)
+10. `git-changes-tab.tsx` accordion viewer
+11. Integrate file tabs into main panel
 
-// #[tauri::command] wrappers become thin delegation:
-// lock mutex -> call method -> save
-```
+**Phase 4: FileTree Enhancements**
+12. Delete file/folder (with confirmation dialog)
+13. Context menu integration
+14. Internal drag/drop
+15. Finder drop
 
-## Data Flow
+**Phase 5: GSD Enhancements**
+16. GSD sub-tabs
+17. ROADMAP.md section parsing
 
-### Test Execution Flow (Frontend)
+**Phase 6: Right Panel Enhancements**
+18. Multi-terminal support in bottom pane
+19. Terminal/Agent dropdown
 
-```
-pnpm test (vitest run)
-    ↓
-vitest.config.ts (jsdom env, preact plugin, setupFiles)
-    ↓
-__test__/setup.ts (crypto polyfill, optional global mockIPC)
-    ↓
-*.test.ts files discovered (src/**/*.test.{ts,tsx})
-    ↓
-beforeEach: mockIPC() intercepts invoke/listen
-    ↓
-Test body: import module -> call function -> assert
-    ↓
-afterEach: clearMocks()
-```
+**Phase 7: Bug Fixes** (can be interleaved)
+- File watcher reliability
+- Newline injection fix
+- Phantom characters on fast scroll
+- Custom scrollbar
+- TUI padding/alignment
 
-### Test Execution Flow (Backend)
+## Anti-Patterns to Avoid
 
-```
-cargo test (from src-tauri/)
-    ↓
-#[cfg(test)] mod tests in each .rs file
-    ↓
-#[test] fn test_name() runs in isolation
-    ↓
-Pure function tests: no setup needed
-    ↓
-I/O tests: tempfile crate for isolated dirs
-```
+### 1. Monolithic Tab Component
+**What people do:** Put all tab types (terminal, file, git-changes) in one giant switch statement
+**Why it's wrong:** Terminal tabs have PTY lifecycle, file tabs have dirty state, git tabs have refresh state - conflating them creates coupling
+**Do this instead:** Separate signal arrays (`terminalTabs`, `fileTabs`, `gitChangesTabs`) rendered by a unified TabBar that dispatches to appropriate handlers
 
-### Key Data Flows to Test
+### 2. Inline Rust Calls in Components
+**What people do:** `invoke('stage_file', {...})` scattered throughout components
+**Why it's wrong:** Duplicates error handling, makes testing hard, IPC details leak into UI
+**Do this instead:** Centralize in service modules (`git-service.ts`, `file-service.ts`) that handle errors and expose clean async functions
 
-1. **State load/save cycle:** `loadAppState()` calls `invoke('load_state')` -> returns `AppState` -> signals updated. Test: mock invoke returns valid state, verify signals have correct values.
-2. **ANSI rendering pipeline:** Raw ANSI string -> `ansiToHtml()` -> styled HTML string. Test: known ANSI inputs produce expected HTML output (XSS safety, color accuracy, 256-color, truecolor, edge cases).
-3. **Project CRUD:** `addProject()` -> `invoke('add_project')` -> reload state -> update `projects` signal. Test: mock invoke sequence, verify signal state after operation.
-4. **Server event flow:** `listenServerOutput()` -> Tauri event `server-output` -> callback with (project, text). Test: mock events, verify callback receives correct payload.
-5. **Rust state serde:** `AppState` serialize -> deserialize roundtrip. Test: default values preserved, unknown fields ignored, corrupt input falls back to defaults.
-6. **Path safety:** `is_safe_path()` rejects traversal. Test: `..` components rejected, valid paths accepted.
+### 3. Direct DOM Manipulation for Drag/Drop
+**What people do:** `document.addEventListener('drag...')` in useEffect
+**Why it's wrong:** Conflicts with Preact's VDOM, hard to clean up
+**Do this instead:** Use Preact's `onDragStart`, `onDragOver`, `onDrop` props, store drag state in signals
 
-## Integration Points
+### 4. Polling for Git Status
+**What people do:** `setInterval(() => getGitStatus(), 1000)`
+**Why it's wrong:** Wastes CPU, creates race conditions with user actions
+**Do this instead:** Refresh git status after git operations (stage/unstage/commit) and on file watcher events
 
-### New Components (to create)
+## Risk Areas
 
-| Component | Type | Purpose |
-|-----------|------|---------|
-| `src/__test__/setup.ts` | New file | Global test setup: crypto polyfill, Tauri mock init |
-| `src/server/ansi-html.test.ts` | New file | Pure function tests for ANSI->HTML |
-| `src/state-manager.test.ts` | New file | State lifecycle with mocked IPC |
-| `src/server/server-bridge.test.ts` | New file | Server bridge with mocked IPC + events |
-| `src/theme/theme-manager.test.ts` | New file | Theme logic with mocked IPC |
-| `src/tokens.test.ts` | New file | Design token contract assertions |
-
-### Modified Components
-
-| Component | Change |
-|-----------|--------|
-| `vitest.config.ts` | Add `setupFiles: ['src/__test__/setup.ts']` |
-| `src-tauri/src/state.rs` | Add `#[cfg(test)] mod tests` (serde roundtrip, defaults) |
-| `src-tauri/src/project.rs` | Extract `impl AppState` methods + add `#[cfg(test)] mod tests` |
-| `src-tauri/src/git_status.rs` | Add `#[cfg(test)] mod tests` (temp git repo) |
-| `src-tauri/src/file_ops.rs` | Add `#[cfg(test)] mod tests` (`is_safe_path`, checkbox) |
-| `src-tauri/src/theme/types.rs` | Add `#[cfg(test)] mod tests` (theme serde) |
-| `src-tauri/Cargo.toml` | Add `[dev-dependencies] tempfile = "3"` |
-| `package.json` | Add `"test:rust": "cd src-tauri && cargo test"`, `"test:all": "vitest run && cd src-tauri && cargo test"` |
-
-### External Dependencies for Testing
-
-| Dependency | Type | Purpose | Already Installed? |
-|------------|------|---------|-------------------|
-| `vitest` | devDependency | Test runner | YES (4.1.3) |
-| `jsdom` | devDependency | DOM environment | YES (29.0.2) |
-| `@tauri-apps/api` | dependency | `mocks` submodule for IPC mocking | YES (2.10.1) |
-| `tempfile` | Rust dev-dependency | Temp directories for Rust I/O tests | NO -- add to Cargo.toml |
-
-### Internal Boundaries
-
-| Boundary | Communication | Test Approach |
-|----------|---------------|---------------|
-| TS modules <-> Tauri IPC | `invoke()` from `@tauri-apps/api/core` | `mockIPC()` intercepts all commands |
-| TS modules <-> Tauri events | `listen()` from `@tauri-apps/api/event` | `mockIPC({ shouldMockEvents: true })` |
-| Rust commands <-> Rust pure fns | Direct function calls | Test pure fns directly, skip command wrappers |
-| Components <-> Signals | `@preact/signals` reactivity | Test signal values after operations |
-| Components <-> DOM | Preact render + CSS | Defer -- component tests are Phase 2 territory |
-
-## Anti-Patterns
-
-### Anti-Pattern 1: Testing Tauri Command Wrappers Directly in Rust
-
-**What people do:** Try to instantiate `tauri::State<ManagedAppState>` in test code to call `#[tauri::command]` functions.
-**Why it's wrong:** `tauri::State` requires the full Tauri runtime. Booting an entire Tauri app in tests is slow, fragile, and defeats the purpose of unit tests.
-**Do this instead:** Test the inner logic (pure functions, struct methods). The `#[tauri::command]` wrapper is thin delegation -- if the inner logic is correct and the wrapper is trivial, the wrapper needs no test.
-
-### Anti-Pattern 2: Manual Module Mocking Instead of mockIPC
-
-**What people do:** Use `vi.mock('@tauri-apps/api/core')` to stub `invoke` with `vi.fn()`.
-**Why it's wrong:** `vi.mock` replaces the entire module. Tauri's `mockIPC` is specifically designed to simulate IPC and handles internal details (request ID, response format). Manual mocking misses edge cases and breaks when Tauri updates internals.
-**Do this instead:** Always use `import { mockIPC, clearMocks } from '@tauri-apps/api/mocks'`.
-
-### Anti-Pattern 3: Testing xterm.js/WebGL in jsdom
-
-**What people do:** Try to create `Terminal` instances and test rendering in jsdom.
-**Why it's wrong:** jsdom has no rendering engine, no WebGL context, no canvas. xterm.js will fail to initialize or produce meaningless results.
-**Do this instead:** Skip terminal-manager tests entirely. Terminal integration is validated by manual testing. If automated terminal testing is needed, that's E2E territory, not unit tests.
-
-### Anti-Pattern 4: Tautological Constant Tests
-
-**What people do:** Write `expect(colors.accent).toBe('#258AD1')` -- just repeating the source code.
-**Why it's wrong:** These tests break when you intentionally change the value, not when something goes wrong. Pure maintenance cost.
-**Do this instead:** Test token *properties* -- all color values are valid 7-char hex strings, all font sizes are positive numbers, no duplicate color keys. This validates the contract, not the values.
-
-### Anti-Pattern 5: Over-Mocking State Manager
-
-**What people do:** Mock every function in state-manager.ts when testing components that use it.
-**Why it's wrong:** The state manager is the backbone of the app. Over-mocking hides real integration bugs.
-**Do this instead:** Mock only the Tauri IPC layer (`mockIPC`). Let state-manager.ts run its real logic against the mock IPC. This tests the actual signal update flow.
-
-## Consolidation Opportunities
-
-### Refactor 1: Extract Pure Functions from `project.rs`
-
-Move project CRUD logic from `#[tauri::command]` closures into `impl AppState` methods. The command wrappers become 3-line functions: lock mutex, call method, save. The methods are trivially testable.
-
-### Refactor 2: Centralize Tauri Mock Setup
-
-Create `src/__test__/setup.ts` with:
-- `globalThis.crypto` polyfill (jsdom lacks WebCrypto, required by Tauri mocks)
-- Shared `mockIPC` handler with all known command responses (optional -- per-test setup may be cleaner)
-- `clearMocks()` in global `afterEach`
-
-Reference in `vitest.config.ts` via `setupFiles: ['src/__test__/setup.ts']`.
-
-### Refactor 3: Dead Code Audit
-
-After rapid MVP development (9,517 LOC in 6 days), dead code is expected. Candidates:
-- Unused exports in `state-manager.ts` (e.g., `updateSession` -- check for callers)
-- Vestigial event listeners from pre-Preact architecture
-- Unused Rust functions or types from iterative development
-- Arrow.js references in comments (already replaced by Preact in Phase 6.1)
-
-### Refactor 4: Type Tightening
-
-- `AppState.layout` is `Record<string, string | boolean>` on the TS side but a strongly-typed struct in Rust. Align TS types to match Rust struct fields.
-- `ProjectEntry.agent` is `string` but should be a union type: `'claude-code' | 'opencode' | string`.
-- `ThemeData.terminal` is `Record<string, string>` but xterm.js has a specific `ITheme` interface.
-
-## Build Order for Testing Phases
-
-Based on dependencies and value-per-effort:
-
-### Phase 1: Infrastructure + Pure Functions (no mocking needed)
-1. Update `vitest.config.ts` with `setupFiles`
-2. Create `src/__test__/setup.ts` with crypto polyfill
-3. Write `ansi-html.test.ts` -- highest value, pure functions, zero mocks
-4. Write `tokens.test.ts` -- contract tests for token API surface
-5. Add `tempfile = "3"` to Rust `[dev-dependencies]`
-6. Add `#[cfg(test)]` to `state.rs` -- serde roundtrip, defaults
-7. Add `#[cfg(test)]` to `file_ops.rs` -- `is_safe_path` pure tests
-
-**Rationale:** Establishes infrastructure and proves the test pipeline works. Pure function tests build confidence without mock complexity.
-
-### Phase 2: Tauri IPC Mocking Layer
-1. Write `state-manager.test.ts` -- load/save cycle, signal updates
-2. Write `server-bridge.test.ts` -- invoke arg verification, event listening
-3. Write `theme-manager.test.ts` -- theme application, mode toggle
-
-**Rationale:** Adds the IPC mock layer. These tests validate the bridge between frontend and backend.
-
-### Phase 3: Rust Logic Tests + Refactoring
-1. Extract `impl AppState` methods in `project.rs`
-2. Add `#[cfg(test)]` to `project.rs` -- CRUD operations
-3. Add `#[cfg(test)]` to `git_status.rs` -- temp repo integration tests
-4. Add `#[cfg(test)]` to `file_ops.rs` -- directory listing, checkbox write-back
-5. Add `#[cfg(test)]` to `theme/types.rs` -- theme serde
-
-**Rationale:** Rust tests run independently (`cargo test`). Extracting methods from command wrappers improves testability and code quality simultaneously.
-
-### Phase 4: Consolidation
-1. Dead code audit + removal
-2. Type tightening (TS types match Rust structs)
-3. CI script: `pnpm test && cd src-tauri && cargo test`
-4. Verify `pnpm run build` still works after all changes
-
-**Rationale:** Consolidation after testing ensures tests catch regressions in the cleanup.
-
-## Vitest Configuration (Final)
-
-```typescript
-// vitest.config.ts
-import { defineConfig } from 'vitest/config';
-import preact from '@preact/preset-vite';
-
-export default defineConfig({
-  plugins: [preact()],
-  test: {
-    environment: 'jsdom',
-    include: ['src/**/*.test.{ts,tsx}'],
-    setupFiles: ['src/__test__/setup.ts'],
-    globals: false, // explicit imports preferred for clarity
-  },
-});
-```
-
-## Test Setup File
-
-```typescript
-// src/__test__/setup.ts
-import { afterEach } from 'vitest';
-import { randomFillSync } from 'crypto';
-
-// jsdom lacks WebCrypto, required by @tauri-apps/api/mocks
-Object.defineProperty(globalThis, 'crypto', {
-  value: {
-    getRandomValues: (buffer: Buffer) => randomFillSync(buffer),
-  },
-});
-
-// Auto-cleanup mocks after each test
-afterEach(async () => {
-  const { clearMocks } = await import('@tauri-apps/api/mocks');
-  clearMocks();
-});
-```
+| Feature | Risk | Mitigation |
+|---------|------|------------|
+| git push | SSH credential handling can fail | Fallback to error message "Use terminal to push" |
+| Finder drop | Large file copies can block UI | Show progress indicator, use streaming copy |
+| File editing | Data loss on crash | Auto-save to tmp, restore on reopen |
+| Drag/drop in tree | Complex state management | Build incrementally, test each interaction |
+| ROADMAP.md parsing | Brittle string parsing | Use robust section markers, handle malformed gracefully |
 
 ## Sources
 
-- [Tauri v2 Mock APIs documentation](https://v2.tauri.app/develop/tests/mocking/) -- HIGH confidence
-- [Tauri mocks namespace API reference](https://v2.tauri.app/reference/javascript/api/namespacemocks/) -- HIGH confidence
-- [Tauri event mock bug report #14281](https://github.com/tauri-apps/tauri/issues/14281) -- event mocking has known edge cases
-- Vitest 4.x config: existing `vitest.config.ts` in project, already configured for jsdom + Preact
-- Rust `#[cfg(test)]` pattern: standard Rust convention
+- Existing codebase: `/Users/lmarques/Dev/efx-mux/src-tauri/src/*.rs`
+- Existing codebase: `/Users/lmarques/Dev/efx-mux/src/components/*.tsx`
+- git2 staging: https://docs.rs/git2/latest/git2/struct.Index.html
+- git2 commit: https://docs.rs/git2/latest/git2/struct.Repository.html#method.commit
+- Tauri drag/drop: https://v2.tauri.app/develop/drop/
 
 ---
-*Architecture research for: Efxmux testing & consolidation*
-*Researched: 2026-04-12*
+*Architecture research for: Efxmux v0.3.0 Workspace Evolution*
+*Researched: 2026-04-14*

@@ -1,210 +1,221 @@
-# Research Summary — GSD⚡MUX
+# Project Research Summary
 
-**Project:** GSD⚡MUX
-**Domain:** Native macOS desktop terminal multiplexer for AI-assisted development
-**Researched:** 2026-04-06
-**Confidence:** MEDIUM-HIGH
-
----
+**Project:** Efxmux v0.3.0 — Workspace Evolution
+**Domain:** Native macOS terminal multiplexer with integrated file editing and git control
+**Researched:** 2026-04-14
+**Confidence:** HIGH
 
 ## Executive Summary
 
-GSD⚡MUX is a Tauri 2 native macOS app that wraps xterm.js terminals backed by tmux sessions, adds a GSD Markdown plan viewer with write-back checkboxes, a live git diff panel, and a project-aware sidebar — all in a single resizable 3-zone layout. The right tool choices are confirmed: Tauri 2.10.x + portable-pty for PTY management, `tauri::ipc::Channel<Vec<u8>>` (not events) for PTY streaming, xterm.js 6.0.0 with WebGL addon, Arrow.js 1.0.x for UI components, tmux via CLI shell-out (not a Rust crate), and git2 0.20.x for diff data. No bundler required — all JS is vendored via import maps.
+Efxmux v0.3.0 is a workspace evolution of a validated Tauri 2 + Preact + xterm.js 6.0 desktop application. The existing stack (Phases 1-7) provides a solid foundation: PTY management, git status reading, file watching, and a multi-panel UI with working tab bars. This milestone adds three major capability groups — editable file tabs (CodeMirror 6), a git control pane with staging/commit/push, and file tree enhancements (delete, drag/drop, Finder integration). All additions extend existing infrastructure rather than replacing it; no architectural pivots are required.
 
-The core technical risk is Phase 2 (Terminal Integration): the PTY→IPC→xterm.js data pipeline must implement watermark-based flow control from day one, and the binary encoding behavior of `Channel<Vec<u8>>` and the Arrow.js `ref` attribute mount pattern both need early verification before the architecture is locked. Every other phase depends on Phase 2 being correct. The multi-webview Tauri API is not production-ready — the entire 3-zone layout must be a single HTML page with CSS flexbox.
+The recommended approach is additive extension with disciplined separation of concerns. CodeMirror 6 is the clear editor choice over Monaco: ~150KB versus 2MB+ bundle, Vite-native, Preact-compatible, no WebGL conflicts with xterm.js. The existing git2 crate handles staging and commit natively; push should fall back to a PTY shell-out for v0.3.0 due to credential complexity. The sidebar evolves to a 3-tab structure (Projects, File Tree, Git Control) with a new `sidebarActiveTab` signal driving conditional rendering — a clean, low-risk pattern already proven in the right panel.
 
-macOS App Sandbox must never be enabled (PTY spawning is incompatible with it), ruling out App Store distribution permanently. tmux is not installed by default on macOS and needs a startup probe with a user-friendly install prompt. These two constraints must be locked in Phase 1 before any Rust code is written.
-
----
+The highest-risk area is git push authentication. libgit2 does not automatically use the macOS SSH agent or Keychain — a credential callback chain is mandatory, and this must be designed upfront. Commit signing (GPG or SSH) is unsupported by libgit2; commits created in Efxmux will be unsigned and this must be communicated to users before the first commit. File watcher reliability (atomic saves from external editors) and watcher thread accumulation on project switch are existing architectural debts that must be resolved before adding new file editing features — otherwise new features will exhibit the same stale-state bugs that currently affect the MD watcher.
 
 ## Key Findings
 
-### Confirmed Stack
+### Recommended Stack
 
-| Package | Version | Decision |
-|---------|---------|----------|
-| tauri (Rust) | 2.10.3 | Stable, use `features = ["protocol-asset"]` |
-| @tauri-apps/api (JS) | ^2.0.0 | Must match tauri core minor |
-| @xterm/xterm | **6.0.0** (not 5.x) | Greenfield — start on current release, handle breaking changes at init |
-| @xterm/addon-webgl | 0.19.0 | WebGL2 confirmed working in WKWebView macOS Sonoma |
-| @xterm/addon-fit | 0.11.0 | Required for panel resize |
-| @xterm/addon-canvas | fallback only | Canvas addon removed from 6.0; use for WebGL context-loss fallback only |
-| @arrow-js/core | 1.0.6 | `component()` = render function, NOT web component |
-| portable-pty (Rust) | 0.9.0 | Blocking I/O — always wrap reads in `spawn_blocking` |
-| git2 (Rust) | 0.20.4 | Compiles libgit2; all calls on `spawn_blocking` |
-| notify (Rust) | 8.2.0 | File watching for PLAN.md and theme.json |
-| marked (JS) | ^14.0.0 | Markdown render + custom checkbox renderer for write-back |
-| tmux (system) | 3.x minimum | Via `std::process::Command` — no Rust crate |
+The existing stack requires minimal additions. CodeMirror 6 (`codemirror@6.0.2` + language packs) is the right editor choice and integrates directly with Preact via DOM ref. The `@tauri-apps/plugin-fs` official plugin handles file delete/copy/move with proper macOS permission scopes, consistent with the existing plugin pattern (`plugin-dialog`, `plugin-opener`). The existing `git2@0.20.4` crate covers all staging and commit operations with no new dependencies; drag/drop uses the HTML5 native API and Tauri's built-in file drop events (zero bundle cost); custom scrollbars are pure CSS targeting webkit selectors that WKWebView on macOS supports fully.
 
-**Spec corrections vs common assumptions:**
-- xterm.js is **6.0**, not 5.x. `@xterm/addon-canvas` does not exist in 6.0; do not import it.
-- Arrow.js `component()` returns a **render function**, not a Custom Element. `customElements.define` is never used.
-- Tauri multiple webviews (`Window::add_child`) are **not stable** — single HTML page with CSS layout only.
-- PTY data goes through **`Channel<Vec<u8>>`**, never `emit()`. Events are JSON-only, unordered under load.
+**Core technology additions:**
+- `codemirror@6.0.2` + language packs: in-app file editor — lightweight (~150KB), Vite-native, no WebGL conflicts with xterm.js
+- `@tauri-apps/plugin-fs@2.2.0` + `tauri-plugin-fs@2` (Rust): file delete/copy/move — official plugin with permission scope handling
+- `git2@0.20.4` (extend existing): stage, unstage, commit via `Index::add_path`, `Repository::commit` — no new crate needed
+- HTML5 Drag and Drop API (native): file tree reordering — zero bundle, DOM events via Preact `onDragStart`/`onDrop` props
+- Tauri built-in drag drop events: Finder-to-tree file drops — `tauri://drag-drop` event listener
+- CSS webkit scrollbar selectors: custom terminal and panel scrollbars — WKWebView compatible, zero bundle cost
 
-### Table Stakes
+**What to avoid:**
+- Monaco Editor: 2MB+ bundle, React-centric, WebGL conflicts with xterm.js, overkill for basic editing
+- Native git2 push for v0.3.0: SSH/HTTPS credential handling is complex; shell out via PTY instead
+- SortableJS or dnd-kit: unnecessary weight for a simple file tree; HTML5 native API is sufficient
+- JavaScript scrollbar libraries: CSS-only approach works in WKWebView
 
-Must work or the app feels broken:
+### Expected Features
 
-- **Zero-lag keyboard input** — PTY round-trip chain must be fully async; no blocking locks in hot path
-- **Correct ANSI/VT100 rendering** — Claude Code uses cursor positioning, progress bars, color; IPC must not mangle bytes
-- **Cmd+C / Cmd+V clipboard** — requires Tauri menu-bar wiring AND tmux OSC 52 config; two separate layers
-- **Session persistence across app restart** — close → reopen → reattach to same tmux sessions
-- **Resize without corruption** — xterm.js FitAddon → debounced `session_resize` → `pty.resize()` → SIGWINCH
-- **Mouse passthrough** — PTY must forward mouse escape sequences unmodified
-- **Scrollback ≥10,000 lines** — Claude Code output is voluminous; tmux default (2000) is insufficient
+Research confirms strong alignment between user expectations (table stakes) and the planned v0.3.0 feature set. Every planned feature maps to an established pattern from VS Code, Zed, or GitHub Desktop.
 
-### Differentiators
+**Must have for v0.3.0 launch (P1):**
+- File editing in tabs with unsaved indicator and Cmd+S save — every IDE has this; double-click to edit is the universal mental model
+- Tab close with unsaved changes warning — losing work is catastrophic UX, universal pattern
+- Git staging checkboxes per file + Stage All — VS Code, GitKraken, GitHub Desktop all use this model
+- Git commit with message input and empty-message validation — cannot commit without a message
+- Accordion diff per file (expand/collapse) — GitHub, GitLab, VS Code all use this; users expect it
+- File tree delete with confirmation dialog — destructive action requires confirmation
+- Open file in external editor — forcing built-in editor for complex work is hostile to power users
+- GSD sub-tabs (Milestones, Phases, Progress from ROADMAP.md + STATE.md) — unique Efxmux differentiator
+- Sidebar 3-tab structure (Projects, File Tree, Git Control) — prerequisite for git control pane
 
-What makes GSD⚡MUX unique:
+**Should have — v0.3.x patches (P2):**
+- Git push button — add after commit is stable; requires auth testing
+- Tab reordering via drag — standard in browsers and VS Code
+- Internal drag/drop in file tree — add after delete is reliable
 
-- **GSD Markdown panel with write-back checkboxes** — click checkbox in PLAN.md → file updated on disk → Claude Code sees change on next read; no other terminal has this
-- **Project-scoped workspace** — switch project → all panels (terminal, diff, plan, sidebar) update atomically
-- **AI agent as first-class PTY citizen** — Claude Code / OpenCode spawn as raw PTY processes; no proxy, no interception
-- **Live git diff panel** — powered by git2 (no shell-out latency); updates as AI makes changes
-- **Collapsible server pane** — Open/Restart/Stop dev server co-located with agent terminal
+**Defer to v0.4+ (P3):**
+- Finder drag-to-tree — complex; add after internal drag is stable
+- Per-hunk staging — power feature; Zed took months to build this correctly
+- AI-generated commit messages — requires LLM integration beyond current agent spawn
+- Interleaved staged/unstaged diff (Zed-style) — complex UI; not essential for v0.3
 
-### Architecture Decisions
+**Anti-features — do not build:**
+- Monaco or full VS Code editor embedding: 50MB+, WebGL conflicts, complexity explosion
+- Auto-save: dangerous with code; conflicts with git workflow; explicit Cmd+S only
+- Real-time collaborative editing: not applicable to a single-user tool
+- Git graph visualization: marginal daily-workflow value; VS Code extensions already exist
 
-**PTY streaming:** `Channel<Vec<u8>>` per session, one `tokio::task::spawn_blocking` reader thread per session, watermark flow control (HIGH: 400KB, LOW: 100KB). `emit()` is explicitly rejected.
+### Architecture Approach
 
-**tmux integration:** Shell out via `std::process::Command`. Spawn `tmux attach-session -t <name>` inside a portable-pty PtyPair — the master PTY delivers the full rendered tmux stream to xterm.js. The `tmux_interface` crate is explicitly rejected (self-described experimental, incomplete).
+v0.3.0 is entirely additive within the existing component structure. The sidebar gains a `sidebarActiveTab` signal and conditional rendering. The main panel adds `fileTabs` and `gitChangesTabs` signal arrays alongside the existing `terminalTabs`, all rendered by a shared TabBar but with distinct lifecycle management. Five new Rust commands land in existing modules (`write_file_content`, `delete_file`, `move_file`, `copy_file`, `create_file` in `file_ops.rs`; `stage_file`, `unstage_file`, `stage_all`, `commit`, `push` in `git_status.rs`). Five new frontend components are created: `git-control.tsx`, `file-tab.tsx`, `git-changes-tab.tsx`, `context-menu.tsx`, `dropdown-menu.tsx`.
 
-**Session naming:** `gsd-{sha8(abs_path)}-{role}` (e.g., `gsd-a3f2c1b4-main`). Path hash prevents collisions; display name stored separately.
+**Major components and their v0.3.0 responsibilities:**
+1. `sidebar.tsx` (modify) — gains tab switcher, hosts File Tree and Git Control as conditional renders
+2. `git-control.tsx` (new) — staging checkboxes, commit message input, push button; all git write operations
+3. `file-tab.tsx` (new) — CodeMirror 6 editor wrapper, dirty state tracking, Cmd+S save, mtime conflict detection
+4. `git-changes-tab.tsx` (new) — accordion diff viewer, lazy-load diffs on accordion expand
+5. `context-menu.tsx` + `dropdown-menu.tsx` (new) — reusable UI primitives consumed by multiple features
+6. `file_ops.rs` (extend) — write_file_content, delete_file, move_file, copy_file, create_file
+7. `git_status.rs` (extend) — stage_file, unstage_file, stage_all, commit, push
 
-**Layout:** Single HTML page, CSS flexbox 3-zone (sidebar | main | right panels). Arrow.js `reactive()` for split ratios. `ResizeObserver` + 50ms debounce → FitAddon → `session_resize`.
-
-**State:** serde `AppState` with `version: u32` migration, camelCase JSON, `~/.config/gsd-mux/state.json`. All fields `#[serde(default)]`.
+**Key patterns to follow:**
+- Separate signal arrays per tab type (terminal, file, git-changes): different lifecycle requires separate state
+- Centralize IPC calls in service modules (`git-service.ts`, `file-service.ts`): avoid scattered `invoke()` in components
+- Serialize all git2 operations through a single `Arc<Mutex<Repository>>` or semaphore: prevents index lock conflicts
+- Use Preact's `onDragStart`/`onDrop` props (not `addEventListener`): compatible with VDOM, avoids cleanup leaks
+- Refresh git status reactively after git operations and on file watcher events: never poll with `setInterval`
 
 ### Critical Pitfalls
 
-1. **xterm.js write buffer overflow (50MB cap)** — Claude Code burst output silently discarded. Implement watermark flow control in Phase 2. `term.write(chunk, callback)` drives backpressure; Rust uses `AtomicBool` pause flag.
+1. **git2 push requires explicit credential callback — SSH agent is not automatic.** libgit2 does not integrate with macOS Keychain or ssh-agent by default. Implement `RemoteCallbacks::credentials()` with a fallback chain: try `Cred::ssh_key_from_agent()` first, then default key paths, then show an actionable error dialog. Alternatively, shell out to `git push` via the existing PTY for v0.3.0 — simpler auth, uses user's git config. This decision must be made at Phase 2 design time.
 
-2. **macOS App Sandbox blocks PTY** — `app-sandbox: true` makes `forkpty()` fail with no workaround. Lock entitlements.plist in Phase 1. App Store is permanently out of scope.
+2. **`dragDropEnabled: true` disables DOM drag-drop — the config flag is backwards.** Setting `dragDropEnabled: true` in `tauri.conf.json` enables Tauri's internal handler, which intercepts events before the DOM. DOM `onDragStart`/`onDrop` handlers never fire. Set `dragDropEnabled: false` to enable HTML5 drag-drop. For Finder drops, use Tauri's `onDragDropEvent` separately. Verify config before writing any drag-drop code.
 
-3. **WebGL context exhaustion** — WKWebView cap ~16. Requires `try/catch` + canvas fallback and `addon.dispose()` + `terminal.dispose()` on every panel close.
+3. **git2 concurrent access causes index lock failures.** `Repository::statuses()` and `Index::add_path` both acquire locks. If a background status refresh overlaps with a user-triggered stage operation, one will fail with "failed to create locked file". Serialize all git2 calls through a single `Arc<Mutex<Repository>>` or single-permit semaphore — this must be designed from the start, retrofitting is painful.
 
-4. **IPC JSON overhead for binary data** — `emit()` base64-encodes binary, +33-100% overhead. `Channel<Vec<u8>>` sends binary directly. Architecture decision; not fixable late.
+4. **File watcher misses external editor saves due to atomic write pattern.** VS Code, Zed, and Vim write to temp files then rename to the final path. The current `file_watcher.rs` (filtered by extension on `notify-debouncer-mini`) may miss these rename events or fire for temp files. Migrate to `notify-debouncer-full` for richer event metadata. Add a fallback: poll directory listing on window focus-regain. Fix this before building new file editing features.
 
-5. **Arrow.js cleanup leak** — Tauri `listen()` does NOT auto-stop on Arrow.js unmount. Must manually `unlisten()` → `addon.dispose()` → `terminal.dispose()` in `onCleanup()`. ~17MB GPU leak per orphaned terminal.
+5. **git2 commit signing is unsupported — commits will be unsigned.** libgit2 has no native SSH signing support (open issue libgit2#6397). GPG signing requires shelling out. For v0.3.0: detect `commit.gpgsign=true` in user's git config and display a warning before the first commit. Document this limitation in the UI. Users with CI pipelines that require signed commits must use the terminal.
 
-6. **tmux race on attach** — `attach-session` races shell init. Poll `tmux has-session` before first write. On reopen, validate session exists; show "Session Lost — Relaunch?" if not.
-
-7. **tmux not in PATH** — Not on macOS by default. Probe at startup; check `/opt/homebrew/bin/tmux` and `/usr/local/bin/tmux`. Show `brew install tmux` hint, not a blank terminal.
-
----
-
-## Phase 2 Spike Required
-
-Two open questions carry HIGH risk if assumed and wrong — verify at Phase 2 start before any production code:
-
-| Question | Risk if wrong | Verification |
-|----------|--------------|--------------|
-| Does `Channel<Vec<u8>>` transmit binary as-is or base64-encode? | Entire PTY streaming architecture must be redesigned | 5-line Tauri spike: send `vec![0u8, 255u8]`, log JS receipt |
-| Does Arrow.js `ref` attribute call the function with the DOM element on mount? | Terminal component mount pattern fails; need custom element wrapper | Minimal Arrow.js component with `ref`, test in WKWebView |
-
----
+**Additional pitfalls to watch:**
+- Watcher threads accumulate on project switch — fix watcher lifecycle before adding more watchers
+- Binary file detection required before file editing — `read_to_string` fails on binary; show error, do not attempt to edit
+- xterm.js phantom characters on fast scroll — known xterm.js 6.0 synchronized output issue; fix in bug sprint
+- Custom scrollbar CSS can break xterm.js scrollbar click targets — test scrollbar interaction after any CSS change
+- macOS drag-drop SIGABRT crash with invalid file paths — known Tauri bug #14624; check if fixed in 2.10.3 before implementing drag-drop
 
 ## Implications for Roadmap
 
-### Phase 1: Scaffold + Entitlements
-**Rationale:** Project structure, CSP, import maps, and entitlements must be correct before any code. Mistakes here cascade into every phase.
-**Delivers:** Tauri 2 project, 3-zone CSS layout (placeholder divs), Arrow.js vendored + import map, split handle drag, sidebar collapse, entitlements locked (no sandbox).
-**Avoids:** ESM CORS pitfall (vendor locally), App Sandbox pitfall (lock entitlements now).
+Based on combined research, the suggested phase structure is seven focused phases following the dependency order identified in ARCHITECTURE.md, with an explicit bug-fix sprint at the end.
 
-### Phase 2: Terminal Integration — CRITICAL PATH
-**Rationale:** The PTY→Channel→xterm.js pipeline is the hardest technical problem and a hard dependency for every later phase.
-**Delivers:** portable-pty in Rust, `Channel<Vec<u8>>` streaming, `session_create / session_attach / session_write / session_resize` commands, xterm.js 6.0 with WebGL (+ canvas fallback), FitAddon + ResizeObserver + debounced resize, watermark flow control, WebGL context-loss handling, tmux startup probe, session naming convention.
-**Spike first:** Verify binary Channel encoding and Arrow.js `ref` mount pattern before writing production code.
-**Research flag: Needs `/gsd-research-phase`** — highest unknowns of any phase.
+### Phase 1: Foundation Primitives
+**Rationale:** `context-menu.tsx` and `dropdown-menu.tsx` are consumed by four downstream features. File and git write Rust commands are the dependency gate for Phases 2-4. Building shared primitives once prevents rework and establishes the service-layer pattern (`git-service.ts`, `file-service.ts`) that all later phases follow.
+**Delivers:** Reusable context menu component, reusable dropdown component, `write_file_content` Rust command, `stage_file`/`unstage_file`/`stage_all`/`commit` Rust commands, `git-service.ts` and `file-service.ts` service modules.
+**Avoids:** Duplication of UI primitive patterns across components; scattered `invoke()` calls in feature components.
 
-### Phase 3: Theme System
-**Rationale:** Isolated and low-risk; parallelizable after Phase 2.
-**Delivers:** `theme.json` schema + serde load, `notify` watcher, hot-reload xterm.js theme objects, initial GSD green theme.
+### Phase 2: Sidebar Evolution + Git Control Pane
+**Rationale:** The sidebar restructure (3-tab layout with `sidebarActiveTab` signal) is the prerequisite for any feature that lives in a sidebar tab. Git Control is the highest-value new panel and exercises the git write commands from Phase 1. The credential strategy for push must be decided here — before any push UI is built.
+**Delivers:** `sidebarActiveTab` signal + tab switcher UI, File Tree moved to sidebar File Tree tab, `git-control.tsx` with staging checkboxes and commit message input, push button (PTY shell-out or credential chain depending on decision), unsigned-commit warning dialog.
+**Uses:** git2 stage/commit commands (Phase 1), existing `get_git_files` command.
+**Avoids:** git2 locking (serialize via mutex from the start), unsigned-commit surprise (check config before first commit).
+**Research flag:** Git push credential handling — evaluate `git2-credentials` crate readiness vs. PTY shell-out; decide before building push UI.
 
-### Phase 4: Session Persistence
-**Rationale:** Core product promise (Claude Code survives app close) requires state save/restore. Depends on session model from Phase 2.
-**Delivers:** Full `AppState` serde schema with migration, `state_save` / `state_load`, on-close detach + on-open reattach, dead session UI.
-**Avoids:** Stale session ID pitfall, corrupted state.json pitfall.
+### Phase 3: Main Panel File Tabs + Tab Dropdown
+**Rationale:** File editing is the highest-value user-facing feature. Depends on `write_file_content` (Phase 1) and the reusable dropdown (Phase 1). Can run in parallel with Phase 2 once Phase 1 is complete — both phases depend only on Phase 1 primitives.
+**Delivers:** Tab dropdown (Terminal | Agent | Git Changes | Create File), `file-tab.tsx` with CodeMirror 6 and language detection, dirty state indicator, Cmd+S save with mtime conflict detection, `git-changes-tab.tsx` accordion diff viewer with lazy diff loading.
+**Uses:** `codemirror@6.0.2` + language packs, `write_file_content` (Phase 1).
+**Avoids:** Binary file corruption (detect binary before loading; show error), external edit data loss (mtime check before write), CodeMirror WebGL conflicts (CM6 is DOM-based, no conflicts with xterm.js WebGL).
 
-### Phase 5: Project System + Sidebar
-**Rationale:** Multi-project workflow requires persisted project list (Phase 4) and session infrastructure (Phase 2).
-**Delivers:** `ProjectConfig` model, project switcher (all panels update atomically), sidebar Arrow.js component, git2 branch/dirty-status badge.
-**Avoids:** Session name collision, deleted project path crash.
+### Phase 4: File Tree Enhancements
+**Rationale:** Delete and drag/drop depend on the context menu (Phase 1) and assume the file open flow from Phase 3 is stable. Building after file tabs ensures the full file-opening lifecycle is established before adding drag-triggered file operations.
+**Delivers:** File delete with confirmation modal, context menu integration (right-click on tree nodes), internal drag/drop reordering, `@tauri-apps/plugin-fs` for delete/move/copy, external editor preference stored in `state.json`.
+**Uses:** `context-menu.tsx` (Phase 1), `@tauri-apps/plugin-fs`, HTML5 Drag and Drop API.
+**Avoids:** `dragDropEnabled: false` config verified before writing any drag code, path canonicalization against project root, binary file guard for dropped files, macOS drag-drop SIGABRT bug check against Tauri 2.10.3.
 
-### Phase 6: Right Panel Views
-**Rationale:** Right panel views are independent of each other; need project paths from Phase 5.
-**Delivers:** GSD Markdown viewer (marked.js + checkbox write-back + notify watcher), git diff panel (git2, live), file tree (read-only), right panel tab system.
+### Phase 5: GSD Sub-Tabs
+**Rationale:** Self-contained enhancement to `gsd-viewer.tsx`. No cross-phase dependencies beyond file reading, which has existed since Phase 6 of the original roadmap. Can proceed independently after Phase 1. Lower priority than file editing and git control; schedule when core features are stable.
+**Delivers:** 5 sub-tabs in GSD viewer (Milestones section, Phases section, Progress section from ROADMAP.md; full MILESTONES.md; STATE.md), `parseRoadmapSection()` helper with graceful degradation, `gsdSubTab` signal.
+**Addresses:** Efxmux's primary differentiator — no other terminal tool shows AI planning context inline.
+**Research flag:** Standard patterns (section parsing by `## Heading`, tab switching already exists in right panel) — skip phase research.
 
-### Phase 7: Server Pane + Agent Support
-**Rationale:** Dev server pane reuses PTY infra from Phase 2; agent binary detection needs project config from Phase 5.
-**Delivers:** Collapsible server pane (direct PTY, no tmux), Restart/Stop/Open-in-Browser, `which claude` / `which opencode` resolution with Homebrew PATH fallbacks.
+### Phase 6: Right Panel Multi-Terminal
+**Rationale:** Extends existing terminal-tabs.tsx patterns to the right panel bottom pane. Purely additive, lowest risk feature in the milestone. Build last among new features so regressions from other phases don't interfere.
+**Delivers:** Multiple terminal/agent sub-tabs in right panel bottom pane, `rightBottomTabs` signal, dropdown menu for tab type selection.
+**Uses:** `dropdown-menu.tsx` (Phase 1), existing PTY infrastructure and terminal-tabs patterns.
+**Research flag:** Direct extension of proven infrastructure — skip phase research.
 
-### Phase 8: Polish + Keyboard System
-**Rationale:** Keyboard shortcut system needs all panels to exist to verify no conflicts with terminal control sequences.
-**Delivers:** No-conflict shortcut set (never intercept Ctrl+C/D/Z/L/R), `attachCustomKeyboardEventHandler` on all xterm.js instances, crash recovery, lazy render (IntersectionObserver), tmux version check + onboarding wizard.
+### Phase 7: Bug Fix Sprint
+**Rationale:** Several known architectural debts (file watcher atomic save, watcher thread accumulation, xterm.js phantom characters, scrollbar click targets) affect multiple new features. Addressing them in a focused sprint after core features are stable is more effective than interleaving — it ensures bugs are fixed systematically with full regression coverage rather than ad-hoc patches.
+**Delivers:** `notify-debouncer-full` migration with atomic-save handling, watcher lifecycle cleanup on project switch, xterm.js fast-scroll phantom character mitigation, custom scrollbar CSS with verified click interaction, focus-regain directory poll as fallback, `lsof`-verified watcher handle count.
+**Addresses:** All pitfalls flagged as "bug fix phase" in PITFALLS.md.
 
 ### Phase Ordering Rationale
 
-- Phase 2 is the critical path — nothing else can be validated without a working terminal.
-- Phases 3 and 5 have no dependency on each other after Phase 2; either order works.
-- Phase 6 right panel views can be prototyped in parallel with Phase 5 as standalone HTML pages.
-- Keyboard system is last because shortcut conflicts require all panels to be present.
+- Phase 1 must come first: context menu, dropdown, and Rust write commands are shared by all subsequent phases; building them once prevents rework in four downstream phases.
+- Phases 2 and 3 can run in parallel after Phase 1 completes: they are independent (sidebar vs. main panel) and both depend only on Phase 1 outputs.
+- Phase 4 follows Phase 3: the file open flow (used in drag-triggered file operations) should be stable before drag-drop is implemented.
+- Phases 5 and 6 are independent enhancements; assign based on team availability after the core trio (1, 2, 3) is landed.
+- Phase 7 is a dedicated quality sprint at the end: ensures existing bugs are fixed with full test coverage rather than patched piecemeal.
 
 ### Research Flags
 
-**Needs `/gsd-research-phase` before planning:**
-- **Phase 2** — binary Channel behavior and Arrow.js `ref` are unverified; wrong assumptions require architectural rewrite.
+Phases needing deeper research before or during planning:
+- **Phase 2 (git push):** libgit2 credential handling has known failure modes in production. Research whether `git2-credentials` crate is production-ready or whether PTY shell-out is the safer v0.3.0 choice. The PITFALLS.md recommendation leans toward shell-out.
+- **Phase 4 (Finder drag-to-tree):** Tauri drag-drop SIGABRT crash bug (#14624) is documented to affect Tauri 2.5.1–2.9.4. Verify whether Tauri 2.10.3 (current) includes the fix before implementing. If unfixed, a defensive workaround must be designed before starting the phase.
 
-**Standard patterns, skip research-phase:**
-- Phase 1 — Tauri scaffolding is well-documented; import map + CSP config is deterministic.
-- Phase 3 — Theme hot-reload via notify + xterm.js theme object is a straightforward pattern.
-- Phase 4 — serde state + migration is standard Rust; no novel unknowns.
-- Phase 6 — marked.js + checkbox write-back is well-understood; git2 diff API is fully documented.
-
----
+Phases with standard patterns — skip phase research:
+- **Phase 1:** Context menu, dropdown, and IPC command patterns are established in the existing codebase.
+- **Phase 3:** CodeMirror 6 is well-documented with clear Tauri + Vite integration patterns. Binary detection and mtime check are standard Rust/FS operations.
+- **Phase 5:** ROADMAP.md parsing is string manipulation on a known format. GSD tab switching already exists in the right panel.
+- **Phase 6:** Direct reuse of terminal-tabs.tsx patterns — no new territory.
+- **Phase 7:** Each bug has a documented fix in PITFALLS.md with specific library recommendations.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All versions verified via npm/crates.io/GitHub; API patterns from official docs |
-| Features | HIGH | Table stakes from xterm.js/Tauri production usage; differentiators from project spec |
-| Architecture | MEDIUM-HIGH | Channel + spawn_blocking + tmux CLI verified; Arrow.js `ref` and Channel binary encoding unconfirmed |
-| Pitfalls | HIGH | All critical pitfalls backed by confirmed upstream issues/PRs |
+| Stack | HIGH | All packages verified via npm, docs.rs, and Context7 with exact versions. No speculation. |
+| Features | HIGH | Grounded in VS Code, Zed, GitKraken, and GitHub Desktop patterns. Competitor analysis confirmed. |
+| Architecture | HIGH | Based on direct codebase analysis of existing components. Integration points are code-level specific, not conceptual. |
+| Pitfalls | HIGH | Each pitfall verified against official docs, open GitHub issues, or libgit2 guides. Bug tracker issue numbers cited. |
 
-**Overall confidence:** MEDIUM-HIGH
+**Overall confidence: HIGH**
 
 ### Gaps to Address
 
-- **`Channel<Vec<u8>>` binary encoding** — Verify with a spike at Phase 2 start. If base64, restructure with raw IPC approach.
-- **Arrow.js `ref` attribute in WKWebView** — Verify against pinned version. Fallback: `<gsd-terminal>` custom element with `connectedCallback`.
-- **tmux version on developer machines** — macOS ships tmux 2.9 (Xcode). Homebrew is 3.x. Minimum supported version needs to be documented and checked at startup.
-- **FiraCode ligatures** — xterm.js does not support ligatures in any renderer. Accept and document; no workaround attempt.
+- **Git push credential strategy:** Research identifies the problem clearly but the implementation decision remains open: credential callback chain via `git2-credentials` crate, or PTY shell-out to `git push`. This is a design decision for Phase 2 planning, not a research gap — the team must decide based on acceptable complexity and v0.3.0 scope.
 
----
+- **Tauri drag-drop bug #14624 fix status:** PITFALLS.md documents the SIGABRT crash affecting Tauri 2.5.1–2.9.4. Must confirm whether 2.10.3 includes the fix before Phase 4 begins. If unfixed, implement defensive path validation and graceful error handling rather than crashing.
+
+- **CodeMirror Solarized Dark theme:** The existing Efxmux theme uses `bg=#282d3a, accent=#258ad1`. CodeMirror's `oneDark` built-in is close but not exact. A custom CodeMirror theme matching the Efxmux palette must be built during Phase 3 — not complex, but not yet designed.
+
+- **GSD ROADMAP.md section format stability:** The `parseRoadmapSection()` helper assumes stable `## Heading` markers. If ROADMAP.md format varies across projects, parsing fails silently. Implement graceful degradation during Phase 5: if a section is not found, display the full file with a notice rather than showing empty content.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- https://v2.tauri.app/develop/calling-frontend/ — Channel API, emit/listen distinction
-- https://v2.tauri.app/develop/calling-rust/ — invoke + command patterns
-- https://github.com/xtermjs/xterm.js/releases/tag/6.0.0 — 6.0 breaking changes
-- https://docs.rs/portable-pty/latest/portable_pty/ — PTY API, spawn_blocking pattern
-- https://docs.rs/git2/latest/git2/ — status + diff API
-- https://arrow-js.com/ — component() is render function, not web component
-- https://xtermjs.org/docs/guides/flowcontrol/ — watermark pattern
-- https://github.com/microsoft/vscode/pull/279579 — GPU memory leak on terminal dispose
+- CodeMirror 6 npm (npmjs.com/package/codemirror) + docs (codemirror.net) — basicSetup, EditorView, language packs, themes
+- git2-rs docs.rs 0.20.4 — Index::add_path, Repository::commit, RemoteCallbacks, Cred types
+- Tauri v2 plugin-fs docs (v2.tauri.app/plugin/file-system) — remove, copyFile, rename, permission scopes
+- git2-rs GitHub (rust-lang/git2-rs) — SSH and HTTPS feature flags
+- MDN HTML5 Drag and Drop API — native browser drag events, dataTransfer interface
+- MDN CSS Scrollbars Styling — scrollbar-width, ::-webkit-scrollbar
+- xterm.js GitHub PR #5096 — VS Code scrollbar infrastructure in xterm.js 6.0
 
 ### Secondary (MEDIUM confidence)
-- tmux_interface crate docs — confirmed experimental/unstable; CLI approach preferred
-- https://forum.babylonjs.com/t/performance-between-safari-and-wkwebview-tauri/60811 — WebGL2 in WKWebView confirmed working
+- Tauri community discussion #9696 — drag-drop event names (`tauri://drag-drop`); community-verified but not in official docs
+- GitHub issue tauri-apps/tauri#14624 — macOS drag-drop SIGABRT crash; fix status in 2.10.x unconfirmed
+- GitHub issue tauri-apps/tauri#14373 — dragDropEnabled config confusion; documents the backwards flag behavior
+- GitHub issue libgit2/libgit2#6397 — SSH signing not supported in libgit2; open issue
+- GitHub issue xtermjs/xterm.js#5198 — selection highlight artifact after scroll
+- GitHub issue xtermjs/xterm.js#1284 — fit addon scrollbar width conflict
+- libgit2 authentication guide (libgit2.org) — credential callback chain patterns
+- Zed git panel architecture (deepwiki) — interleaved diff-of-diffs pattern; useful for v0.4+ planning
 
 ### Tertiary (LOW confidence — verify during implementation)
-- tmux control mode (`tmux -C attach`) for sidebar read-only ops — feasibility unverified
-- tmux version differences on Xcode-installed vs Homebrew macOS — anecdotal
+- `notify-debouncer-full` atomic-save handling patterns — oneuptime.com community blog; pattern is sound but Efxmux-specific adaptation unverified
+- `git2-credentials` crate production readiness — mentioned as credential-chain helper; maturity needs evaluation before using in Phase 2
 
 ---
-
-*Research completed: 2026-04-06*
+*Research completed: 2026-04-14*
 *Ready for roadmap: yes*

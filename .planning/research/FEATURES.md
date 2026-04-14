@@ -1,245 +1,271 @@
 # Feature Research
 
-**Domain:** Unit testing and project consolidation for Tauri 2 + Preact terminal mux app
-**Researched:** 2026-04-12
+**Domain:** Terminal Multiplexer IDE (v0.3.0 Workspace Evolution)
+**Researched:** 2026-04-14
 **Confidence:** HIGH
 
 ## Feature Landscape
 
-### Table Stakes (Must Have for v0.2.0)
+### Table Stakes (Users Expect These)
 
-Features that make this milestone worth doing. Without these, "testing & consolidation" is just checkbox theater.
+Features users assume exist. Missing these = product feels incomplete.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Vitest test infrastructure | Tests cannot run without config, mocks, CI scripts | LOW | Already have `vitest.config.ts` + jsdom; need Tauri invoke mocks and test utilities |
-| Pure function unit tests (ansi-html, tokens, color256) | These are the highest-ROI tests: pure input/output, no DOM, catch regressions fast | LOW | `ansiToHtml()`, `extractServerUrl()`, `color256()` are perfect test targets |
-| State serialization round-trip tests | State persistence is critical path -- broken state.json = app won't restore | MEDIUM | Test `AppState` serde round-trips on Rust side; test state-manager type contracts on TS side |
-| Rust unit tests for git_status, state, theme | These modules have pure logic extractable from Tauri command wrappers | MEDIUM | `GitStatus::for_path()` testable with temp git repos; state serde testable without Tauri |
-| Dead code removal | 6-day sprint guarantees abandoned code paths; dead code confuses future development | LOW | Run TypeScript strict checks, look for unused exports, check for leftover Arrow.js patterns |
-| Type safety tightening | Rapid development often means `any` types, missing interfaces, loose generics | LOW | Enable stricter tsconfig options, add return types to exported functions |
-| Dependency audit | Post-sprint deps may include unused packages or version mismatches | LOW | `pnpm why` for each dep; remove unused; verify version matrix from CLAUDE.md |
+| File editing in tabs | Every IDE/editor has this; users will instinctively double-click to edit | HIGH | Requires Monaco/CodeMirror integration, tab state management, unsaved changes tracking |
+| Tab close with unsaved warning | Universal pattern; losing work is catastrophic UX | LOW | Modal confirmation when dirty flag set |
+| Git staging with checkboxes | VS Code, Zed, GitKraken all use this; standard mental model | MEDIUM | Checkbox per file, "Stage All" button, visual staging state |
+| Git commit with message input | Cannot commit without message; core git workflow | LOW | Text input + Commit button, validation for empty message |
+| File delete with confirmation | Destructive action requires confirmation; universal pattern | LOW | Modal dialog, no direct deletion |
+| Expand/collapse diff per file | GitHub, GitLab, VS Code all have this; users expect to focus on one file at a time | MEDIUM | Accordion pattern with chevron indicators |
+| Tab reordering via drag | Browser tabs, VS Code, every tabbed interface supports this | MEDIUM | Drag handle detection, drop zone preview |
+| Open in external editor | Users have preferred editors (Zed, VS Code); forcing built-in editor is hostile | LOW | `open -a` command via Tauri shell, configurable editor preference |
+| File tree delete | Cannot manage files without delete; paired with create | LOW | Context menu + keyboard shortcut (Delete/Backspace) |
+| Visual git status in file tree | See which files are modified without opening git panel | LOW | Status badge/color overlay on tree nodes |
 
-### Differentiators (High Value, Not Strictly Required)
+### Differentiators (Competitive Advantage)
 
-Features that make the test suite actually useful long-term rather than just "we have tests."
+Features that set Efxmux apart. Not required, but valuable for terminal-first developers.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Tauri invoke mock layer | Reusable mock for `@tauri-apps/api/core` invoke calls; enables testing any component that talks to Rust | MEDIUM | Create `src/test/tauri-mock.ts` that intercepts invoke with configurable responses |
-| Component render tests for key panels | Verify sidebar, right-panel, and GSD viewer render without crashing; catch broken imports | MEDIUM | Use Preact render + jsdom; test that components mount, not pixel output |
-| Rust integration test for PTY spawn/destroy lifecycle | PTY is the most critical path; a test that spawns `echo hello` and reads output catches portability issues | HIGH | Requires real PTY (not mockable); run in `#[cfg(test)]` with short timeout |
-| Module boundary documentation | After consolidation, document which modules are public API vs internal; prevents future coupling | LOW | Add barrel exports, internal-only markers, or module-level doc comments |
-| CI-ready test scripts | `pnpm test` and `cargo test` in package.json scripts; ready for GitHub Actions | LOW | Already have `"test": "vitest run"`; add `"test:rust"` and `"test:all"` |
-| Code organization refactor | Extract shared types to `src/types/`, consolidate Tauri invoke calls to `src/api/` | MEDIUM | Reduces import spaghetti; makes mock layer cleaner |
+| GSD sub-tabs (Milestones/Phases/Progress/History/State) | No other tool shows AI planning context inline; unique to GSD workflow | MEDIUM | Parse ROADMAP.md sections, render STATE.md, tab switching |
+| Interleaved staged/unstaged diff view (Zed-style) | Focus stays on code location, not on "staged" vs "unstaged" sections; reduces cognitive load | HIGH | Requires diff-of-diffs rendering, per-hunk stage/unstage buttons |
+| AI-generated commit messages | Zed and VS Code have this; competitive parity becoming table stakes | MEDIUM | LLM integration via existing agent, staged content as context |
+| Drag files from Finder to file tree | macOS-native workflow; no other terminal multiplexer supports this | HIGH | Tauri file drop events, copy operation, tree refresh |
+| Sidebar bash sub-TUI tabs | Run multiple terminal sessions in sidebar without consuming main panel space | MEDIUM | Extends existing terminal-tabs pattern to sidebar |
+| Per-hunk staging from diff view | Stage only specific changes within a file; power user feature | HIGH | Hunk boundary detection, partial staging commands |
+| Undo last commit (soft reset) | Zed shows "Uncommit" button immediately after commit; safety net | LOW | `git reset HEAD^ --soft` via git2 |
 
-### Anti-Features (Do NOT Build These)
+### Anti-Features (Commonly Requested, Often Problematic)
 
-Features that seem like good testing practice but are wrong for this project.
+Features that seem good but create problems.
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| E2E tests with WebDriver/Playwright | "Full coverage" instinct | Tauri E2E is fragile, slow, requires app build. Terminal rendering is non-deterministic. ROI is near zero for a solo-dev desktop app | Manual smoke test checklist; component render tests for UI |
-| Snapshot testing for components | "Catch UI regressions" | UI changed twice in 10 phases. Snapshots would be constant noise, not signal. Terminal output is non-deterministic | Test behavior (does it mount? does callback fire?) not rendered HTML |
-| 100% code coverage target | "Professional standards" | Most code is Tauri IPC glue or DOM manipulation. Forcing coverage on drag-manager or terminal-tabs means writing DOM simulation tests that test nothing real | Cover pure functions thoroughly; accept 0% on DOM-heavy glue code |
-| Mock tmux/PTY for frontend tests | "Unit test everything" | Mocking terminal I/O is harder than the real thing. Tests would validate the mock, not the integration | Rust-side integration test with real PTY; skip terminal pipeline in TS tests |
-| Visual regression testing | "Pixel-perfect UI" | Requires screenshot infrastructure, baseline management, CI with display. Overkill for single-developer project | Design review via Pencil mockup comparison (already in workflow) |
-| Testing xterm.js rendering | "Terminal is core feature" | xterm.js is a third-party library. Testing that it renders text is testing their code. WebGL context cannot be created in jsdom | Trust xterm.js; test your integration points (theme application, resize handler) |
+| Full Monaco/VS Code editor | "Why not just embed VS Code?" | 50MB+ bundle size, WebGL conflicts with xterm.js, complexity explosion, maintenance burden | Lightweight CodeMirror 6 for basic editing; external editor for heavy work |
+| Real-time collaborative editing | "Google Docs but for code" | Massive complexity (CRDT, networking, presence); conflicts with terminal-first ethos | Not applicable to single-user tool |
+| Git graph visualization | "Show me the branch tree" | Complex canvas rendering, marginal value for daily workflow, VS Code extension exists | Text-based branch name display, defer to external tools |
+| Auto-save | "Save my work automatically" | Dangerous with code; accidental saves break builds; conflicts with git workflow | Unsaved indicator + Cmd+S; explicit save only |
+| Syntax highlighting in diff | "Color the code in diff view" | Requires language detection, TextMate grammars, significant complexity for read-only view | Keep current line-level +/- coloring; add syntax highlighting only for editor tabs |
+| Multi-window support | "I want diffs on second monitor" | Breaks single-window value proposition, state sync complexity | Defer indefinitely per PROJECT.md |
 
 ## Feature Dependencies
 
 ```
-[Vitest infrastructure]
-    |-- requires --> [Tauri invoke mock layer]
-    |                    |-- enables --> [Component render tests]
-    |                    |-- enables --> [State manager tests]
-    |
-    |-- enables --> [Pure function tests] (no deps, can start immediately)
+[File editing in tabs]
+    |--requires--> [Tab bar component] (EXISTS)
+    |--requires--> [File read/write commands] (EXISTS: read_file, write_checkbox pattern)
+    |--requires--> [Monaco or CodeMirror integration] (NEW)
 
-[Dead code removal]
-    |-- should precede --> [Code organization refactor]
-    |                          |-- enables --> [Module boundary docs]
+[Git staging UI]
+    |--requires--> [Git status display] (EXISTS: sidebar git section)
+    |--requires--> [Git file list] (EXISTS: get_git_files command)
+    |--requires--> [Stage command] (NEW: git add via git2)
+    |--requires--> [Unstage command] (NEW: git reset via git2)
 
-[Type safety tightening]
-    |-- independent, parallel with everything]
+[Git commit]
+    |--requires--> [Git staging UI]
+    |--requires--> [Commit command] (NEW: git commit via git2)
 
-[Dependency audit]
-    |-- should precede --> [CI-ready scripts] (clean deps before locking CI)
+[Git push]
+    |--requires--> [Git commit]
+    |--requires--> [Push command] (NEW: git push via git2, requires auth handling)
 
-[Rust unit tests]
-    |-- independent of TS tests, parallel track]
+[Accordion diff panels]
+    |--requires--> [Diff viewer] (EXISTS: diff-viewer.tsx)
+    |--requires--> [Expand/collapse state per file] (NEW)
+
+[GSD sub-tabs]
+    |--requires--> [GSD viewer] (EXISTS: gsd-viewer.tsx)
+    |--requires--> [ROADMAP.md section parser] (NEW)
+    |--requires--> [STATE.md reader] (EXISTS: read_file_content)
+
+[Sidebar 3-tab structure]
+    |--requires--> [Tab bar component] (EXISTS)
+    |--requires--> [File tree component] (EXISTS)
+    |--requires--> [Git control panel] (NEW, depends on Git staging UI)
+
+[File tree drag/drop]
+    |--requires--> [File tree component] (EXISTS)
+    |--requires--> [Move file command] (NEW)
+    |--requires--> [Tauri file drop events] (NEW)
+
+[External editor integration]
+    |--requires--> [tauri-plugin-opener or shell command] (EXISTS: tauri_plugin_opener)
+    |--requires--> [Editor preference setting] (NEW)
 ```
 
 ### Dependency Notes
 
-- **Component render tests require Tauri mock layer:** Every component calls `invoke()`. Without mocks, components throw on import.
-- **Dead code removal before refactoring:** Remove the junk first, then reorganize what remains. Refactoring dead code is wasted effort.
-- **Pure function tests have zero dependencies:** `ansi-html.ts` and `tokens.ts` import nothing from Tauri or DOM. Test immediately.
-- **Rust tests are independent:** `cargo test` runs separately from Vitest. No shared infrastructure needed.
-
-## What To Test vs What Not To Test
-
-### HIGH ROI -- Test These
-
-| Module | Why Test | What To Assert |
-|--------|----------|----------------|
-| `src/server/ansi-html.ts` | Pure function, complex logic, XSS prevention | HTML output for ANSI codes; XSS vectors escaped; 256-color and truecolor conversion; edge cases (empty input, malformed sequences) |
-| `src/server/ansi-html.ts::extractServerUrl()` | Pure regex, critical for server pane | Extracts localhost URLs; returns null for non-URLs; handles port numbers and paths |
-| `src/tokens.ts` | Pure data, design system contract | Token values match expected hex codes; all expected keys exist |
-| `src-tauri/src/state.rs` | Serde round-trip, default values | Serialize then deserialize produces same struct; defaults are sensible; migration from older versions |
-| `src-tauri/src/git_status.rs` | Pure git2 logic | Correct counts for modified/staged/untracked; handles bare repos; handles empty repos |
-| `src-tauri/src/theme/types.rs` | Theme parsing logic | Valid theme.json parses; missing fields get defaults; invalid JSON errors gracefully |
-| `src-tauri/src/theme/iterm2.rs` | iTerm2 plist conversion | Converts iTerm2 color profile to internal theme format |
-| `src/state-manager.ts` | State shape contracts | Type exports match Rust-side AppState; default state is valid; state update functions produce expected shapes |
-
-### LOW ROI -- Skip These
-
-| Module | Why Skip |
-|--------|----------|
-| `src/drag-manager.ts` | 100% DOM event manipulation. Testing requires simulating mousedown/mousemove/mouseup with getBoundingClientRect. Tests would be longer than the code. |
-| `src/terminal/terminal-manager.ts` | Creates xterm.js Terminal instances. Cannot construct Terminal in jsdom (needs canvas/WebGL). |
-| `src/terminal/pty-bridge.ts` | Thin wrapper around `invoke('spawn_terminal')` and `invoke('write_pty')`. Testing the wrapper tests nothing. |
-| `src/terminal/resize-handler.ts` | ResizeObserver + DOM measurement + invoke. All browser APIs. |
-| `src/components/terminal-tabs.tsx` | 700+ lines of complex UI with xterm.js refs, PTY lifecycle, tmux integration. Integration test territory, not unit test. |
-| `src/components/sidebar.tsx` | Heavy DOM, drag handles, project switching via invoke. Would need full Tauri mock + DOM simulation. |
-| `src/main.tsx` | App bootstrap. Tests would just verify "it doesn't crash" which `pnpm build` already does. |
-
-## Consolidation Categories
-
-### Dead Code Removal (Priority: P1)
-
-| Target | What to Look For | Detection Method |
-|--------|-----------------|------------------|
-| Unused exports | Functions/types exported but never imported | TypeScript `--noUnusedLocals` + manual grep for export usage |
-| Arrow.js remnants | Any leftover references to `reactive`, `html` template literals, Arrow.js patterns | Grep for `arrow`, `reactive`, `html\`` |
-| Abandoned feature flags | Conditional code for features that were cut or redesigned | Grep for `TODO`, `FIXME`, `HACK`, commented-out blocks |
-| Unused Rust commands | Tauri commands registered but never invoked from frontend | Cross-reference `generate_handler![]` with `invoke()` calls in TS |
-| Unused CSS classes | Tailwind classes defined in `@layer` but never used | Tailwind purge handles this at build time, but check custom CSS in `@layer` |
-
-### Type Safety Tightening (Priority: P1)
-
-| Action | Impact | Effort |
-|--------|--------|--------|
-| Add explicit return types to all exported functions | Catches drift between intent and implementation | LOW |
-| Replace `any` types with proper interfaces | Prevents silent type errors | LOW-MEDIUM |
-| Enable `strict: true` in tsconfig if not already | Catches null/undefined issues | MEDIUM (may surface many errors) |
-| Add `@ts-expect-error` annotations where `any` is intentional | Documents deliberate type escapes | LOW |
-
-### Code Organization (Priority: P2)
-
-| Refactor | Rationale | Effort |
-|----------|-----------|--------|
-| Extract shared TypeScript types to `src/types/` | Types duplicated between state-manager, components, and bridges | LOW |
-| Consolidate Tauri invoke calls to `src/api/` barrel | Makes mock layer trivial; single point of change if API evolves | MEDIUM |
-| Group test files co-located with source | `ansi-html.test.ts` next to `ansi-html.ts` (already configured in vitest.config.ts) | LOW |
-
-### Dependency Audit (Priority: P2)
-
-| Check | Why | How |
-|-------|-----|-----|
-| Unused npm packages | Sprint installs leave orphaned deps | `pnpm why <pkg>` for each dep; check if actually imported |
-| Version matrix alignment | CLAUDE.md specifies exact versions; drift causes subtle bugs | Compare `package.json` and `Cargo.toml` against CLAUDE.md version matrix |
-| Dev vs prod classification | Some deps may be in wrong section | Verify test/build tools are in `devDependencies` |
+- **File editing requires editor library:** Monaco is heavyweight (VS Code engine), CodeMirror 6 is modular and lightweight. Given Efxmux's terminal-first ethos, CodeMirror 6 with minimalSetup is recommended.
+- **Git staging requires new Rust commands:** The existing `git2` crate supports staging (`index.add_path`), unstaging (`index.remove_path`), and committing. No new dependencies needed.
+- **Git push requires authentication:** git2 does not pick up SSH keys automatically. For HTTPS, credential helpers work. For SSH, may need manual key path configuration. This is the highest-risk feature.
+- **GSD sub-tabs requires markdown parsing:** The existing `marked.js` can extract sections by heading. No new dependencies needed, but parsing logic is non-trivial.
+- **Sidebar restructure conflicts with current layout:** The current sidebar has Projects + Git Changes in one scrollable view. Moving to 3 tabs requires UI redesign but no new dependencies.
 
 ## MVP Definition
 
-### Phase 1: Test Infrastructure + Pure Function Tests
+### Launch With (v0.3.0)
 
-Minimum to claim "we have tests that catch real bugs."
+Minimum viable product for this milestone.
 
-- [ ] Tauri invoke mock layer (`src/test/tauri-mock.ts`) -- enables all component tests
-- [ ] `ansi-html.test.ts` -- XSS prevention, color conversion, edge cases (~15-20 test cases)
-- [ ] `extractServerUrl.test.ts` -- URL extraction regex (~8-10 test cases)
-- [ ] Rust `state.rs` serde round-trip tests (~5-8 test cases)
-- [ ] Rust `git_status.rs` tests with temp repo (~5-8 test cases)
-- [ ] Rust `theme/types.rs` parse tests (~5 test cases)
-- [ ] CI-ready scripts: `pnpm test` + `cargo test` both green
+- [x] **Tab bar for main panel** -- Already exists (terminal-tabs.tsx pattern)
+- [ ] **File editing in tabs** -- CodeMirror 6 with basic syntax highlighting
+- [ ] **Unsaved file indicator** -- Dot or asterisk in tab title
+- [ ] **Save file (Cmd+S)** -- Write file content via Tauri command
+- [ ] **Git staging checkboxes** -- Individual file stage/unstage
+- [ ] **Git commit with message** -- Text area + commit button
+- [ ] **Accordion diff per file** -- Expand/collapse in git changes view
+- [ ] **File tree delete** -- Context menu with confirmation dialog
+- [ ] **Open in external editor** -- Configurable $EDITOR or specific app
+- [ ] **GSD sub-tabs** -- At minimum: Milestones, Phases, Progress from ROADMAP.md
+- [ ] **Sidebar 3-tab structure** -- Projects, File Tree, Git Control
 
-### Phase 2: Consolidation
+### Add After Validation (v0.3.x)
 
-Clean up after the sprint before adding more features.
+Features to add once core is working.
 
-- [ ] Dead code scan and removal
-- [ ] Type safety audit (explicit return types, remove `any`)
-- [ ] Dependency audit (remove unused, verify versions)
-- [ ] Arrow.js remnant cleanup (if any remain)
+- [ ] **Git push** -- Add after commit is stable; requires auth testing
+- [ ] **Drag/drop files in tree** -- Add after delete works reliably
+- [ ] **Finder drag-to-tree** -- macOS-specific, add after internal drag works
+- [ ] **Per-hunk staging** -- Power user feature; add after file-level staging is solid
+- [ ] **Undo last commit** -- Safety feature; add after commit UI is proven
+- [ ] **Sidebar bash sub-TUI tabs** -- Extends existing pattern; add when main features stable
 
-### Phase 3: Extended Tests + Organization (if time permits)
+### Future Consideration (v0.4+)
 
-- [ ] Component render tests for 2-3 key panels (sidebar, right-panel, GSD viewer)
-- [ ] Code organization refactor (types/, api/ barrels)
-- [ ] Module boundary documentation
+Features to defer until this milestone is complete.
 
-### Future Consideration (v0.3+)
-
-- [ ] Rust integration test for PTY spawn lifecycle -- defer because it requires real PTY and is slow
-- [ ] GitHub Actions CI pipeline -- defer until test suite is stable
-- [ ] Pre-commit hook running `vitest run` -- defer until test suite is fast enough (<5s)
+- [ ] **AI commit message generation** -- Requires LLM integration beyond current agent spawn
+- [ ] **Interleaved staged/unstaged diff** -- Complex UI; Zed took months to build this
+- [ ] **Git stash support** -- Nice to have, not critical path
+- [ ] **Branch switching UI** -- Current workflow is terminal-based; defer UI
 
 ## Feature Prioritization Matrix
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| Pure function tests (ansi-html, tokens) | HIGH | LOW | P1 |
-| Tauri invoke mock layer | HIGH | MEDIUM | P1 |
-| State serde round-trip (Rust) | HIGH | LOW | P1 |
-| Dead code removal | HIGH | LOW | P1 |
-| Type safety tightening | MEDIUM | LOW | P1 |
-| CI-ready test scripts | MEDIUM | LOW | P1 |
-| Git status tests (Rust) | MEDIUM | MEDIUM | P1 |
-| Dependency audit | MEDIUM | LOW | P2 |
-| Component render tests | MEDIUM | MEDIUM | P2 |
-| Code organization refactor | MEDIUM | MEDIUM | P2 |
-| Theme parse tests (Rust) | LOW | LOW | P2 |
-| iTerm2 import tests (Rust) | LOW | LOW | P2 |
-| PTY integration test (Rust) | MEDIUM | HIGH | P3 |
-| Module boundary docs | LOW | LOW | P3 |
+| File editing in tabs | HIGH | HIGH | P1 |
+| Git staging checkboxes | HIGH | MEDIUM | P1 |
+| Git commit | HIGH | LOW | P1 |
+| Accordion diff | MEDIUM | MEDIUM | P1 |
+| File tree delete | HIGH | LOW | P1 |
+| GSD sub-tabs | MEDIUM | MEDIUM | P1 |
+| Sidebar 3-tabs | MEDIUM | MEDIUM | P1 |
+| Open in external editor | HIGH | LOW | P1 |
+| Tab reordering | MEDIUM | MEDIUM | P2 |
+| Git push | HIGH | HIGH | P2 |
+| Drag/drop in tree | MEDIUM | HIGH | P2 |
+| Finder drag-to-tree | LOW | HIGH | P3 |
+| Per-hunk staging | MEDIUM | HIGH | P3 |
+| Undo commit | LOW | LOW | P3 |
+| Sidebar bash tabs | MEDIUM | MEDIUM | P3 |
 
 **Priority key:**
-- P1: Must have -- this is why the milestone exists
-- P2: Should have -- improves quality but milestone succeeds without it
-- P3: Nice to have -- defer if time pressure
+- P1: Must have for v0.3.0 launch
+- P2: Should have, add in v0.3.x patches
+- P3: Nice to have, consider for v0.4.0
 
-## Testability Assessment by Module
+## Competitor Feature Analysis
 
-### TypeScript Side
+| Feature | VS Code | Zed | Warp Terminal | Efxmux Approach |
+|---------|---------|-----|---------------|-----------------|
+| File editing | Full Monaco with extensions | Custom GPU-rendered editor | None (terminal only) | CodeMirror 6 basic editing; external editor for complex work |
+| Git staging | Checkbox per file, line-level staging | Interleaved diff-of-diffs, per-hunk | View-only diff panel (feature request open) | Checkbox per file (v0.3.0), per-hunk later |
+| Git commit | Inline message box, AI assist optional | Inline + AI generation, Uncommit button | Via terminal commands | Inline message box, defer AI to v0.4 |
+| Git push | Sync button, branch protection | Push/Pull/Fetch buttons, remote selector | Via terminal commands | Button in git panel (v0.3.x) |
+| Diff collapse | Expand All / Collapse All buttons | File-level collapse, auto-collapse generated | N/A | Per-file accordion with chevrons |
+| File tree delete | Right-click > Delete, keyboard shortcut | Right-click > Move to Trash | N/A | Right-click + Delete key, confirmation modal |
+| Open external | Right-click > Reveal in Finder / Open With | Cmd+Shift+O opens in configured editor | N/A | Menu item + keyboard shortcut |
+| Drag/drop | Full support (files, folders, between windows) | Full support | N/A | Internal tree drag (v0.3.x), Finder drop (v0.4) |
 
-| Module | Lines | Testability | Reason |
-|--------|-------|-------------|--------|
-| `server/ansi-html.ts` | 148 | EXCELLENT | Pure functions, zero deps |
-| `tokens.ts` | 60 | EXCELLENT | Pure data export |
-| `state-manager.ts` | 230 | GOOD | Needs invoke mock, but logic is extractable |
-| `theme/theme-manager.ts` | 250 | POOR | Heavy Tauri + DOM coupling |
-| `drag-manager.ts` | 180 | POOR | Pure DOM events |
-| `terminal/terminal-manager.ts` | 100 | UNTESTABLE | Requires xterm.js + WebGL |
-| `terminal/pty-bridge.ts` | 55 | TRIVIAL | Thin invoke wrapper, nothing to test |
-| `terminal/resize-handler.ts` | 40 | POOR | ResizeObserver + DOM |
-| `server/server-bridge.ts` | 70 | TRIVIAL | Thin invoke wrapper |
-| `components/*.tsx` | ~3500 | MIXED | Some mountable with mocks, most too DOM-heavy |
+## Implementation Notes
 
-### Rust Side
+### CodeMirror 6 vs Monaco
 
-| Module | Lines | Testability | Reason |
-|--------|-------|-------------|--------|
-| `state.rs` | 280 | GOOD | Serde logic testable without Tauri runtime |
-| `git_status.rs` | 90 | GOOD | Testable with temp git repos via `git2` |
-| `theme/types.rs` | 287 | GOOD | Parsing logic is pure |
-| `theme/iterm2.rs` | 131 | GOOD | Plist conversion is pure |
-| `file_ops.rs` | 220 | MEDIUM | File I/O testable with temp dirs |
-| `project.rs` | 90 | MEDIUM | State mutation, needs managed state mock |
-| `server.rs` | 260 | POOR | Process spawning, Tauri app handle deps |
-| `terminal/pty.rs` | ~400 | POOR | PTY + Tauri managed state + threads |
-| `lib.rs` | 178 | UNTESTABLE | App bootstrap, not unit-testable |
+**Recommendation: CodeMirror 6**
+
+| Criterion | Monaco | CodeMirror 6 |
+|-----------|--------|--------------|
+| Bundle size | ~2MB minified | ~150KB with basic setup |
+| WebGL conflicts | Uses canvas, may conflict with xterm.js WebGL | DOM-based, no conflicts |
+| Language support | Full VS Code grammar support | Good support, simpler setup |
+| Extensibility | Extension ecosystem (heavy) | Plugin system (lightweight) |
+| Tauri integration | Works but resource-heavy | Proven lightweight in Tauri apps |
+
+CodeMirror 6 packages needed:
+- `@codemirror/state`
+- `@codemirror/view`
+- `@codemirror/commands`
+- `@codemirror/language`
+- `@codemirror/lang-javascript` (and other lang packages as needed)
+
+### Git Operations via git2
+
+Existing `git2` crate in Cargo.toml supports all needed operations:
+
+```rust
+// Stage file
+let mut index = repo.index()?;
+index.add_path(Path::new("file.txt"))?;
+index.write()?;
+
+// Unstage file
+index.remove_path(Path::new("file.txt"))?;
+index.write()?;
+
+// Commit
+let tree_id = index.write_tree()?;
+let tree = repo.find_tree(tree_id)?;
+let sig = repo.signature()?;
+let parent = repo.head()?.peel_to_commit()?;
+repo.commit(Some("HEAD"), &sig, &sig, "message", &tree, &[&parent])?;
+```
+
+### Accordion Diff Pattern
+
+Based on GitLab and VS Code patterns:
+- Default state: All files collapsed (show file header only)
+- Click header or chevron to expand/collapse
+- "Expand All" / "Collapse All" buttons in toolbar
+- Persist collapse state during session (not across restarts)
+
+### GSD Sub-Tabs Section Parsing
+
+ROADMAP.md has predictable structure:
+```markdown
+## Milestones
+...
+## Phases
+...
+## Progress
+...
+```
+
+Parse by splitting on `## ` headers, extract section content by name.
 
 ## Sources
 
-- Vitest documentation: https://vitest.dev/guide/
-- Preact testing patterns: https://preactjs.com/guide/v10/unit-testing-with-enzyme
-- Tauri v2 testing: community convention is to mock `invoke()` at module level via `vi.mock('@tauri-apps/api/core')`
-- Rust testing: https://doc.rust-lang.org/book/ch11-00-testing.html
-- xterm.js jsdom limitation: canvas/WebGL context not available (known constraint)
-- Existing codebase analysis: 14 Rust files, 22 TypeScript files, ~9,500 LOC total
+- [VS Code Source Control Documentation](https://code.visualstudio.com/docs/sourcecontrol/overview)
+- [VS Code Staging and Committing](https://code.visualstudio.com/docs/sourcecontrol/staging-commits)
+- [Zed Git Documentation](https://zed.dev/docs/git)
+- [Zed Native Git Support Blog](https://zed.dev/blog/git)
+- [Zed Git Panel Architecture](https://deepwiki.com/zed-industries/zed/6.1-git-panel-and-ui)
+- [GitLab Collapse/Expand Diffs Issue](https://gitlab.com/gitlab-org/gitlab/-/issues/361278)
+- [GitLab Rapid Diffs Architecture](https://docs.gitlab.com/development/fe_guide/rapid_diffs/)
+- [Warp Terminal Git Feature Request](https://github.com/warpdotdev/Warp/issues/8542)
+- [Monaco Editor GitHub](https://github.com/microsoft/monaco-editor)
+- [CodeMirror 6 Homepage](https://codemirror.net/)
+- [SideX - VS Code rebuilt on Tauri](https://github.com/Sidenai/sidex)
+- [Montauri Editor - Monaco + Tauri](https://github.com/TimSusa/montauri-editor)
+- [JetBrains Rider Editor Tabs](https://www.jetbrains.com/help/rider/Managing_Editor_Tabs.html)
+- [W3C WAI-ARIA Tabs Pattern](https://www.w3.org/WAI/ARIA/apg/patterns/tabs/)
+- [NN/g Drag and Drop UX](https://www.nngroup.com/articles/drag-drop/)
+- [Smart Interface Design Patterns - Drag and Drop](https://smart-interface-design-patterns.com/articles/drag-and-drop-ux/)
+- [GitHub Desktop Staging](https://simpledev.io/lesson/stage-files-gh-desktop-1/)
+- [GitKraken Staging](https://help.gitkraken.com/gitkraken-desktop/staging/)
 
 ---
-*Feature research for: Testing and consolidation of Efxmux v0.2.0*
-*Researched: 2026-04-12*
+*Feature research for: Efxmux v0.3.0 Workspace Evolution*
+*Researched: 2026-04-14*
