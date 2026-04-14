@@ -40,7 +40,7 @@
 **Milestone Goal:** Transform Efxmux from terminal-focused MVP to full-featured development workspace with file editing, git control, and enhanced navigation.
 
 - [x] **Phase 15: Foundation Primitives** (2 plans) -- Shared UI components and Rust write commands (completed 2026-04-14)
-- [ ] **Phase 16: Sidebar Evolution + Git Control** -- 3-tab sidebar with git staging/commit/push
+- [ ] **Phase 16: Sidebar Evolution + Git Control** (3 plans) -- 3-tab sidebar with git staging/commit/push
 - [ ] **Phase 17: Main Panel File Tabs** -- CodeMirror editor tabs with dropdown menu
 - [ ] **Phase 18: File Tree Enhancements** -- Delete, drag/drop, external editor integration
 - [ ] **Phase 19: GSD Sub-Tabs** -- 5 sub-tabs for Milestones, Phases, Progress, History, State
@@ -66,14 +66,17 @@
 ### Phase 16: Sidebar Evolution + Git Control
 **Goal**: Users can stage, commit, and push changes from a dedicated git control pane in the sidebar
 **Depends on**: Phase 15
-**Requirements**: SIDE-01, GIT-01, GIT-02, GIT-03, GIT-04, GIT-05
+**Requirements**: SIDE-01, GIT-01, GIT-02, GIT-03, GIT-04 (GIT-05 deferred)
 **Success Criteria** (what must be TRUE):
   1. User can switch between 3 sidebar tabs: Projects, File Tree, Git Control
   2. User can stage individual files via checkboxes in git control pane
   3. User can unstage individual files via checkboxes
   4. User can commit staged changes with message input
   5. User can push commits to remote repository
-**Plans**: TBD
+**Plans**: 3 plans
+  - [ ] 16-01-PLAN.md -- Backend get_unpushed_count and service layer + test stubs
+  - [ ] 16-02-PLAN.md -- Sidebar tab system and Toast notification component
+  - [ ] 16-03-PLAN.md -- GitControlTab with staging/commit/push workflow
 **UI hint**: yes
 
 ### Phase 17: Main Panel File Tabs
@@ -163,7 +166,7 @@ Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21
 | 13. Rust Tests | v0.2.0 | 2/2 | Complete | 2026-04-12 |
 | 14. Consolidation | v0.2.0 | 2/2 | Complete | 2026-04-12 |
 | 15. Foundation Primitives | v0.3.0 | 2/2 | Complete    | 2026-04-14 |
-| 16. Sidebar Evolution + Git Control | v0.3.0 | 0/? | Not started | - |
+| 16. Sidebar Evolution + Git Control | v0.3.0 | 0/3 | Planned | - |
 | 17. Main Panel File Tabs | v0.3.0 | 0/? | Not started | - |
 | 18. File Tree Enhancements | v0.3.0 | 0/? | Not started | - |
 | 19. GSD Sub-Tabs | v0.3.0 | 0/? | Not started | - |
@@ -172,4 +175,4 @@ Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21
 
 ---
 *Roadmap created: 2026-04-06*
-*Last updated: 2026-04-14 (v0.3.0 phases added)*
+*Last updated: 2026-04-15 (Phase 16 plans created)*
