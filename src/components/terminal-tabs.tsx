@@ -695,7 +695,7 @@ export function TerminalTabBar() {
 
   return (
     <div
-      class="flex gap-1 px-3 shrink-0 items-center h-[48px]"
+      class="flex gap-0.5 px-2 shrink-0 items-center h-[34px]"
       role="tablist"
       style={{ backgroundColor: colors.bgBase, borderBottom: `1px solid ${colors.bgBorder}` }}
     >
@@ -707,8 +707,8 @@ export function TerminalTabBar() {
             role="tab"
             aria-selected={isActive}
             class={isActive
-              ? 'flex items-center gap-2 px-4 py-3 border-b-2 border-accent text-sm font-medium font-sans cursor-pointer bg-transparent transition-all duration-150'
-              : 'flex items-center gap-2 px-4 py-3 text-sm font-sans cursor-pointer bg-transparent transition-all duration-150'}
+              ? 'flex items-center gap-1.5 px-3 py-2 border-b-2 border-accent text-xs font-medium font-sans cursor-pointer bg-transparent transition-all duration-150'
+              : 'flex items-center gap-1 px-3 py-2 text-xs font-sans cursor-pointer bg-transparent transition-all duration-150'}
             style={{ color: isActive ? colors.textPrimary : colors.textDim }}
             onClick={() => {
               activeTabId.value = tab.id;
@@ -716,25 +716,25 @@ export function TerminalTabBar() {
             }}
             title={tab.sessionName}
           >
-            {isActive && <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: colors.statusGreen, flexShrink: 0 }} />}
+            {isActive && <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: colors.statusGreen, flexShrink: 0 }} />}
             <span>{tab.label}</span>
-            <button
-              class="ml-2 flex items-center justify-center rounded transition-colors duration-150"
-              style={{ width: 22, height: 22, fontSize: 16, lineHeight: 1, color: colors.textDim, backgroundColor: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0 }}
+            <span
+              class="ml-1 text-[10px]"
+              style={{ color: colors.textDim }}
               onClick={(e) => {
                 e.stopPropagation();
                 closeTab(tab.id);
               }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textPrimary; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textDim; }}
+              onMouseEnter={(e) => { (e.target as HTMLElement).style.color = colors.textPrimary; }}
+              onMouseLeave={(e) => { (e.target as HTMLElement).style.color = colors.textDim; }}
               title="Close tab"
-            >{'\u00D7'}</button>
+            >{'\u00D7'}</span>
           </button>
         );
       })}
       {/* New tab button */}
       <button
-        class="w-8 h-8 rounded flex items-center justify-center text-lg cursor-pointer"
+        class="w-6 h-6 rounded flex items-center justify-center text-sm cursor-pointer"
         style={{ color: colors.textDim, fontFamily: fonts.sans }}
         onMouseEnter={(e) => { const t = e.target as HTMLElement; t.style.color = colors.textPrimary; t.style.backgroundColor = colors.bgElevated; }}
         onMouseLeave={(e) => { const t = e.target as HTMLElement; t.style.color = colors.textDim; t.style.backgroundColor = 'transparent'; }}
