@@ -1,9 +1,9 @@
 ---
 gsd_state_version: 1.0
 milestone: v0.3.0
-milestone_name: TBD
-status: planning
-stopped_at: v0.2.2 patch release (shipped 2026-04-14)
+milestone_name: Workspace Evolution
+status: defining_requirements
+stopped_at: null
 last_updated: "2026-04-14"
 last_activity: 2026-04-14
 progress:
@@ -18,19 +18,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-12 after v0.2.0 milestone)
+See: .planning/PROJECT.md (updated 2026-04-14 after v0.3.0 milestone start)
 
 **Core value:** A single native macOS window that co-locates AI agent terminals alongside live GSD progress, git diff, and file tree -- all persisted across restarts via tmux.
-**Current focus:** Planning v0.3.0
+**Current focus:** v0.3.0 Workspace Evolution
 
 ## Current Position
 
-Milestone: v0.2.2 patch release shipped (2026-04-14)
-- Enhanced: File preview bar UX (56px height, proper button styling)
-- Enhanced: Terminal tabs match right panel TabBar style (pill buttons)
-- Added: Shift+Enter newline injection via tmux send-keys -l
-
-Next: `/gsd-new-milestone` to define v0.3.0 scope
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-14 — Milestone v0.3.0 started
 
 ## Performance Metrics
 

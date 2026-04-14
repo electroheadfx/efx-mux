@@ -45,11 +45,17 @@ Laurent (the developer) and other developers who use Claude Code / OpenCode as t
 
 ### Active
 
-#### Current Milestone: v0.3.0 Planning
+#### Current Milestone: v0.3.0 Workspace Evolution
 
-**Goal:** Define next milestone scope based on shipped v0.2.0 test infrastructure and consolidation.
+**Goal:** Transform Efxmux from terminal-focused MVP to full-featured development workspace with file editing, git control, and enhanced navigation.
 
-**Target features:** TBD -- start with `/gsd-new-milestone`
+**Target features:**
+- Filetree: delete, preview/open, edit in tab, external editor, drag/drop
+- Bug fixes: file watcher, newline injection, phantom chars, scroll, TUI padding/alignment
+- Main panel: dropdown to add Terminal/Agent/Git changes tabs, accordion diffs
+- GSD viewer: 5 sub-tabs (Milestones, Phases, Progress, History, State)
+- Left sidebar: 3 tabs (Projects, File tree, Git control with stage/commit/push)
+- Sidebar bash: plus menu for new Terminal/Agent sub-TUI
 
 ### Out of Scope
 
