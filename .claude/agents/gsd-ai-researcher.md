@@ -51,7 +51,7 @@ Read `/Users/lmarques/Dev/efx-mux/.claude/get-shit-done/references/ai-frameworks
 - `phase_context`: phase name and goal
 - `context_path`: path to CONTEXT.md if it exists
 
-**If prompt contains `<files_to_read>`, read every listed file before doing anything else.**
+**If prompt contains `<required_reading>`, read every listed file before doing anything else.**
 </input>
 
 <documentation_sources>

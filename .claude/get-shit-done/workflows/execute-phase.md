@@ -57,6 +57,8 @@ Parse `$ARGUMENTS` before loading any context:
 - First positional token → `PHASE_ARG`
 - Optional `--wave N` → `WAVE_FILTER`
 - Optional `--gaps-only` keeps its current meaning
+- Optional `--cross-ai` → `CROSS_AI_FORCE=true` (force all plans through cross-AI execution)
+- Optional `--no-cross-ai` → `CROSS_AI_DISABLED=true` (disable cross-AI for this run, overrides config and frontmatter)
 
 If `--wave` is absent, preserve the current behavior of executing all incomplete waves in the phase.
 </step>
@@ -80,6 +82,15 @@ Read worktree config:
 USE_WORKTREES=$(node "/Users/lmarques/Dev/efx-mux/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.use_worktrees 2>/dev/null || echo "true")
 ```
 
+If the project uses git submodules, worktree isolation is skipped regardless of the `workflow.use_worktrees` config — the executor commit protocol cannot correctly handle submodule commits inside isolated worktrees. Sequential execution handles submodules transparently.
+
+```bash
+if [ -f .gitmodules ]; then
+  echo "[worktree] Submodule project detected (.gitmodules exists) — falling back to sequential execution"
+  USE_WORKTREES=false
+fi
+```
+
 When `USE_WORKTREES` is `false`, all executor agents run without `isolation="worktree"` — they execute sequentially on the main working tree instead of in parallel worktrees.
 
 Read context window size for adaptive prompt enrichment:
@@ -92,6 +103,12 @@ When `CONTEXT_WINDOW >= 500000` (1M-class models), subagent prompts include rich
 - Executor agents receive prior wave SUMMARY.md files and the phase CONTEXT.md/RESEARCH.md
 - Verifier agents receive all PLAN.md, SUMMARY.md, CONTEXT.md files plus REQUIREMENTS.md
 - This enables cross-phase awareness and history-aware verification
+
+When `CONTEXT_WINDOW < 200000` (sub-200K models), subagent prompts are thinned to reduce static overhead:
+- Executor agents omit extended deviation rule examples and checkpoint examples from inline prompt — load on-demand via @/Users/lmarques/Dev/efx-mux/.claude/get-shit-done/references/executor-examples.md
+- Planner agents omit extended anti-pattern lists and specificity examples from inline prompt — load on-demand via @/Users/lmarques/Dev/efx-mux/.claude/get-shit-done/references/planner-antipatterns.md
+- Core rules and decision logic remain inline; only verbose examples and edge-case lists are extracted
+- This reduces executor static overhead by ~40% while preserving behavioral correctness
 
 **If `phase_found` is false:** Error — phase directory not found.
 **If `plan_count` is 0:** Error — no plans found in phase.
@@ -241,6 +258,77 @@ Report:
 | 1 | 01-01, 01-02 | {from plan objectives, 3-8 words} |
 | 2 | 01-03 | ... |
 ```
+</step>
+
+<step name="cross_ai_delegation">
+**Optional step 2.5 — Delegate plans to an external AI runtime.**
+
+This step runs after plan discovery and before normal wave execution. It identifies plans
+that should be delegated to an external AI command and executes them via stdin-based prompt
+delivery. Plans handled here are removed from the execute_waves plan list so the normal
+executor skips them.
+
+**Activation logic:**
+
+1. If `CROSS_AI_DISABLED` is true (`--no-cross-ai` flag): skip this step entirely.
+2. If `CROSS_AI_FORCE` is true (`--cross-ai` flag): mark ALL incomplete plans for cross-AI execution.
+3. Otherwise: check each plan's frontmatter for `cross_ai: true` AND verify config
+   `workflow.cross_ai_execution` is `true`. Plans matching both conditions are marked for cross-AI.
+
+```bash
+CROSS_AI_ENABLED=$(node "/Users/lmarques/Dev/efx-mux/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.cross_ai_execution --default false 2>/dev/null)
+CROSS_AI_CMD=$(node "/Users/lmarques/Dev/efx-mux/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.cross_ai_command --default "" 2>/dev/null)
+CROSS_AI_TIMEOUT=$(node "/Users/lmarques/Dev/efx-mux/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.cross_ai_timeout --default 300 2>/dev/null)
+```
+
+**If no plans are marked for cross-AI:** Skip to execute_waves.
+
+**If plans are marked but `cross_ai_command` is empty:** Error — tell user to set
+`workflow.cross_ai_command` via `gsd-tools.cjs config-set workflow.cross_ai_command "<command>"`.
+
+**For each cross-AI plan (sequentially):**
+
+1. **Construct the task prompt** from the plan file:
+   - Extract `<objective>` and `<tasks>` sections from the PLAN.md
+   - Append PROJECT.md context (project name, description, tech stack)
+   - Format as a self-contained execution prompt
+
+2. **Check for dirty working tree before execution:**
+   ```bash
+   if ! git diff --quiet HEAD 2>/dev/null; then
+     echo "WARNING: dirty working tree detected — the external AI command may produce uncommitted changes that conflict with existing modifications"
+   fi
+   ```
+
+3. **Run the external command** from the project root, writing the prompt to stdin.
+   Never shell-interpolate the prompt — always pipe via stdin to prevent injection:
+   ```bash
+   echo "$TASK_PROMPT" | timeout "${CROSS_AI_TIMEOUT}s" ${CROSS_AI_CMD} > "$CANDIDATE_SUMMARY" 2>"$ERROR_LOG"
+   EXIT_CODE=$?
+   ```
+
+4. **Evaluate the result:**
+
+   **Success (exit 0 + valid summary):**
+   - Read `$CANDIDATE_SUMMARY` and validate it contains meaningful content
+     (not empty, has at least a heading and description — a valid SUMMARY.md structure)
+   - Write it as the plan's SUMMARY.md file
+   - Update STATE.md plan status to complete
+   - Update ROADMAP.md progress
+   - Mark plan as handled — skip it in execute_waves
+
+   **Failure (non-zero exit or invalid summary):**
+   - Display the error output and exit code
+   - Warn: "The external command may have left uncommitted changes or partial edits
+     in the working tree. Review `git status` and `git diff` before proceeding."
+   - Offer three choices:
+     - **retry** — run the same plan through cross-AI again
+     - **skip** — fall back to normal executor for this plan (re-add to execute_waves list)
+     - **abort** — stop execution entirely, preserve state for resume
+
+5. **After all cross-AI plans processed:** Remove successfully handled plans from the
+   incomplete plan list so execute_waves skips them. Any skipped-to-fallback plans remain
+   in the list for normal executor processing.
 </step>
 
 <step name="execute_waves">
@@ -395,6 +483,7 @@ Execute each selected wave in sequence. Within a wave: parallel if `PARALLELIZAT
        @/Users/lmarques/Dev/efx-mux/.claude/get-shit-done/templates/summary.md
        @/Users/lmarques/Dev/efx-mux/.claude/get-shit-done/references/checkpoints.md
        @/Users/lmarques/Dev/efx-mux/.claude/get-shit-done/references/tdd.md
+       ${CONTEXT_WINDOW < 200000 ? '' : '@/Users/lmarques/Dev/efx-mux/.claude/get-shit-done/references/executor-examples.md'}
        </execution_context>
 
        <files_to_read>
@@ -510,8 +599,8 @@ Execute each selected wave in sequence. Within a wave: parallel if `PARALLELIZAT
        # and ROADMAP.md are stale. Main always wins for these files.
        STATE_BACKUP=$(mktemp)
        ROADMAP_BACKUP=$(mktemp)
-       git show HEAD:.planning/STATE.md > "$STATE_BACKUP" 2>/dev/null || true
-       git show HEAD:.planning/ROADMAP.md > "$ROADMAP_BACKUP" 2>/dev/null || true
+       [ -f .planning/STATE.md ] && cp .planning/STATE.md "$STATE_BACKUP" || true
+       [ -f .planning/ROADMAP.md ] && cp .planning/ROADMAP.md "$ROADMAP_BACKUP" || true
 
        # Snapshot list of files on main BEFORE merge to detect resurrections
        PRE_MERGE_FILES=$(git ls-files .planning/)
@@ -837,6 +926,50 @@ If `SECURITY_CFG` is `true` AND SECURITY.md exists: check frontmatter `threats_o
 ⚠ Security gate: {threats_open} threats open
   /gsd-secure-phase {PHASE} — resolve before advancing
 ```
+</step>
+
+<step name="tdd_review_checkpoint">
+**Optional step — TDD collaborative review.**
+
+```bash
+TDD_MODE=$(node "/Users/lmarques/Dev/efx-mux/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.tdd_mode --default false 2>/dev/null)
+```
+
+**Skip if `TDD_MODE` is `false`.**
+
+When `TDD_MODE` is `true`, check whether any completed plans in this phase have `type: tdd` in their frontmatter:
+
+```bash
+TDD_PLANS=$(grep -rl "^type: tdd" "${PHASE_DIR}"/*-PLAN.md 2>/dev/null | wc -l | tr -d ' ')
+```
+
+**If `TDD_PLANS` > 0:** Insert end-of-phase collaborative review checkpoint.
+
+1. Collect all SUMMARY.md files for TDD plans
+2. For each TDD plan summary, verify the RED/GREEN/REFACTOR gate sequence:
+   - RED gate: A failing test commit exists (`test(...)` commit with MUST-fail evidence)
+   - GREEN gate: An implementation commit exists (`feat(...)` commit making tests pass)
+   - REFACTOR gate: Optional cleanup commit (`refactor(...)` commit, tests still pass)
+3. If any TDD plan is missing the RED or GREEN gate commits, flag it:
+   ```
+   ⚠ TDD gate violation: Plan {plan_id} missing {RED|GREEN} phase commit.
+     Expected commit pattern: test({phase}-{plan}): ... → feat({phase}-{plan}): ...
+   ```
+4. Present collaborative review summary:
+   ```
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    TDD REVIEW — Phase {X}
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+   TDD Plans: {TDD_PLANS} | Gate violations: {count}
+
+   | Plan | RED | GREEN | REFACTOR | Status |
+   |------|-----|-------|----------|--------|
+   | {id} |  ✓  |   ✓   |    ✓     | Pass   |
+   | {id} |  ✓  |   ✗   |    —     | FAIL   |
+   ```
+
+**Gate violations are advisory** — they do not block execution but are surfaced to the user for review. The verifier agent (step `verify_phase_goal`) will also check TDD discipline as part of its quality assessment.
 </step>
 
 <step name="handle_partial_wave_execution">
