@@ -242,7 +242,7 @@ export function MainPanel() {
 
       {fileViewerVisible.value && (
         <div class="absolute inset-0 flex flex-col" style={{ backgroundColor: colors.bgBase, zIndex: 10 }}>
-          <div class="flex items-center justify-between px-5 py-4 shrink-0" style={{ backgroundColor: colors.bgElevated, borderBottom: `1px solid ${colors.bgBorder}` }}>
+          <div class="flex items-center justify-between px-6 shrink-0" style={{ backgroundColor: colors.bgElevated, borderBottom: `1px solid ${colors.bgBorder}`, height: 56 }}>
             <div class="flex items-center gap-4 min-w-0">
               <span class="text-[12px] px-3 py-1.5 rounded font-semibold tracking-wider shrink-0" style={{ backgroundColor: colors.accent, color: colors.bgBase }}>READ-ONLY</span>
               <span class="text-[14px] font-mono overflow-hidden text-ellipsis whitespace-nowrap" style={{ fontFamily: 'GeistMono', color: colors.textSecondary }}>{fileName.value}</span>
