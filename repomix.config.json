@@ -11,8 +11,6 @@
       "coverage/**",
       ".planning/**",
       ".claude/**",
-      ".qoder/**",
-      ".code-review-graph/**",
       "RESEARCH/**",
       ".vscode/**",
       ".github/**",
@@ -21,7 +19,9 @@
       "**/*.ico",
       "**/*.png",
       "pnpm-lock.yaml",
-      "package-lock.json"
+      "package-lock.json",
+      "**/*.test.ts",
+      "**/*.test.tsx"
     ]
   }
 }

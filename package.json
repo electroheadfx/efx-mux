@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "repomix": "npx repomix@latest --config repomix.config.json"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.5",
