@@ -66,35 +66,62 @@ pub async fn spawn_terminal(
         return Err("Invalid session name: must contain at least one alphanumeric character".to_string());
     }
 
-    // If the tmux session already exists (e.g., switching back to a project),
-    // clear its screen and scrollback history BEFORE re-attaching a new PTY client.
-    // This prevents tmux from dumping stale screen content to the new client,
-    // which xterm.js would render as extra blank lines (the original newlines bug).
+    // If the tmux session already exists, behaviour differs by tab type:
+    //
+    // AGENT TABS (shell_command is Some, e.g. "claude"):
+    //   Kill the existing session so that `tmux new-session` below creates a FRESH one
+    //   and runs the inline-export shell wrapper:
+    //     export CLAUDE_CODE_NO_FLICKER=1 ...; claude; exec zsh
+    //   Without killing first, `tmux new-session -A` merely RE-ATTACHES to the running
+    //   session and the initial-command argument is silently ignored by tmux. The already-
+    //   running claude process retains whatever environment it had when first launched,
+    //   which may not include CLAUDE_CODE_NO_FLICKER=1 (e.g. sessions started before this
+    //   fix was deployed). Only a fresh session guarantees the env var reaches claude.
+    //
+    // PLAIN SHELL TABS (shell_command is None):
+    //   Re-attach to the existing session (preserve user shell state). Clear scrollback
+    //   history to prevent stale content from being dumped to the new PTY client.
     let session_exists = std::process::Command::new("tmux")
         .args(["has-session", "-t", &sanitized])
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
     if session_exists {
-        // Clear the visible pane content (like Ctrl+L) -- ignore errors if terminal
-        // is in a state that doesn't support it (e.g., no scrollback or tmux version mismatch)
-        let _ = std::process::Command::new("tmux")
-            .args(["send-keys", "-t", &sanitized, "C-l"])
-            .output();
-        // Clear the scrollback history buffer -- capture stderr to prevent tmux error
-        // "terminal does not support clear" from leaking into PTY output stream
-        let _ = std::process::Command::new("tmux")
-            .args(["clear-history", "-t", &sanitized])
-            .output()
-            .and_then(|o| {
-                if !o.status.success() {
-                    let stderr = String::from_utf8_lossy(&o.stderr);
-                    if !stderr.is_empty() {
-                        eprintln!("[efxmux] clear-history warning: {}", stderr.trim());
+        if shell_command.as_deref().map(|s| !s.is_empty()).unwrap_or(false) {
+            // Agent tab: kill the old session so the new-session command below creates
+            // a fresh one with the correct environment (CLAUDE_CODE_NO_FLICKER=1 etc.)
+            // baked into the inline-export shell wrapper. Ignoring the kill error is safe
+            // -- if the session is already gone we still proceed to create a new one.
+            let _ = std::process::Command::new("tmux")
+                .args(["kill-session", "-t", &sanitized])
+                .output();
+        } else {
+            // Plain shell tab: re-attach to the existing session.
+            // Clear the scrollback history buffer ONLY -- do NOT send Ctrl+L.
+            //
+            // Sending `send-keys C-l` to an existing session fires a Ctrl+L keystroke
+            // into whatever process is currently running (e.g., Claude Code's Ink TUI)
+            // BEFORE the new PTY client attaches and establishes its window dimensions.
+            // Ink interprets Ctrl+L as a clear-screen + full redraw. At that moment tmux
+            // still has the stale dimensions from the previously detached client, so Ink
+            // measures the wrong window size, its alternate-screen entry fails, and it
+            // falls back to the "tmux detected · scroll with PgUp/PgDn" inline mode.
+            //
+            // clear-history alone is sufficient to prevent stale scrollback from being
+            // dumped to the new client on attach.
+            let _ = std::process::Command::new("tmux")
+                .args(["clear-history", "-t", &sanitized])
+                .output()
+                .and_then(|o| {
+                    if !o.status.success() {
+                        let stderr = String::from_utf8_lossy(&o.stderr);
+                        if !stderr.is_empty() {
+                            eprintln!("[efxmux] clear-history warning: {}", stderr.trim());
+                        }
                     }
-                }
-                Ok(o)
-            });
+                    Ok(o)
+                });
+        }
     }
 
     let pty_system = native_pty_system();
@@ -111,6 +138,17 @@ pub async fn spawn_terminal(
     cmd.env("TERM", "xterm-256color");
     cmd.env("LANG", "en_US.UTF-8");
     cmd.env("LC_ALL", "en_US.UTF-8");
+    // Inject Claude Code env vars directly into the PTY process environment.
+    // macOS .app bundles launched by launchd receive a minimal environment —
+    // user shell profile scripts (e.g. ~/.zshrc, custom wrapper scripts) are
+    // NOT sourced. Any env vars the agent binary needs must be set explicitly here.
+    //
+    // CLAUDE_CODE_NO_FLICKER=1 suppresses the "tmux detected" fallback mode:
+    // without it, Claude Code detects tmux and renders inline (non-fullscreen)
+    // instead of using the alternate screen buffer (fullscreen TUI).
+    cmd.env("CLAUDE_CODE_NO_FLICKER", "1");
+    cmd.env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1");
+    cmd.env("ENABLE_LSP_TOOL", "1");
     cmd.args(["new-session", "-A", "-s", &sanitized]);
     // Set tmux session start directory if provided (workspace-aware sessions)
     if let Some(ref dir) = start_dir {
@@ -118,13 +156,26 @@ pub async fn spawn_terminal(
             cmd.args(["-c", dir]);
         }
     }
-    // If shell_command is provided (e.g., agent binary), wrap it so the user's shell
-    // survives after the agent exits (Ctrl+C, /exit, etc.) — user lands in their
-    // default shell instead of the tmux session dying (AGENT-03/04)
+    // If shell_command is provided (e.g., agent binary), wrap it so the user
+    // drops into an interactive shell after the agent exits (AGENT-03/04).
+    // Plain `-c` is correct here — no login shell needed.
+    // NOTE: cmd.env() calls above set vars on the tmux CLIENT process only.
+    // tmux spawns the shell from the SERVER's environment, not the client's,
+    // so those vars do NOT reach the shell. Env vars must be exported inline
+    // inside the shell wrapper command (see format! below).
     if let Some(ref shell_cmd) = shell_command {
         if !shell_cmd.is_empty() {
             let user_shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
-            let wrapped = format!("{} -c '{}; exec {}'", user_shell, shell_cmd, user_shell);
+            // Inline export is required because tmux spawns shells from the SERVER's
+            // environment, not the connecting client's. cmd.env() above sets vars on
+            // the tmux CLIENT process only — those do NOT propagate into the shell that
+            // tmux creates inside the session. Only inline export in the shell command
+            // itself (or tmux -e flag) reliably delivers env vars to the spawned process.
+            // This mirrors the approach already used in switch_tmux_session().
+            let wrapped = format!(
+                "{} -c 'export CLAUDE_CODE_NO_FLICKER=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 ENABLE_LSP_TOOL=1; {}; exec {}'",
+                user_shell, shell_cmd, user_shell
+            );
             cmd.arg(&wrapped);
         }
     }
@@ -391,13 +442,21 @@ pub fn switch_tmux_session(
                 args.push(&dir_str);
             }
         }
-        // If a shell command (agent binary) is specified, wrap it so the user's shell
-        // survives after the agent exits — same wrapping as spawn_terminal (AGENT-03, AGENT-04).
+        // If a shell command (agent binary) is specified, wrap it so the user
+        // drops into an interactive shell after the agent exits (AGENT-03/04).
+        // Env vars (CLAUDE_CODE_NO_FLICKER etc.) are already in the environment
+        // inherited from the Tauri process via CommandBuilder in spawn_terminal.
+        // switch_tmux_session creates sessions via std::process::Command (system
+        // tmux) rather than a PTY CommandBuilder, so the env var must be passed
+        // explicitly through the shell wrapper when needed.
         let shell_cmd_str;
         if let Some(ref cmd) = shell_command {
             if !cmd.is_empty() {
                 let user_shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
-                shell_cmd_str = format!("{} -c '{}; exec {}'", user_shell, cmd, user_shell);
+                shell_cmd_str = format!(
+                    "{} -c 'export CLAUDE_CODE_NO_FLICKER=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 ENABLE_LSP_TOOL=1; {}; exec {}'",
+                    user_shell, cmd, user_shell
+                );
                 args.push(&shell_cmd_str);
             }
         }

@@ -66,6 +66,16 @@ function getTerminalContainersEl(): HTMLElement | null {
   return document.querySelector('.terminal-containers');
 }
 
+/**
+ * Wait for the next animation frame so the browser has laid out newly-appended
+ * elements before FitAddon measures them. Without this, fitAddon.fit() reads
+ * a zero-sized or default-sized (80-col) container and the PTY is spawned at
+ * the wrong column count, causing paste truncation at col 80.
+ */
+function nextFrame(): Promise<void> {
+  return new Promise(resolve => requestAnimationFrame(() => resolve()));
+}
+
 function getThemeOptions(): TerminalOptions {
   const theme = getTheme();
   return {
@@ -134,6 +144,30 @@ export async function createNewTab(): Promise<TerminalTab | null> {
   const { terminal, fitAddon } = createTerminal(container, themeOpts);
   registerTerminal(terminal, fitAddon);
 
+  // Show the tab and register it before connecting PTY so switchToTab makes
+  // the container visible and the browser can lay it out before we measure.
+  const partialTab: TerminalTab = {
+    id,
+    sessionName,
+    label,
+    terminal,
+    fitAddon,
+    container,
+    ptyConnected: false,
+    disconnectPty: undefined,
+    detachResize: undefined,
+    exitCode: undefined,
+  };
+  terminalTabs.value = [...terminalTabs.value, partialTab];
+  activeTabId.value = id;
+  switchToTab(id);
+
+  // Wait for browser layout so fitAddon.fit() reads the real container dimensions.
+  // Without this, terminal.cols is the xterm.js default (80) and the PTY opens at
+  // 80 cols — causing paste text to wrap at col 80 regardless of the visible width.
+  await nextFrame();
+  fitAddon.fit();
+
   // Connect PTY -- Ctrl+T tabs are always plain shell (UAT gap 1)
   const agentBinary = undefined;
   let disconnectPty: (() => void) | undefined;
@@ -151,25 +185,16 @@ export async function createNewTab(): Promise<TerminalTab | null> {
   // Attach resize handler
   const resizeHandle = attachResizeHandler(container, terminal, fitAddon, sessionName);
 
-  const tab: TerminalTab = {
-    id,
-    sessionName,
-    label,
-    terminal,
-    fitAddon,
-    container,
-    ptyConnected,
-    disconnectPty,
-    detachResize: resizeHandle.detach,
-    exitCode: undefined,
-  };
+  // Update the partial tab in-place with PTY connection results
+  partialTab.ptyConnected = ptyConnected;
+  partialTab.disconnectPty = disconnectPty;
+  partialTab.detachResize = resizeHandle.detach;
+  // Trigger reactivity
+  terminalTabs.value = [...terminalTabs.value];
 
-  terminalTabs.value = [...terminalTabs.value, tab];
-  activeTabId.value = id;
-  switchToTab(id);
   persistTabState();
 
-  return tab;
+  return partialTab;
 }
 
 /**
@@ -286,6 +311,13 @@ export async function initFirstTab(
   // Create terminal
   const { terminal, fitAddon } = createTerminal(container, themeOptions);
 
+  // Wait for browser layout before measuring. createTerminal calls fitAddon.fit()
+  // synchronously, but the container was just appended — no layout has occurred yet.
+  // Without this frame, terminal.cols stays at the xterm.js default (80) and the PTY
+  // opens at 80 cols, causing paste text to wrap at col 80 regardless of visible width.
+  await nextFrame();
+  fitAddon.fit();
+
   // Connect PTY
   let disconnectPty: (() => void) | undefined;
   let ptyConnected = false;
@@ -396,6 +428,11 @@ export async function restartTabSession(tabId: string): Promise<void> {
   const themeOpts = getThemeOptions();
   const { terminal, fitAddon } = createTerminal(tab.container, themeOpts);
   registerTerminal(terminal, fitAddon);
+
+  // Wait for browser layout before measuring, then fit — ensures the PTY opens
+  // at the real container width instead of the 80-col xterm.js default.
+  await nextFrame();
+  fitAddon.fit();
 
   // New session name (increment suffix)
   const projectInfo = await getActiveProjectInfo();
@@ -563,16 +600,27 @@ export async function restoreTabs(
     tabCounter++;
     const id = `tab-${Date.now()}-${tabCounter}`;
 
-    // Create container
+    // Create container — make it visible so the browser can lay it out and
+    // fitAddon.fit() reads real dimensions. switchToTab will hide non-active tabs.
     const container = document.createElement('div');
     container.className = 'absolute inset-0';
-    container.style.display = 'none'; // switchToTab will show the active one
+    // Intentionally NOT setting display:none here — container must be visible for
+    // fitAddon to measure the real column count before PTY spawn.
     wrapper.appendChild(container);
 
     // Create terminal
     const themeOpts = getThemeOptions();
     const { terminal, fitAddon } = createTerminal(container, themeOpts);
     registerTerminal(terminal, fitAddon);
+
+    // Wait for browser layout so fitAddon.fit() reads the real container width.
+    // Without this, terminal.cols is 80 (xterm.js default) and the PTY opens at
+    // 80 cols — causing paste text to wrap at col 80 regardless of visible width.
+    await nextFrame();
+    fitAddon.fit();
+
+    // Hide after measuring — switchToTab will reveal the active tab.
+    container.style.display = 'none';
 
     // Connect PTY -- first tab gets agent binary (it's the agent tab), rest are plain shell
     const shellCmd = (i === 0 && agentBinary) ? agentBinary : undefined;

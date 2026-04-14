@@ -24,6 +24,14 @@ export function attachResizeHandler(
   const observer = new ResizeObserver(() => {
     // Defer fit() to next frame to avoid ResizeObserver infinite loop (UAT gap test 5)
     requestAnimationFrame(() => {
+      // Skip fit when container is hidden (display:none). During restoreTabs(), all
+      // non-active tab containers are display:none while their ResizeObservers are
+      // active. When a subsequent tab is appended and the browser reflows, the
+      // ResizeObserver fires for the hidden container. Without this guard,
+      // fitAddon.fit() would measure 0 cols, terminal.onResize would emit, and
+      // resize_pty would be invoked with 0 dimensions — sending SIGWINCH with the
+      // wrong size to the running process (e.g. Claude Code TUI), breaking fullscreen.
+      if (container.style.display === 'none') return;
       fitAddon.fit();
 
       const { cols, rows } = terminal;
