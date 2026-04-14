@@ -141,7 +141,7 @@ export async function createNewTab(): Promise<TerminalTab | null> {
 
   // Create terminal
   const themeOpts = getThemeOptions();
-  const { terminal, fitAddon } = createTerminal(container, themeOpts);
+  const { terminal, fitAddon } = createTerminal(container, { ...themeOpts, sessionName });
   registerTerminal(terminal, fitAddon);
 
   // Show the tab and register it before connecting PTY so switchToTab makes
@@ -309,7 +309,7 @@ export async function initFirstTab(
   wrapper.appendChild(container);
 
   // Create terminal
-  const { terminal, fitAddon } = createTerminal(container, themeOptions);
+  const { terminal, fitAddon } = createTerminal(container, { ...themeOptions, sessionName });
 
   // Wait for browser layout before measuring. createTerminal calls fitAddon.fit()
   // synchronously, but the container was just appended — no layout has occurred yet.
@@ -423,22 +423,23 @@ export async function restartTabSession(tabId: string): Promise<void> {
   // Clear exit code
   tab.exitCode = undefined;
 
+  // New session name (increment suffix) — must be computed before createTerminal
+  // so the key handler's sessionName closure captures the correct value.
+  const projectInfo = await getActiveProjectInfo();
+  tabCounter++;
+  const newSessionSuffix = `r${tabCounter}`;
+  const newSessionName = projectSessionName(activeProjectName.value, newSessionSuffix);
+
   // Create new terminal in same container
   tab.container.innerHTML = '';
   const themeOpts = getThemeOptions();
-  const { terminal, fitAddon } = createTerminal(tab.container, themeOpts);
+  const { terminal, fitAddon } = createTerminal(tab.container, { ...themeOpts, sessionName: newSessionName });
   registerTerminal(terminal, fitAddon);
 
   // Wait for browser layout before measuring, then fit — ensures the PTY opens
   // at the real container width instead of the 80-col xterm.js default.
   await nextFrame();
   fitAddon.fit();
-
-  // New session name (increment suffix)
-  const projectInfo = await getActiveProjectInfo();
-  tabCounter++;
-  const newSessionSuffix = `r${tabCounter}`;
-  const newSessionName = projectSessionName(activeProjectName.value, newSessionSuffix);
 
   // Connect PTY
   const agentBinary = await resolveAgentBinary(projectInfo?.agent);
@@ -608,9 +609,10 @@ export async function restoreTabs(
     // fitAddon to measure the real column count before PTY spawn.
     wrapper.appendChild(container);
 
-    // Create terminal
+    // Create terminal — pass sessionName so the Shift+Enter key handler can invoke
+    // send_literal_sequence with the correct tmux target.
     const themeOpts = getThemeOptions();
-    const { terminal, fitAddon } = createTerminal(container, themeOpts);
+    const { terminal, fitAddon } = createTerminal(container, { ...themeOpts, sessionName: saved.sessionName });
     registerTerminal(terminal, fitAddon);
 
     // Wait for browser layout so fitAddon.fit() reads the real container width.
@@ -693,7 +695,7 @@ export function TerminalTabBar() {
 
   return (
     <div
-      class="flex gap-0.5 px-2 shrink-0 items-center h-[34px]"
+      class="flex gap-0.5 px-2 shrink-0 items-center h-[40px]"
       role="tablist"
       style={{ backgroundColor: colors.bgBase, borderBottom: `1px solid ${colors.bgBorder}` }}
     >
@@ -705,8 +707,8 @@ export function TerminalTabBar() {
             role="tab"
             aria-selected={isActive}
             class={isActive
-              ? 'flex items-center gap-1.5 px-3 py-2 border-b-2 border-accent text-xs font-medium font-sans cursor-pointer bg-transparent transition-all duration-150'
-              : 'flex items-center gap-1 px-3 py-2 text-xs font-sans cursor-pointer bg-transparent transition-all duration-150'}
+              ? 'flex items-center gap-1.5 px-3 py-2.5 border-b-2 border-accent text-xs font-medium font-sans cursor-pointer bg-transparent transition-all duration-150'
+              : 'flex items-center gap-1 px-3 py-2.5 text-xs font-sans cursor-pointer bg-transparent transition-all duration-150'}
             style={{ color: isActive ? colors.textPrimary : colors.textDim }}
             onClick={() => {
               activeTabId.value = tab.id;
@@ -716,17 +718,17 @@ export function TerminalTabBar() {
           >
             {isActive && <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: colors.statusGreen, flexShrink: 0 }} />}
             <span>{tab.label}</span>
-            <span
-              class="ml-1 text-[10px]"
-              style={{ color: colors.textDim }}
+            <button
+              class="ml-1.5 flex items-center justify-center rounded transition-colors duration-150"
+              style={{ width: 18, height: 18, fontSize: 13, lineHeight: 1, color: colors.textDim, backgroundColor: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0 }}
               onClick={(e) => {
                 e.stopPropagation();
                 closeTab(tab.id);
               }}
-              onMouseEnter={(e) => { (e.target as HTMLElement).style.color = colors.textPrimary; }}
-              onMouseLeave={(e) => { (e.target as HTMLElement).style.color = colors.textDim; }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textPrimary; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textDim; }}
               title="Close tab"
-            >{'\u00D7'}</span>
+            >{'\u00D7'}</button>
           </button>
         );
       })}
