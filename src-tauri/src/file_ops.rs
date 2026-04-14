@@ -231,6 +231,97 @@ pub fn write_checkbox_impl(
     Ok(())
 }
 
+/// Synchronous inner implementation of write_file_content for testing.
+pub fn write_file_content_impl(path: &str, content: &str) -> Result<(), String> {
+    if !is_safe_path(path) {
+        return Err("Invalid path: directory traversal not allowed".to_string());
+    }
+    // Atomic write: tmp + rename
+    let tmp_path = format!("{}.tmp", path);
+    std::fs::write(&tmp_path, content).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp_path, path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Write content to a file atomically (D-12).
+#[tauri::command]
+pub async fn write_file_content(path: String, content: String) -> Result<(), String> {
+    if !is_safe_path(&path) {
+        return Err("Invalid path: directory traversal not allowed".to_string());
+    }
+    spawn_blocking(move || write_file_content_impl(&path, &content))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Synchronous inner implementation of delete_file for testing.
+pub fn delete_file_impl(path: &str) -> Result<(), String> {
+    if !is_safe_path(path) {
+        return Err("Invalid path: directory traversal not allowed".to_string());
+    }
+    let p = Path::new(path);
+    if p.is_dir() {
+        std::fs::remove_dir_all(path).map_err(|e| e.to_string())
+    } else {
+        std::fs::remove_file(path).map_err(|e| e.to_string())
+    }
+}
+
+/// Delete a file or directory (D-12).
+#[tauri::command]
+pub async fn delete_file(path: String) -> Result<(), String> {
+    if !is_safe_path(&path) {
+        return Err("Invalid path: directory traversal not allowed".to_string());
+    }
+    spawn_blocking(move || delete_file_impl(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Synchronous inner implementation of rename_file for testing.
+pub fn rename_file_impl(from: &str, to: &str) -> Result<(), String> {
+    if !is_safe_path(from) || !is_safe_path(to) {
+        return Err("Invalid path: directory traversal not allowed".to_string());
+    }
+    std::fs::rename(from, to).map_err(|e| e.to_string())
+}
+
+/// Rename/move a file (D-12).
+#[tauri::command]
+pub async fn rename_file(from: String, to: String) -> Result<(), String> {
+    if !is_safe_path(&from) || !is_safe_path(&to) {
+        return Err("Invalid path: directory traversal not allowed".to_string());
+    }
+    spawn_blocking(move || rename_file_impl(&from, &to))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Synchronous inner implementation of create_file for testing.
+pub fn create_file_impl(path: &str) -> Result<(), String> {
+    if !is_safe_path(path) {
+        return Err("Invalid path: directory traversal not allowed".to_string());
+    }
+    // Create parent directories if needed
+    if let Some(parent) = Path::new(path).parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+    }
+    std::fs::write(path, "").map_err(|e| e.to_string())
+}
+
+/// Create an empty file (D-12).
+#[tauri::command]
+pub async fn create_file(path: String) -> Result<(), String> {
+    if !is_safe_path(&path) {
+        return Err("Invalid path: directory traversal not allowed".to_string());
+    }
+    spawn_blocking(move || create_file_impl(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// Write checkbox state back to a .md file (D-01).
 /// Finds the specified line, validates it contains a task list checkbox,
 /// and toggles it. Uses atomic write (tmp + rename) for safety.
@@ -355,5 +446,143 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.contains("not a checkbox"), "Expected 'not a checkbox' error, got: {}", err);
+    }
+
+    // ========== Phase 15: write_file_content tests ==========
+
+    #[test]
+    fn write_file_content_writes_and_reads() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("test.txt");
+        let path = file.to_str().unwrap();
+
+        write_file_content_impl(path, "hello world").unwrap();
+        let content = std::fs::read_to_string(path).unwrap();
+        assert_eq!(content, "hello world");
+    }
+
+    #[test]
+    fn write_file_content_rejects_traversal() {
+        let result = write_file_content_impl("../etc/passwd", "bad");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("directory traversal"), "Expected traversal error, got: {}", err);
+    }
+
+    #[test]
+    fn write_file_content_overwrites_existing() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("test.txt");
+        let path = file.to_str().unwrap();
+
+        std::fs::write(&file, "original").unwrap();
+        write_file_content_impl(path, "updated").unwrap();
+        let content = std::fs::read_to_string(path).unwrap();
+        assert_eq!(content, "updated");
+    }
+
+    // ========== Phase 15: delete_file tests ==========
+
+    #[test]
+    fn delete_file_removes_file() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("to_delete.txt");
+        std::fs::write(&file, "content").unwrap();
+        let path = file.to_str().unwrap();
+
+        assert!(file.exists());
+        delete_file_impl(path).unwrap();
+        assert!(!file.exists());
+    }
+
+    #[test]
+    fn delete_file_removes_directory() {
+        let dir = TempDir::new().unwrap();
+        let subdir = dir.path().join("subdir");
+        std::fs::create_dir(&subdir).unwrap();
+        std::fs::write(subdir.join("file.txt"), "content").unwrap();
+        let path = subdir.to_str().unwrap();
+
+        assert!(subdir.exists());
+        delete_file_impl(path).unwrap();
+        assert!(!subdir.exists());
+    }
+
+    #[test]
+    fn delete_file_rejects_traversal() {
+        let result = delete_file_impl("../etc/passwd");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("directory traversal"), "Expected traversal error, got: {}", err);
+    }
+
+    // ========== Phase 15: rename_file tests ==========
+
+    #[test]
+    fn rename_file_moves_file() {
+        let dir = TempDir::new().unwrap();
+        let from = dir.path().join("old.txt");
+        let to = dir.path().join("new.txt");
+        std::fs::write(&from, "content").unwrap();
+
+        rename_file_impl(from.to_str().unwrap(), to.to_str().unwrap()).unwrap();
+
+        assert!(!from.exists());
+        assert!(to.exists());
+        assert_eq!(std::fs::read_to_string(&to).unwrap(), "content");
+    }
+
+    #[test]
+    fn rename_file_rejects_traversal_in_from() {
+        let dir = TempDir::new().unwrap();
+        let to = dir.path().join("new.txt");
+        let result = rename_file_impl("../etc/passwd", to.to_str().unwrap());
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("directory traversal"), "Expected traversal error, got: {}", err);
+    }
+
+    #[test]
+    fn rename_file_rejects_traversal_in_to() {
+        let dir = TempDir::new().unwrap();
+        let from = dir.path().join("old.txt");
+        std::fs::write(&from, "content").unwrap();
+        let result = rename_file_impl(from.to_str().unwrap(), "../etc/passwd");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("directory traversal"), "Expected traversal error, got: {}", err);
+    }
+
+    // ========== Phase 15: create_file tests ==========
+
+    #[test]
+    fn create_file_creates_empty_file() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("new.txt");
+        let path = file.to_str().unwrap();
+
+        assert!(!file.exists());
+        create_file_impl(path).unwrap();
+        assert!(file.exists());
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "");
+    }
+
+    #[test]
+    fn create_file_creates_parent_directories() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("a").join("b").join("c").join("deep.txt");
+        let path = file.to_str().unwrap();
+
+        assert!(!file.exists());
+        create_file_impl(path).unwrap();
+        assert!(file.exists());
+    }
+
+    #[test]
+    fn create_file_rejects_traversal() {
+        let result = create_file_impl("../etc/passwd");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("directory traversal"), "Expected traversal error, got: {}", err);
     }
 }

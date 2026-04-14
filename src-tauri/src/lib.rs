@@ -136,6 +136,11 @@ pub fn run() {
             file_ops::read_file_content,
             file_ops::read_file,
             file_ops::write_checkbox,
+            // Phase 15: File CRUD (D-12)
+            file_ops::write_file_content,
+            file_ops::delete_file,
+            file_ops::rename_file,
+            file_ops::create_file,
 
             // Phase 6: File watcher (D-02)
             file_watcher::set_project_path,
