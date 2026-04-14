@@ -33,27 +33,30 @@ Declared values from existing `tokens.ts` (multiples of 4 where practical):
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| xs | 1px | Hairline gaps |
-| sm | 2px | Minimal padding |
 | md | 4px | Tight element spacing |
-| lg | 6px | Compact section padding |
 | xl | 8px | Default element spacing |
-| 2xl | 10px | Gap between related items |
 | 3xl | 12px | Section padding |
 | 4xl | 16px | Container padding |
 | 5xl | 20px | Modal padding |
 | 6xl | 28px | Major section breaks |
 
+**Named Exceptions (justified deviations from 4px multiples):**
+
+| Token | Value | Justification |
+|-------|-------|---------------|
+| xs | 1px | Hairline gaps: used for 1px visual separators and hairline borders that would be invisible at 4px |
+| sm | 2px | Minimal padding: used for 2px underline heights on active tabs and tight icon-to-text gaps where 4px feels too loose |
+| lg | 6px | Compact section padding: existing project pattern from sidebar.tsx; 4px too tight, 8px too loose for dense file lists |
+| 2xl | 10px | Gap between related items: existing project pattern; bridges the visual gap between 8px and 12px for mid-density layouts |
+
 **Phase 16-specific usage:**
 - Tab row padding: 4px horizontal, 8px vertical
 - Tab gap: 0px (tabs touch, separated by visual underline)
 - Commit textarea padding: 8px
-- Button padding: 6px vertical, 16px horizontal
+- Button padding: 8px vertical, 16px horizontal
 - Section header padding: 4px vertical, 8px horizontal
 - File row padding: 4px vertical, 4px horizontal
 - Checkbox-to-label gap: 8px
-
-Exceptions: none
 
 ---
 
@@ -61,14 +64,16 @@ Exceptions: none
 
 | Role | Size | Weight | Line Height | Font |
 |------|------|--------|-------------|------|
-| Tab label | 11px | 500 (medium) | 1.0 | Geist |
-| Section header | 10px | 500 (medium) | 1.2 | GeistMono |
+| Tab label | 11px | 600 (semibold) | 1.0 | Geist |
+| Section header | 10px | 600 (semibold) | 1.2 | GeistMono |
 | File name | 12px | 400 (regular) | 1.4 | GeistMono |
 | Commit textarea | 12px | 400 (regular) | 1.5 | GeistMono |
 | Button text | 12px | 600 (semibold) | 1.0 | Geist |
 | Toast text | 12px | 400 (regular) | 1.4 | Geist |
 
-**Source:** Existing patterns in sidebar.tsx (fontSize 10-13px, weights 400-600)
+**Weights Used:** 2 (400 regular, 600 semibold)
+
+**Source:** Existing patterns in sidebar.tsx (fontSize 10-13px). Weight 500 (medium) consolidated to 600 (semibold) for visual hierarchy.
 
 ---
 
@@ -166,7 +171,7 @@ Exceptions: none
 2. Checkbox toggles optimistically
 3. stageFile()/unstageFile() IPC call fires
 4. On success: file moves between STAGED/CHANGES sections
-5. On error: revert checkbox, show toast with error
+5. On error: revert checkbox, show toast with error and recovery hint
 
 ### Commit Flow
 1. User types in commit textarea
@@ -202,8 +207,8 @@ Exceptions: none
 | Push auth error | "Authentication failed. Run: ssh-add" |
 | Push rejected error | "Push rejected. Pull first." |
 | Commit success | "Committed {short_oid}" |
-| Stage error | "Failed to stage {filename}" |
-| Unstage error | "Failed to unstage {filename}" |
+| Stage error | "Failed to stage {filename} -- see terminal for details" |
+| Unstage error | "Failed to unstage {filename} -- see terminal for details" |
 
 ---
 
