@@ -11,7 +11,9 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "tauri": "tauri",
-    "repomix": "npx repomix@latest --config repomix.config.json"
+    "repomix": "npx repomix@latest --config repomix.config.json",
+    "repomix:skill": "npx repomix@latest --skill-generate",
+    "repomix:skill-remote": "npx repomix@latest --remote"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.5",

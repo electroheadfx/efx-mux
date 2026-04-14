@@ -1,0 +1,46 @@
+# Tech Stack
+
+## Languages
+
+- Node.js
+
+## Frameworks
+
+- TypeScript
+
+## Dependencies
+
+- @preact/signals (^2.9.0)
+- @tauri-apps/api (^2.10.1)
+- @tauri-apps/plugin-dialog (^2.7.0)
+- @tauri-apps/plugin-opener (^2.5.3)
+- @xterm/addon-fit (0.11.0)
+- @xterm/addon-webgl (0.19.0)
+- @xterm/xterm (6.0.0)
+- lucide-preact (^1.8.0)
+- marked (^14.1.4)
+- preact (^10.29.1)
+
+## Dev Dependencies
+
+- @preact/preset-vite (^2.10.5)
+- @tailwindcss/vite (^4.2.2)
+- @tauri-apps/cli (^2)
+- @testing-library/jest-dom (^6.9.1)
+- @testing-library/preact (^3.2.4)
+- @vitest/coverage-v8 (^4.1.4)
+- @xterm/addon-web-links (^0.12.0)
+- esbuild (^0.28.0)
+- jsdom (^29.0.2)
+- tailwindcss (^4.2.2)
+- typescript (^6.0.2)
+- vite (^8.0.7)
+- vitest (^4.1.4)
+
+## Configuration Files
+
+- vite.config.ts
+- tsconfig.json
+- .gitignore
+- vitest.config.ts
+- package.json
