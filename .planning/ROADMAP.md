@@ -39,7 +39,7 @@
 
 **Milestone Goal:** Transform Efxmux from terminal-focused MVP to full-featured development workspace with file editing, git control, and enhanced navigation.
 
-- [ ] **Phase 15: Foundation Primitives** (2 plans) -- Shared UI components and Rust write commands
+- [x] **Phase 15: Foundation Primitives** (2 plans) -- Shared UI components and Rust write commands (completed 2026-04-14)
 - [ ] **Phase 16: Sidebar Evolution + Git Control** -- 3-tab sidebar with git staging/commit/push
 - [ ] **Phase 17: Main Panel File Tabs** -- CodeMirror editor tabs with dropdown menu
 - [ ] **Phase 18: File Tree Enhancements** -- Delete, drag/drop, external editor integration
@@ -60,8 +60,8 @@
   4. `git-service.ts` module exposes stage/unstage/commit/push IPC wrappers
   5. `file-service.ts` module exposes file CRUD IPC wrappers
 **Plans**: 2 plans
-  - [ ] 15-01-PLAN.md -- Context Menu and Dropdown Menu UI components
-  - [ ] 15-02-PLAN.md -- Git operations, file operations, and TypeScript services
+  - [x] 15-01-PLAN.md -- Context Menu and Dropdown Menu UI components
+  - [x] 15-02-PLAN.md -- Git operations, file operations, and TypeScript services
 
 ### Phase 16: Sidebar Evolution + Git Control
 **Goal**: Users can stage, commit, and push changes from a dedicated git control pane in the sidebar
@@ -162,7 +162,7 @@ Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21
 | 12. TypeScript Tests | v0.2.0 | 2/2 | Complete | 2026-04-12 |
 | 13. Rust Tests | v0.2.0 | 2/2 | Complete | 2026-04-12 |
 | 14. Consolidation | v0.2.0 | 2/2 | Complete | 2026-04-12 |
-| 15. Foundation Primitives | v0.3.0 | 0/2 | In Progress | - |
+| 15. Foundation Primitives | v0.3.0 | 2/2 | Complete   | 2026-04-14 |
 | 16. Sidebar Evolution + Git Control | v0.3.0 | 0/? | Not started | - |
 | 17. Main Panel File Tabs | v0.3.0 | 0/? | Not started | - |
 | 18. File Tree Enhancements | v0.3.0 | 0/? | Not started | - |
