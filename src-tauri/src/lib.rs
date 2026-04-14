@@ -1,6 +1,7 @@
 // src-tauri/src/lib.rs
 pub mod file_ops;
 pub mod file_watcher;
+pub mod git_ops;
 pub mod git_status;
 pub mod project;
 pub mod server;
@@ -116,6 +117,10 @@ pub fn run() {
             // Git
             git_status::get_git_status,
             git_status::get_git_files,
+            git_ops::stage_file,
+            git_ops::unstage_file,
+            git_ops::commit,
+            git_ops::push,
 
             // Projects
             project::add_project,
