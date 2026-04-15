@@ -418,6 +418,44 @@ mod tests {
     }
 
     #[test]
+    fn unstage_new_file_removes_from_index() {
+        let (dir, path) = setup_git_repo();
+        let file_path = dir.path().join("newfile.txt");
+        std::fs::write(&file_path, "new content").unwrap();
+        run_git(dir.path(), &["add", "newfile.txt"]);
+
+        // Verify file is staged (should show 'A  newfile.txt')
+        let output = std::process::Command::new("git")
+            .args(["status", "--porcelain"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        let status = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            status.contains("A  newfile.txt"),
+            "File should be staged before unstage: {}",
+            status
+        );
+
+        // Unstage the NEW file (not in HEAD)
+        let result = unstage_file_impl(&path, "newfile.txt");
+        assert!(result.is_ok(), "unstage_file_impl failed for new file: {:?}", result);
+
+        // Verify file is now untracked (should show '?? newfile.txt')
+        let output = std::process::Command::new("git")
+            .args(["status", "--porcelain"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        let status = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            status.contains("?? newfile.txt"),
+            "New file should be untracked after unstaging: {}",
+            status
+        );
+    }
+
+    #[test]
     fn commit_creates_commit_with_message() {
         let (dir, path) = setup_git_repo();
         let file_path = dir.path().join("test.txt");
