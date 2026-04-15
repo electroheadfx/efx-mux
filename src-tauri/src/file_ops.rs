@@ -59,38 +59,73 @@ pub fn get_file_diff_impl(path: &str) -> Result<String, String> {
         .strip_prefix(workdir)
         .map_err(|_| "File is not inside the git repository".to_string())?;
 
-    let mut opts = DiffOptions::new();
-    opts.pathspec(rel_path.to_string_lossy().as_ref());
-    opts.include_untracked(true);
+    // Helper closure to extract patch text from a git2::Diff
+    let extract_patch = |diff: git2::Diff| -> Result<String, String> {
+        let mut out = String::new();
+        diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+            let origin = line.origin();
+            match origin {
+                '+' | '-' | ' ' => {
+                    out.push(origin);
+                    if let Ok(content) = std::str::from_utf8(line.content()) {
+                        out.push_str(content);
+                    }
+                }
+                'H' => {
+                    if let Ok(content) = std::str::from_utf8(line.content()) {
+                        out.push_str(content);
+                    }
+                }
+                _ => {}
+            }
+            true
+        })
+        .map_err(|e| e.to_string())?;
+        Ok(out)
+    };
 
-    // Diff between index (HEAD) and workdir
-    let diff = repo
+    let pathspec = rel_path.to_string_lossy().to_string();
+
+    // 1. Try staged diff (HEAD tree → index) first
+    let staged_output = if let Ok(head_ref) = repo.head() {
+        if let Ok(head_commit) = head_ref.peel_to_commit() {
+            if let Ok(head_tree) = head_commit.tree() {
+                let mut opts = DiffOptions::new();
+                opts.pathspec(&pathspec);
+                if let Ok(diff) = repo.diff_tree_to_index(Some(&head_tree), None, Some(&mut opts)) {
+                    extract_patch(diff)?
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
+    // 2. Try unstaged diff (index → workdir)
+    let mut opts = DiffOptions::new();
+    opts.pathspec(&pathspec);
+    opts.include_untracked(true);
+    let unstaged_diff = repo
         .diff_index_to_workdir(None, Some(&mut opts))
         .map_err(|e| e.to_string())?;
+    let unstaged_output = extract_patch(unstaged_diff)?;
 
-    let mut output = String::new();
-    diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
-        let origin = line.origin();
-        match origin {
-            '+' | '-' | ' ' => {
-                output.push(origin);
-                if let Ok(content) = std::str::from_utf8(line.content()) {
-                    output.push_str(content);
-                }
-            }
-            'H' => {
-                // Hunk header line (@@...@@)
-                if let Ok(content) = std::str::from_utf8(line.content()) {
-                    output.push_str(content);
-                }
-            }
-            _ => {}
-        }
-        true
-    })
-    .map_err(|e| e.to_string())?;
+    // Combine: prefer staged if present, append unstaged if also present
+    let output = if !staged_output.trim().is_empty() && !unstaged_output.trim().is_empty() {
+        format!("{}\n{}", staged_output, unstaged_output)
+    } else if !staged_output.trim().is_empty() {
+        staged_output
+    } else {
+        unstaged_output
+    };
 
-    // If diff is empty, file might be untracked — show full content as new file
+    // If both empty, file might be untracked — show full content as new file
     if output.trim().is_empty() {
         let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
         let mut new_file_output = String::from("@@ New file @@\n");

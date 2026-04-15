@@ -2,7 +2,7 @@ Please find GSD tools from `.claude/get-shit-done` and not from `$HOME/.claude/g
 Please do not run the server, I do on my side
 
 <!-- GSD:project-start source:PROJECT.md -->
-## Project XXXXX
+## Project
 
 **GSD⚡MUX
 
