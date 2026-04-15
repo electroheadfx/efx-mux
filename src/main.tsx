@@ -20,7 +20,8 @@ import { FuzzySearch } from './components/fuzzy-search';
 import { ShortcutCheatsheet, toggleCheatsheet } from './components/shortcut-cheatsheet';
 import { FirstRunWizard, openWizard } from './components/first-run-wizard';
 import { PreferencesPanel, togglePreferences } from './components/preferences-panel';
-import { ToastContainer } from './components/toast';
+import { ToastContainer, showToast } from './components/toast';
+import { ConfirmModal } from './components/confirm-modal';
 import { initDragManager } from './drag-manager';
 import { initTheme, registerTerminal, toggleThemeMode } from './theme/theme-manager';
 import { createNewTab, closeActiveTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs, saveProjectTabs, hasProjectTabs, restoreProjectTabs } from './components/terminal-tabs';
@@ -29,6 +30,7 @@ import {
   getProjects, getActiveProject, projects, activeProjectName
 } from './state-manager';
 import { openProjectModal } from './components/project-modal';
+import { openEditorTab } from './components/unified-tab-bar';
 import { serverPaneState, saveCurrentProjectState, restoreProjectState } from './components/server-pane';
 import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from './components/file-tree';
 import { detectAgent } from './server/server-bridge';
@@ -93,6 +95,7 @@ function App() {
       <FirstRunWizard />
       <PreferencesPanel />
       <ToastContainer />
+      <ConfirmModal />
     </div>
   );
 }
@@ -158,6 +161,10 @@ async function bootstrap() {
         e.preventDefault(); e.stopPropagation();
         sidebarCollapsed.value = !sidebarCollapsed.value;
         break;
+      case key === 's' && e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey:
+        // Cmd+S: prevent browser Save Page dialog, let CM6 handle save
+        e.preventDefault();
+        break;
       case key === 's' && e.ctrlKey && !e.shiftKey && !e.altKey:
         e.preventDefault(); e.stopPropagation();
         serverPaneState.value = serverPaneState.value === 'strip' ? 'expanded' : 'strip';
@@ -216,16 +223,15 @@ async function bootstrap() {
     document.documentElement.style.setProperty('--server-pane-h', String(appState.layout['server-pane-height']));
   }
 
-  // Step 7: file-opened handler (PANEL-06)
+  // Step 7: file-opened handler -- opens editor tab (EDIT-01)
   document.addEventListener('file-opened', async (e: Event) => {
     const { path, name } = (e as CustomEvent).detail;
     try {
-      const content = await invoke('read_file_content', { path });
-      document.dispatchEvent(new CustomEvent('show-file-viewer', {
-        detail: { path, name, content }
-      }));
+      const content = await invoke<string>('read_file_content', { path });
+      openEditorTab(path, name, content);
     } catch (err) {
       console.error('[efxmux] Failed to read file:', err);
+      showToast({ type: 'error', message: `Could not open file: ${name}` });
     }
   });
 
