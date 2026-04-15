@@ -166,7 +166,7 @@ Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21
 | 13. Rust Tests | v0.2.0 | 2/2 | Complete | 2026-04-12 |
 | 14. Consolidation | v0.2.0 | 2/2 | Complete | 2026-04-12 |
 | 15. Foundation Primitives | v0.3.0 | 2/2 | Complete    | 2026-04-14 |
-| 16. Sidebar Evolution + Git Control | v0.3.0 | 3/3 | Complete   | 2026-04-15 |
+| 16. Sidebar Evolution + Git Control | v0.3.0 | 4/4 | Complete   | 2026-04-15 |
 | 17. Main Panel File Tabs | v0.3.0 | 0/? | Not started | - |
 | 18. File Tree Enhancements | v0.3.0 | 0/? | Not started | - |
 | 19. GSD Sub-Tabs | v0.3.0 | 0/? | Not started | - |
