@@ -451,7 +451,7 @@ function handleDrop(e: DragEvent, targetId: string): void {
   const insertAt = order.indexOf(targetId);
   order.splice(insertAt, 0, sourceId);
 
-  tabOrder.value = order;
+  setProjectTabOrder(order);
   clearDragState();
 }
 
