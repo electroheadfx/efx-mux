@@ -2,12 +2,13 @@
 //
 // Renders STAGED/CHANGES sections with file checkboxes, commit textarea,
 // and Commit/Push buttons. Uses git-service.ts for operations.
+// Includes error log panel with clear button for operation feedback.
 
 import { useEffect } from 'preact/hooks';
 import { signal, computed } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { ChevronDown, ChevronRight, Loader } from 'lucide-preact';
+import { ChevronDown, ChevronRight, Loader, X } from 'lucide-preact';
 import { colors, fonts, fontSizes, spacing, radii } from '../tokens';
 import { projects, activeProjectName } from '../state-manager';
 import type { ProjectEntry } from '../state-manager';
@@ -25,6 +26,13 @@ interface GitFile {
   staged: boolean;
 }
 
+interface GitLogEntry {
+  timestamp: string;
+  type: 'error' | 'info' | 'success';
+  message: string;
+  detail?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Local signals
 // ---------------------------------------------------------------------------
@@ -36,6 +44,7 @@ const stagedSectionOpen = signal(true);
 const changesSectionOpen = signal(true);
 const isCommitting = signal(false);
 const isPushing = signal(false);
+const gitLog = signal<GitLogEntry[]>([]);
 
 // ---------------------------------------------------------------------------
 // Computed values
@@ -44,6 +53,7 @@ const isPushing = signal(false);
 const stagedFiles = computed(() => gitFiles.value.filter(f => f.staged));
 const changedFiles = computed(() => gitFiles.value.filter(f => !f.staged));
 const canCommit = computed(() => stagedFiles.value.length > 0 && commitMessage.value.trim().length > 0);
+const hasChangesOrCommits = computed(() => gitFiles.value.length > 0 || unpushedCount.value > 0);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -51,6 +61,16 @@ const canCommit = computed(() => stagedFiles.value.length > 0 && commitMessage.v
 
 function getActiveProject(): ProjectEntry | undefined {
   return projects.value.find(p => p.name === activeProjectName.value);
+}
+
+function addLogEntry(type: GitLogEntry['type'], message: string, detail?: string): void {
+  const now = new Date();
+  const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+  gitLog.value = [...gitLog.value, { timestamp, type, message, detail }];
+}
+
+function clearLog(): void {
+  gitLog.value = [];
 }
 
 async function refreshGitFiles(): Promise<void> {
@@ -110,10 +130,12 @@ async function handleCheckboxChange(file: GitFile, shouldStage: boolean): Promis
     // Revert on error
     gitFiles.value = previousFiles;
     const action = shouldStage ? 'stage' : 'unstage';
+    const errMsg = err instanceof GitError ? err.details || err.code : String(err);
+    addLogEntry('error', `Failed to ${action} ${file.name}`, errMsg);
     showToast({
       type: 'error',
       message: `Failed to ${action} ${file.name}`,
-      hint: 'See terminal for details',
+      hint: 'See error log in GIT tab',
     });
   }
 }
@@ -127,6 +149,7 @@ async function handleCommit(): Promise<void> {
     const oid = await commit(project.path, commitMessage.value.trim());
     const shortOid = oid.slice(0, 7);
     commitMessage.value = '';
+    addLogEntry('success', `Committed ${shortOid}`);
     showToast({
       type: 'success',
       message: `Committed ${shortOid}`,
@@ -134,6 +157,7 @@ async function handleCommit(): Promise<void> {
     await refreshGitFiles();
   } catch (err) {
     const message = err instanceof GitError ? err.details || err.code : String(err);
+    addLogEntry('error', 'Commit failed', message);
     showToast({
       type: 'error',
       message: 'Commit failed',
@@ -153,39 +177,35 @@ async function handlePush(): Promise<void> {
     await push(project.path);
     // Get branch name for toast
     const gitData = await invoke<{ branch: string }>('get_git_status', { path: project.path });
+    const branchName = gitData.branch || 'main';
+    addLogEntry('success', `Pushed to origin/${branchName}`);
     showToast({
       type: 'success',
-      message: `Pushed to origin/${gitData.branch || 'main'}`,
+      message: `Pushed to origin/${branchName}`,
     });
     await refreshGitFiles();
   } catch (err) {
+    let errMessage = 'Push failed';
+    let errDetail = String(err);
+
     if (err instanceof GitError) {
       if (err.code === 'AuthFailed') {
-        showToast({
-          type: 'error',
-          message: 'Authentication failed',
-          hint: 'Run: ssh-add',
-        });
+        errMessage = 'Authentication failed';
+        errDetail = 'Run: ssh-add';
       } else if (err.code === 'PushRejected') {
-        showToast({
-          type: 'error',
-          message: 'Push rejected',
-          hint: 'Pull first',
-        });
+        errMessage = 'Push rejected';
+        errDetail = err.details || 'Pull first';
       } else {
-        showToast({
-          type: 'error',
-          message: 'Push failed',
-          hint: err.details || err.code,
-        });
+        errDetail = err.details || err.code;
       }
-    } else {
-      showToast({
-        type: 'error',
-        message: 'Push failed',
-        hint: String(err),
-      });
     }
+
+    addLogEntry('error', errMessage, errDetail);
+    showToast({
+      type: 'error',
+      message: errMessage,
+      hint: 'See error log in GIT tab',
+    });
   } finally {
     isPushing.value = false;
   }
@@ -328,6 +348,98 @@ function GitFileRow({
   );
 }
 
+function GitLogPanel() {
+  const entries = gitLog.value;
+  if (entries.length === 0) return null;
+
+  return (
+    <div
+      style={{
+        borderTop: `1px solid ${colors.bgBorder}`,
+        maxHeight: 140,
+        overflowY: 'auto',
+      }}
+    >
+      {/* Header with clear button */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: `${spacing.md}px ${spacing.xl}px`,
+          position: 'sticky',
+          top: 0,
+          backgroundColor: colors.bgSurface,
+          zIndex: 1,
+        }}
+      >
+        <span
+          style={{
+            fontFamily: fonts.mono,
+            fontSize: fontSizes.sm,
+            fontWeight: 600,
+            color: colors.textDim,
+          }}
+        >
+          LOG ({entries.length})
+        </span>
+        <button
+          onClick={clearLog}
+          title="Clear log"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 18,
+            height: 18,
+            borderRadius: radii.sm,
+            backgroundColor: 'transparent',
+            border: 'none',
+            color: colors.textDim,
+            cursor: 'pointer',
+          }}
+        >
+          <X size={12} />
+        </button>
+      </div>
+
+      {/* Log entries */}
+      {entries.map((entry, i) => {
+        const entryColor =
+          entry.type === 'error' ? colors.diffRed :
+          entry.type === 'success' ? colors.statusGreen :
+          colors.textMuted;
+
+        return (
+          <div
+            key={i}
+            style={{
+              padding: `${spacing.sm}px ${spacing.xl}px`,
+              fontFamily: fonts.mono,
+              fontSize: fontSizes.sm,
+              lineHeight: '1.4',
+            }}
+          >
+            <span style={{ color: colors.textDim }}>{entry.timestamp} </span>
+            <span style={{ color: entryColor }}>{entry.message}</span>
+            {entry.detail && (
+              <div
+                style={{
+                  color: colors.textDim,
+                  paddingLeft: spacing['3xl'],
+                  wordBreak: 'break-word',
+                }}
+              >
+                {entry.detail}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -357,35 +469,49 @@ export function GitControlTab() {
     };
   }, []);
 
-  // Empty state: no changes at all AND no unpushed commits
-  if (gitFiles.value.length === 0 && unpushedCount.value === 0) {
+  // Empty state: no changes and no unpushed commits
+  if (!hasChangesOrCommits.value) {
     return (
       <div
         style={{
-          padding: spacing['4xl'],
-          textAlign: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
         }}
       >
         <div
           style={{
-            fontFamily: fonts.sans,
-            fontSize: fontSizes.lg,
-            fontWeight: 600,
-            color: colors.textMuted,
-            marginBottom: spacing.xl,
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: spacing['4xl'],
           }}
         >
-          No changes
+          <div
+            style={{
+              fontFamily: fonts.sans,
+              fontSize: fontSizes.lg,
+              fontWeight: 600,
+              color: colors.textMuted,
+              marginBottom: spacing.xl,
+            }}
+          >
+            No changes
+          </div>
+          <div
+            style={{
+              fontFamily: fonts.sans,
+              fontSize: fontSizes.base,
+              color: colors.textDim,
+            }}
+          >
+            Working directory is clean.
+          </div>
         </div>
-        <div
-          style={{
-            fontFamily: fonts.sans,
-            fontSize: fontSizes.base,
-            color: colors.textDim,
-          }}
-        >
-          Working directory is clean.
-        </div>
+        {/* Show log even in clean state so errors remain visible */}
+        <GitLogPanel />
       </div>
     );
   }
@@ -399,100 +525,106 @@ export function GitControlTab() {
         minHeight: 0,
       }}
     >
-      {/* Commit textarea - always visible (D-09) */}
-      <div style={{ padding: `${spacing.xl}px ${spacing['3xl']}px` }}>
-        <textarea
-          value={commitMessage.value}
-          onInput={(e) => { commitMessage.value = (e.target as HTMLTextAreaElement).value; }}
-          placeholder="Commit message..."
-          style={{
-            width: '100%',
-            height: 64,
-            maxHeight: 120,
-            resize: 'vertical',
-            backgroundColor: colors.bgElevated,
-            border: `1px solid ${colors.bgBorder}`,
-            borderRadius: radii.md,
-            padding: spacing.xl,
-            fontFamily: fonts.mono,
-            fontSize: fontSizes.base,
-            color: colors.textPrimary,
-            outline: 'none',
-          }}
-          onFocus={(e) => {
-            (e.target as HTMLTextAreaElement).style.borderColor = colors.accent;
-          }}
-          onBlur={(e) => {
-            (e.target as HTMLTextAreaElement).style.borderColor = colors.bgBorder;
-          }}
-        />
-      </div>
+      {/* Commit textarea -- only show when there are files to stage/commit */}
+      {gitFiles.value.length > 0 && (
+        <div style={{ padding: `${spacing.xl}px ${spacing['3xl']}px` }}>
+          <textarea
+            value={commitMessage.value}
+            onInput={(e) => { commitMessage.value = (e.target as HTMLTextAreaElement).value; }}
+            placeholder="Commit message..."
+            style={{
+              width: '100%',
+              height: 64,
+              maxHeight: 120,
+              resize: 'vertical',
+              backgroundColor: colors.bgElevated,
+              border: `1px solid ${colors.bgBorder}`,
+              borderRadius: radii.md,
+              padding: spacing.xl,
+              fontFamily: fonts.mono,
+              fontSize: fontSizes.base,
+              color: colors.textPrimary,
+              outline: 'none',
+            }}
+            onFocus={(e) => {
+              (e.target as HTMLTextAreaElement).style.borderColor = colors.accent;
+            }}
+            onBlur={(e) => {
+              (e.target as HTMLTextAreaElement).style.borderColor = colors.bgBorder;
+            }}
+          />
+        </div>
+      )}
 
-      {/* Buttons row */}
-      <div
-        style={{
-          display: 'flex',
-          gap: spacing.xl,
-          padding: `0 ${spacing['3xl']}px ${spacing.xl}px`,
-        }}
-      >
-        {/* Commit button (D-11) */}
-        <button
-          disabled={!canCommit.value || isCommitting.value}
-          onClick={handleCommit}
+      {/* Buttons row -- only show when there are actionable items */}
+      {(gitFiles.value.length > 0 || unpushedCount.value > 0) && (
+        <div
           style={{
-            flex: 1,
-            height: 28,
-            borderRadius: radii.md,
-            backgroundColor: canCommit.value && !isCommitting.value
-              ? colors.accent
-              : colors.bgSurface,
-            border: 'none',
-            fontFamily: fonts.sans,
-            fontSize: fontSizes.base,
-            fontWeight: 600,
-            color: canCommit.value && !isCommitting.value ? 'white' : colors.textDim,
-            cursor: canCommit.value && !isCommitting.value ? 'pointer' : 'not-allowed',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
             gap: spacing.xl,
+            padding: `0 ${spacing['3xl']}px ${spacing.xl}px`,
           }}
         >
-          {isCommitting.value && <Loader size={12} class="animate-spin" />}
-          Commit ({stagedFiles.value.length} files)
-        </button>
+          {/* Commit button (D-11) -- only show when there are files */}
+          {gitFiles.value.length > 0 && (
+            <button
+              disabled={!canCommit.value || isCommitting.value}
+              onClick={handleCommit}
+              style={{
+                flex: 1,
+                height: 28,
+                borderRadius: radii.md,
+                backgroundColor: canCommit.value && !isCommitting.value
+                  ? colors.accent
+                  : colors.bgSurface,
+                border: 'none',
+                fontFamily: fonts.sans,
+                fontSize: fontSizes.base,
+                fontWeight: 600,
+                color: canCommit.value && !isCommitting.value ? 'white' : colors.textDim,
+                cursor: canCommit.value && !isCommitting.value ? 'pointer' : 'not-allowed',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: spacing.xl,
+              }}
+            >
+              {isCommitting.value && <Loader size={12} class="animate-spin" />}
+              Commit ({stagedFiles.value.length} files)
+            </button>
+          )}
 
-        {/* Push button (D-13) - only visible when unpushed commits exist */}
-        {unpushedCount.value > 0 && (
-          <button
-            disabled={isPushing.value}
-            onClick={handlePush}
-            style={{
-              flex: 1,
-              height: 28,
-              borderRadius: radii.md,
-              backgroundColor: isPushing.value ? colors.bgSurface : colors.accent,
-              border: 'none',
-              fontFamily: fonts.sans,
-              fontSize: fontSizes.base,
-              fontWeight: 600,
-              color: isPushing.value ? colors.textDim : 'white',
-              cursor: isPushing.value ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: spacing.xl,
-            }}
-          >
-            {isPushing.value ? (
-              <Loader size={12} class="animate-spin" />
-            ) : (
-              'Push to origin'
-            )}
-          </button>
-        )}
-      </div>
+          {/* Push button (D-13) - only visible when unpushed commits exist */}
+          {unpushedCount.value > 0 && (
+            <button
+              disabled={isPushing.value}
+              onClick={handlePush}
+              style={{
+                flex: 1,
+                height: 28,
+                borderRadius: radii.md,
+                backgroundColor: isPushing.value ? colors.bgSurface : colors.accent,
+                border: 'none',
+                fontFamily: fonts.sans,
+                fontSize: fontSizes.base,
+                fontWeight: 600,
+                color: isPushing.value ? colors.textDim : 'white',
+                cursor: isPushing.value ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: spacing.xl,
+              }}
+            >
+              {isPushing.value ? (
+                <Loader size={12} class="animate-spin" />
+              ) : (
+                `Push (${unpushedCount.value})`
+              )}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* File sections */}
       <div
@@ -568,7 +700,41 @@ export function GitControlTab() {
             </div>
           </div>
         )}
+
+        {/* Only unpushed commits, no file changes */}
+        {gitFiles.value.length === 0 && unpushedCount.value > 0 && (
+          <div
+            style={{
+              padding: `${spacing['3xl']}px ${spacing['4xl']}px`,
+              textAlign: 'center',
+            }}
+          >
+            <div
+              style={{
+                fontFamily: fonts.sans,
+                fontSize: fontSizes.base,
+                fontWeight: 600,
+                color: colors.textMuted,
+                marginBottom: spacing.md,
+              }}
+            >
+              {unpushedCount.value} unpushed commit{unpushedCount.value > 1 ? 's' : ''}
+            </div>
+            <div
+              style={{
+                fontFamily: fonts.sans,
+                fontSize: fontSizes.sm,
+                color: colors.textDim,
+              }}
+            >
+              Working directory is clean. Click Push to sync.
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Error/info log panel at bottom */}
+      <GitLogPanel />
     </div>
   );
 }

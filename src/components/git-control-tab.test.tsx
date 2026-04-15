@@ -167,13 +167,13 @@ describe('GitControlTab', () => {
     });
   });
 
-  it('should show Push button when unpushed commits exist', async () => {
+  it('should show Push button with count when unpushed commits exist', async () => {
     vi.mocked(getUnpushedCount).mockResolvedValue(2);
 
     render(<GitControlTab />);
 
     await waitFor(() => {
-      expect(screen.getByText('Push to origin')).toBeTruthy();
+      expect(screen.getByText('Push (2)')).toBeTruthy();
     });
   });
 
@@ -184,7 +184,7 @@ describe('GitControlTab', () => {
 
     // Wait for component to render
     await waitFor(() => {
-      expect(screen.queryByText('Push to origin')).toBeNull();
+      expect(screen.queryByText(/Push/)).toBeNull();
     });
   });
 

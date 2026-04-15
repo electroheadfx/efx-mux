@@ -2,10 +2,13 @@
 //!
 //! Provides git2-based commands for staging, unstaging, committing, and pushing
 //! changes. Consumed by the frontend via Tauri invoke.
+//!
+//! Push uses system `git push` (not git2) to leverage macOS Keychain, ssh-agent,
+//! and credential helpers that git2 cannot access reliably.
 
-use git2::{Cred, PushOptions, RemoteCallbacks, Repository, Signature};
-use std::env;
+use git2::{Repository, Signature};
 use std::path::Path;
+use std::process::Command;
 use tauri::async_runtime::spawn_blocking;
 
 /// Typed error enum for git operations (D-08).
@@ -182,13 +185,18 @@ pub fn commit_impl(repo_path: &str, message: &str) -> Result<String, GitError> {
     Ok(commit_id.to_string())
 }
 
-/// Synchronous inner implementation of push for testing.
-/// Pushes to remote, discovering auth method from remote URL (D-09).
+/// Synchronous inner implementation of push using system git binary.
+///
+/// Uses `git push` subprocess instead of git2 to leverage the system's SSH agent,
+/// macOS Keychain integration, and credential helpers. git2's libgit2 SSH auth
+/// has a known issue where the credentials callback can loop infinitely when
+/// the SSH agent has no keys and the key file requires a passphrase.
 pub fn push_impl(
     repo_path: &str,
     remote: Option<&str>,
     branch: Option<&str>,
 ) -> Result<(), GitError> {
+    // Verify it's a valid git repo first
     let repo = Repository::open(repo_path).map_err(|_| GitError::NotARepo)?;
     let remote_name = remote.unwrap_or("origin");
 
@@ -202,71 +210,59 @@ pub fn push_impl(
         })
         .unwrap_or_else(|| "main".to_string());
 
-    let mut remote_obj = repo
-        .find_remote(remote_name)
-        .map_err(|e| GitError::PushRejected(e.to_string()))?;
+    // Drop the repo handle before shelling out to avoid lock contention
+    drop(repo);
 
-    // Discover auth method from remote URL (D-09)
-    let url = remote_obj.url().unwrap_or("");
-    let mut callbacks = RemoteCallbacks::new();
+    // Shell out to system git for push -- this uses the system's SSH agent,
+    // macOS Keychain, and any configured credential helpers correctly.
+    let output = Command::new("git")
+        .args(["push", remote_name, &branch_name])
+        .current_dir(repo_path)
+        .env("GIT_TERMINAL_PROMPT", "0") // Prevent interactive prompts in background
+        .output()
+        .map_err(|e| GitError::PushRejected(format!("Failed to run git: {}", e)))?;
 
-    if url.starts_with("ssh://") || url.starts_with("git@") {
-        // SSH authentication
-        callbacks.credentials(|_url, username_from_url, _allowed_types| {
-            let user = username_from_url.unwrap_or("git");
-            let home = env::var("HOME").unwrap_or_else(|_| "/".to_string());
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        let stderr_lower = stderr.to_lowercase();
 
-            // Try ssh-agent first, then fall back to file-based key
-            Cred::ssh_key_from_agent(user).or_else(|_| {
-                Cred::ssh_key(
-                    user,
-                    None,
-                    Path::new(&format!("{}/.ssh/id_rsa", home)),
-                    None,
-                )
-            })
-        });
-    } else if url.starts_with("https://") {
-        // HTTPS: try credential helper
-        callbacks.credentials(|url, username, _allowed_types| {
-            let config = repo.config().ok();
-            if let Some(cfg) = config {
-                if let Ok(cred) = Cred::credential_helper(&cfg, url, username) {
-                    return Ok(cred);
-                }
-            }
-            Err(git2::Error::from_str("No credentials found"))
-        });
-    }
-
-    callbacks.push_update_reference(|refname, status| {
-        if let Some(msg) = status {
-            Err(git2::Error::from_str(&format!(
-                "Push rejected: {} - {}",
-                refname, msg
-            )))
-        } else {
-            Ok(())
+        // Check for missing/invalid remote first -- "does not appear to be a git
+        // repository" comes before "could not read from remote" in git's output
+        // when the remote name itself is invalid or not configured.
+        if stderr_lower.contains("does not appear to be a git repository")
+            || stderr_lower.contains("no such remote")
+        {
+            return Err(GitError::PushRejected(stderr));
         }
-    });
 
-    let mut push_opts = PushOptions::new();
-    push_opts.remote_callbacks(callbacks);
+        // Auth failures: permission denied, actual authentication errors
+        if stderr_lower.contains("authentication")
+            || stderr_lower.contains("permission denied")
+            || stderr_lower.contains("could not read from remote")
+        {
+            return Err(GitError::AuthFailed);
+        }
 
-    let refspec = format!(
-        "refs/heads/{}:refs/heads/{}",
-        branch_name, branch_name
-    );
-    remote_obj
-        .push(&[&refspec], Some(&mut push_opts))
-        .map_err(|e| {
-            let msg = e.message();
-            if msg.contains("authentication") || msg.contains("credential") {
-                GitError::AuthFailed
-            } else {
-                GitError::PushRejected(msg.to_string())
-            }
-        })?;
+        // Push rejected by remote (non-fast-forward, hooks, etc.)
+        if stderr_lower.contains("rejected")
+            || stderr_lower.contains("non-fast-forward")
+            || stderr_lower.contains("failed to push")
+        {
+            return Err(GitError::PushRejected(stderr));
+        }
+
+        // For upstream tracking issues, provide a helpful message
+        if stderr_lower.contains("no upstream branch")
+            || stderr_lower.contains("has no upstream")
+        {
+            return Err(GitError::PushRejected(format!(
+                "No upstream branch. Run: git push -u {} {}",
+                remote_name, branch_name
+            )));
+        }
+
+        return Err(GitError::PushRejected(stderr));
+    }
 
     Ok(())
 }
@@ -298,7 +294,7 @@ pub async fn commit(repo_path: String, message: String) -> Result<String, String
         .map_err(|e| e.to_string())
 }
 
-/// Push to remote repository.
+/// Push to remote repository using system git binary.
 #[tauri::command]
 pub async fn push(
     repo_path: String,
@@ -330,7 +326,7 @@ pub fn get_unpushed_count_impl(repo_path: &str) -> Result<usize, GitError> {
     let upstream_oid = match branch.upstream() {
         Ok(upstream) => upstream.get().target(),
         Err(_) => {
-            // No upstream configured — try origin/main or origin/master as fallback
+            // No upstream configured -- try origin/main or origin/master as fallback
             repo.find_reference("refs/remotes/origin/main")
                 .or_else(|_| repo.find_reference("refs/remotes/origin/master"))
                 .ok()
@@ -599,5 +595,35 @@ mod tests {
         let result = get_unpushed_count_impl(&path);
         assert!(result.is_ok(), "get_unpushed_count_impl failed: {:?}", result);
         assert_eq!(result.unwrap(), 0);
+    }
+
+    #[test]
+    fn push_impl_returns_error_for_non_repo() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().to_str().unwrap();
+        let result = push_impl(path, None, None);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            GitError::NotARepo => {}
+            e => panic!("Expected NotARepo, got {:?}", e),
+        }
+    }
+
+    #[test]
+    fn push_impl_returns_error_for_no_remote() {
+        let (_dir, path) = setup_git_repo();
+        // No remote configured -- git says "does not appear to be a git repository"
+        let result = push_impl(&path, None, None);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            GitError::PushRejected(msg) => {
+                assert!(
+                    msg.contains("does not appear to be a git repository"),
+                    "Expected remote-not-found message, got: {}",
+                    msg
+                );
+            }
+            e => panic!("Expected PushRejected for missing remote, got {:?}", e),
+        }
     }
 }
