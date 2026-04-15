@@ -117,6 +117,7 @@ pub fn run() {
             // Git
             git_status::get_git_status,
             git_status::get_git_files,
+            git_status::get_file_diff_stats,
             git_ops::stage_file,
             git_ops::unstage_file,
             git_ops::commit,

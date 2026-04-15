@@ -111,6 +111,65 @@ pub async fn get_git_files(path: String) -> Result<Vec<GitFileEntry>, String> {
         .map_err(|e| e.to_string())?
 }
 
+/// Per-file diff stats (additions/deletions) for the sidebar.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FileDiffStats {
+    pub path: String,
+    pub additions: usize,
+    pub deletions: usize,
+}
+
+/// Synchronous inner implementation of get_file_diff_stats for testing.
+///
+/// Computes per-file line additions/deletions by diffing HEAD tree against
+/// the working directory with index (captures both staged and unstaged changes).
+/// Uses git2's Patch API for accurate per-file line_stats.
+pub fn get_file_diff_stats_impl(repo_path: &str) -> Result<Vec<FileDiffStats>, String> {
+    let repo = Repository::open(repo_path).map_err(|e| e.to_string())?;
+
+    // Get HEAD tree (required to diff against)
+    let head_tree = repo
+        .head()
+        .and_then(|h| h.peel_to_tree())
+        .map_err(|e| e.to_string())?;
+
+    // Diff HEAD tree vs workdir+index -- captures all changes regardless of staging state
+    let diff = repo
+        .diff_tree_to_workdir_with_index(Some(&head_tree), None)
+        .map_err(|e| e.to_string())?;
+
+    let mut results = Vec::new();
+
+    for idx in 0..diff.deltas().len() {
+        if let Ok(Some(patch)) = git2::Patch::from_diff(&diff, idx) {
+            let (_, adds, dels) = patch.line_stats().unwrap_or((0, 0, 0));
+            if adds > 0 || dels > 0 {
+                let delta = diff.get_delta(idx).unwrap();
+                let rel = delta
+                    .new_file()
+                    .path()
+                    .unwrap_or(std::path::Path::new(""));
+                let full = format!("{}/{}", repo_path, rel.display());
+                results.push(FileDiffStats {
+                    path: full,
+                    additions: adds,
+                    deletions: dels,
+                });
+            }
+        }
+    }
+
+    Ok(results)
+}
+
+/// Return per-file diff stats (additions/deletions) for the git panel.
+#[tauri::command]
+pub async fn get_file_diff_stats(repo_path: String) -> Result<Vec<FileDiffStats>, String> {
+    spawn_blocking(move || get_file_diff_stats_impl(&repo_path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -183,6 +242,33 @@ mod tests {
         std::fs::write(&file_path, "new content").unwrap();
         let status = GitStatus::for_path(&path).unwrap();
         assert_eq!(status.untracked, 1);
+    }
+
+    #[test]
+    fn get_file_diff_stats_returns_additions_and_deletions() {
+        let (dir, path) = setup_git_repo();
+        // Create a file, commit it, then modify
+        let file = dir.path().join("stats.txt");
+        std::fs::write(&file, "line1\nline2\nline3\n").unwrap();
+        run_git(dir.path(), &["add", "stats.txt"]);
+        run_git(dir.path(), &["commit", "-m", "add stats.txt"]);
+
+        // Modify: remove line2, add two new lines
+        std::fs::write(&file, "line1\nline3\nnewA\nnewB\n").unwrap();
+
+        let stats = get_file_diff_stats_impl(&path).unwrap();
+        let entry = stats.iter().find(|s| s.path.ends_with("stats.txt"));
+        assert!(entry.is_some(), "stats.txt should have diff stats");
+        let entry = entry.unwrap();
+        assert!(entry.additions > 0, "Should have additions");
+        assert!(entry.deletions > 0, "Should have deletions");
+    }
+
+    #[test]
+    fn get_file_diff_stats_empty_for_clean_repo() {
+        let (_dir, path) = setup_git_repo();
+        let stats = get_file_diff_stats_impl(&path).unwrap();
+        assert!(stats.is_empty(), "Clean repo should have no diff stats");
     }
 
     #[test]

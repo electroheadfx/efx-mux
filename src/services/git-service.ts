@@ -80,6 +80,29 @@ export async function push(repoPath: string, remote?: string, branch?: string): 
 }
 
 /**
+ * Per-file diff stats (additions/deletions).
+ */
+export interface FileDiffStats {
+  path: string;
+  additions: number;
+  deletions: number;
+}
+
+/**
+ * Get per-file diff stats (additions/deletions) for all changed files.
+ * @param repoPath Path to the git repository root
+ * @returns Array of per-file stats, empty array on failure
+ */
+export async function getFileDiffStats(repoPath: string): Promise<FileDiffStats[]> {
+  try {
+    return await invoke<FileDiffStats[]>('get_file_diff_stats', { repoPath });
+  } catch (e) {
+    console.warn('[git-service] getFileDiffStats failed:', e);
+    return [];
+  }
+}
+
+/**
  * Get the number of commits ahead of upstream (unpushed commits).
  * @param repoPath Path to the git repository root
  * @returns Number of unpushed commits (0 if no upstream configured or on error)
