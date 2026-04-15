@@ -659,15 +659,27 @@ export function Sidebar() {
               height: '100%',
             }}
           >
-            {/* Header — just the add-project button */}
+            {/* Header — current project + add button */}
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'flex-end',
+                justifyContent: 'space-between',
                 padding: '16px 16px 12px 12px',
               }}
             >
+              <span
+                style={{
+                  fontFamily: fonts.sans,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: colors.textPrimary,
+                  letterSpacing: '1px',
+                  textTransform: 'uppercase',
+                }}
+              >
+                {activeProjectName.value || 'NO PROJECT'}
+              </span>
               <button
                 style={{
                   display: 'flex',
