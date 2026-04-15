@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 Phase: 16 (sidebar-evolution-git-control) — EXECUTING
 Plan: 1 of 1
 Status: Executing Phase 16
-Last activity: 2026-04-15 -- Completed quick task 260415-h39: Add git history accordion
+Last activity: 2026-04-15 -- Completed quick task 260415-he6: Add per-file revert and Revert All
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -71,6 +71,7 @@ None.
 | 260415-fv4 | Redesign git-control-tab to Zed editor layout | 2026-04-15 |
 | 260415-gkz | Redesign git-control-tab to Zed panel layout: gray checkboxes, diff stats, click-to-diff | 2026-04-15 |
 | 260415-h39 | Add git history accordion section with commit log above branch bar | 2026-04-15 |
+| 260415-he6 | Add per-file revert button and replace ellipsis with Revert All in Git tab | 2026-04-15 |
 
 ## Session Continuity
 
