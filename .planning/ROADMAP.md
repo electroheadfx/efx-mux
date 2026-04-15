@@ -41,7 +41,7 @@
 
 - [x] **Phase 15: Foundation Primitives** (2 plans) -- Shared UI components and Rust write commands (completed 2026-04-14)
 - [x] **Phase 16: Sidebar Evolution + Git Control** (3 plans) -- 3-tab sidebar with git staging/commit/push (completed 2026-04-15)
-- [ ] **Phase 17: Main Panel File Tabs** (3 plans) -- CodeMirror editor tabs with dropdown menu
+- [ ] **Phase 17: Main Panel File Tabs** (5 plans) -- CodeMirror editor tabs with dropdown menu
 - [ ] **Phase 18: File Tree Enhancements** -- Delete, drag/drop, external editor integration
 - [ ] **Phase 19: GSD Sub-Tabs** -- 5 sub-tabs for Milestones, Phases, Progress, History, State
 - [ ] **Phase 20: Right Panel Multi-Terminal** -- Plus menu for Terminal/Agent sub-TUI
@@ -91,10 +91,13 @@
   5. User can reorder tabs via drag and drop
   6. User can add new tabs via dropdown menu (Terminal Zsh, Agent, Git changes)
   7. User can view git changes panel with accordion per-file diffs
-**Plans**: 3 plans
+**Plans**: 5 plans
+Plans:
   - [ ] 17-01-PLAN.md -- CM6 packages, editor infrastructure (theme, languages, setup), confirmation modal
   - [ ] 17-02-PLAN.md -- Unified tab bar, editor tab component, terminal-tabs refactor
   - [ ] 17-03-PLAN.md -- Git changes tab, main panel rewire, file-opened flow, human verification
+  - [ ] 17-04-PLAN.md -- Gap closure: DnD reorder fix, dropdown click fix, remove Diff tab
+  - [ ] 17-05-PLAN.md -- Gap closure: git refresh after save, editor revert sync, terminal tab persistence
 **UI hint**: yes
 
 ### Phase 18: File Tree Enhancements
@@ -170,7 +173,7 @@ Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21
 | 14. Consolidation | v0.2.0 | 2/2 | Complete | 2026-04-12 |
 | 15. Foundation Primitives | v0.3.0 | 2/2 | Complete    | 2026-04-14 |
 | 16. Sidebar Evolution + Git Control | v0.3.0 | 4/4 | Complete   | 2026-04-15 |
-| 17. Main Panel File Tabs | v0.3.0 | 0/3 | Planned | - |
+| 17. Main Panel File Tabs | v0.3.0 | 3/5 | Gap closure | - |
 | 18. File Tree Enhancements | v0.3.0 | 0/? | Not started | - |
 | 19. GSD Sub-Tabs | v0.3.0 | 0/? | Not started | - |
 | 20. Right Panel Multi-Terminal | v0.3.0 | 0/? | Not started | - |
@@ -178,4 +181,4 @@ Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21
 
 ---
 *Roadmap created: 2026-04-06*
-*Last updated: 2026-04-15 (Phase 17 plans created)*
+*Last updated: 2026-04-15 (Phase 17 gap closure plans added)*
