@@ -82,6 +82,28 @@ export function EditorTab({ tabId, filePath, fileName, content, isActive }: Edit
     }
   }, [isActive]);
 
+  // Listen for editor-save event (dispatched by main.tsx on Cmd+S)
+  useEffect(() => {
+    function onEditorSave() {
+      if (viewRef.current) {
+        viewRef.current.focus();
+        // Dispatch a synthetic Mod-s event so CM6's keymap handles it
+        const event = new KeyboardEvent('keydown', {
+          key: 's',
+          keyCode: 19,
+          which: 19,
+          bubbles: true,
+          cancelable: true,
+          metaKey: true,
+          ctrlKey: false,
+        });
+        viewRef.current.dom.dispatchEvent(event);
+      }
+    }
+    document.addEventListener('editor-save', onEditorSave);
+    return () => document.removeEventListener('editor-save', onEditorSave);
+  }, []);
+
   return (
     <div
       style={{

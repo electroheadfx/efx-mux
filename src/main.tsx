@@ -30,7 +30,7 @@ import {
   getProjects, getActiveProject, projects, activeProjectName
 } from './state-manager';
 import { openProjectModal } from './components/project-modal';
-import { openEditorTab, restoreEditorTabs } from './components/unified-tab-bar';
+import { openEditorTab, restoreEditorTabs, activeUnifiedTabId } from './components/unified-tab-bar';
 import { serverPaneState, saveCurrentProjectState, restoreProjectState } from './components/server-pane';
 import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from './components/file-tree';
 import { detectAgent } from './server/server-bridge';
@@ -162,8 +162,11 @@ async function bootstrap() {
         sidebarCollapsed.value = !sidebarCollapsed.value;
         break;
       case key === 's' && e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey:
-        // Cmd+S: prevent browser Save Page dialog, let CM6 handle save
+        // Cmd+S: prevent browser Save Page dialog, dispatch save event to active editor
         e.preventDefault();
+        if (activeUnifiedTabId.value.startsWith('editor-')) {
+          document.dispatchEvent(new CustomEvent('editor-save'));
+        }
         break;
       case key === 's' && e.ctrlKey && !e.shiftKey && !e.altKey:
         e.preventDefault(); e.stopPropagation();
