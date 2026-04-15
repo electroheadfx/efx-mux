@@ -135,9 +135,10 @@ activeTabId.subscribe(id => {
   if (!id) return;
   const current = activeUnifiedTabId.value;
   if (current === id) return;
-  // Only sync if no tab is active, or the active tab is a terminal tab
   const currentTab = allTabs.value.find(t => t.id === current);
-  if (!current || !currentTab || currentTab.type === 'terminal') {
+  // Only sync if no unified tab is active, or the active tab is already a terminal
+  // NEVER hijack focus from editor or git-changes tabs
+  if (!current || currentTab?.type === 'terminal') {
     activeUnifiedTabId.value = id;
   }
 });
@@ -389,89 +390,181 @@ function buildDropdownItems(): DropdownItem[] {
   ];
 }
 
-// ── Drag-and-Drop ───────────────────────────────────────────────────────────────
+// ── Tab Reorder (mouse-based) ───────────────────────────────────────────────────
+// HTML5 Drag and Drop API does NOT work in Tauri/WKWebView on macOS.
+// WKWebView's native drag system hijacks dragstart and fires dragend immediately
+// without any dragover/drop events. The green plus/copy OS badge appears instead.
+// Solution: pure mouse events (mousedown → mousemove → mouseup).
 
-interface DragState {
+const DRAG_THRESHOLD = 5; // px before drag starts
+
+interface ReorderState {
   sourceId: string | null;
-  overId: string | null;
+  sourceEl: HTMLElement | null;
+  ghostEl: HTMLElement | null;
+  startX: number;
+  dragging: boolean;
 }
 
-const dragState = { sourceId: null as string | null, overId: null as string | null };
+const reorder: ReorderState = {
+  sourceId: null,
+  sourceEl: null,
+  ghostEl: null,
+  startX: 0,
+  dragging: false,
+};
 
-function handleDragStart(e: DragEvent, tabId: string): void {
-  if (!e.dataTransfer) return;
-  dragState.sourceId = tabId;
-  e.dataTransfer.setData('text/plain', tabId);
-  e.dataTransfer.effectAllowed = 'move';
-  const target = e.target as HTMLElement;
-  target.style.opacity = '0.5';
-}
+function onTabMouseDown(e: MouseEvent, tabId: string): void {
+  // Only left button, ignore close button clicks
+  if (e.button !== 0) return;
+  const target = e.currentTarget as HTMLElement;
+  // Don't start drag from the close button
+  if ((e.target as HTMLElement).closest('[title="Close tab"]')) return;
 
-function handleDragOver(e: DragEvent, tabId: string): void {
+  // Prevent text selection during drag
   e.preventDefault();
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-  if (dragState.overId !== tabId) {
-    dragState.overId = tabId;
-    // Visual indicator: 2px left border in accent color
-    const allTabEls = document.querySelectorAll('[data-tab-id]');
-    allTabEls.forEach(el => {
-      const el_ = el as HTMLElement;
-      if (el_.dataset.tabId === tabId) {
-        el_.style.borderLeft = `2px solid ${colors.accent}`;
-      } else {
-        el_.style.borderLeft = '';
-      }
-    });
-  }
+
+  reorder.sourceId = tabId;
+  reorder.sourceEl = target;
+  reorder.startX = e.clientX;
+  reorder.dragging = false;
+
+  document.addEventListener('mousemove', onDocMouseMove);
+  document.addEventListener('mouseup', onDocMouseUp);
 }
 
-function handleDragLeave(_e: DragEvent, _tabId: string): void {
-  // Could remove border here, but handleDragOver handles most cases
-}
+function onDocMouseMove(e: MouseEvent): void {
+  if (!reorder.sourceId || !reorder.sourceEl) return;
 
-function handleDrop(e: DragEvent, targetId: string): void {
-  e.preventDefault();
-  const sourceId = dragState.sourceId;
-  if (!sourceId || sourceId === targetId) {
-    clearDragState();
-    return;
-  }
+  const dx = Math.abs(e.clientX - reorder.startX);
 
-  // Operate on the full ordered list (all tab types) so terminal tabs can also be reordered
-  const ordered = getOrderedTabs();
-  const allIds = ordered.map(t => t.id);
-  const sourceIdx = allIds.indexOf(sourceId);
-  const targetIdx = allIds.indexOf(targetId);
+  // Start dragging after threshold
+  if (!reorder.dragging && dx >= DRAG_THRESHOLD) {
+    reorder.dragging = true;
+    reorder.sourceEl.style.opacity = '0.4';
 
-  if (sourceIdx === -1 || targetIdx === -1) {
-    clearDragState();
-    return;
+    // Create ghost element
+    const ghost = reorder.sourceEl.cloneNode(true) as HTMLElement;
+    ghost.style.position = 'fixed';
+    ghost.style.top = `${reorder.sourceEl.getBoundingClientRect().top}px`;
+    ghost.style.left = `${e.clientX - 40}px`;
+    ghost.style.opacity = '0.8';
+    ghost.style.pointerEvents = 'none';
+    ghost.style.zIndex = '9999';
+    ghost.style.transition = 'none';
+    ghost.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+    ghost.style.borderRadius = '6px';
+    document.body.appendChild(ghost);
+    reorder.ghostEl = ghost;
   }
 
-  // Remove source from order
-  allIds.splice(sourceIdx, 1);
-  // Insert source before target
-  const insertAt = allIds.indexOf(targetId);
-  allIds.splice(insertAt, 0, sourceId);
+  if (!reorder.dragging) return;
 
-  setProjectTabOrder(allIds);
-  clearDragState();
-}
+  // Move ghost
+  if (reorder.ghostEl) {
+    reorder.ghostEl.style.left = `${e.clientX - 40}px`;
+  }
 
-function handleDragEnd(): void {
-  clearDragState();
-}
-
-function clearDragState(): void {
-  dragState.sourceId = null;
-  dragState.overId = null;
-  // Remove all visual indicators
-  const allTabEls = document.querySelectorAll('[data-tab-id]');
-  allTabEls.forEach(el => {
-    const el_ = el as HTMLElement;
-    el_.style.borderLeft = '';
-    el_.style.opacity = '';
+  // Find tab under cursor and show drop indicator
+  const tabEls = document.querySelectorAll<HTMLElement>('[data-tab-id]');
+  tabEls.forEach(el => {
+    el.style.borderLeft = '';
+    el.style.borderRight = '';
   });
+
+  for (const el of tabEls) {
+    const rect = el.getBoundingClientRect();
+    if (e.clientX >= rect.left && e.clientX <= rect.right) {
+      const mid = rect.left + rect.width / 2;
+      if (el.dataset.tabId !== reorder.sourceId) {
+        if (e.clientX < mid) {
+          el.style.borderLeft = `2px solid ${colors.accent}`;
+        } else {
+          el.style.borderRight = `2px solid ${colors.accent}`;
+        }
+      }
+      break;
+    }
+  }
+}
+
+function onDocMouseUp(e: MouseEvent): void {
+  document.removeEventListener('mousemove', onDocMouseMove);
+  document.removeEventListener('mouseup', onDocMouseUp);
+
+  if (!reorder.dragging || !reorder.sourceId) {
+    cleanupReorder();
+    return;
+  }
+
+  // Find drop target
+  const tabEls = document.querySelectorAll<HTMLElement>('[data-tab-id]');
+  let targetId: string | null = null;
+  let insertAfter = false;
+
+  for (const el of tabEls) {
+    const rect = el.getBoundingClientRect();
+    if (e.clientX >= rect.left && e.clientX <= rect.right) {
+      targetId = el.dataset.tabId ?? null;
+      const mid = rect.left + rect.width / 2;
+      insertAfter = e.clientX >= mid;
+      break;
+    }
+  }
+
+  // If dropped outside tabs, find nearest
+  if (!targetId) {
+    let closestDist = Infinity;
+    for (const el of tabEls) {
+      const rect = el.getBoundingClientRect();
+      const center = rect.left + rect.width / 2;
+      const dist = Math.abs(e.clientX - center);
+      if (dist < closestDist) {
+        closestDist = dist;
+        targetId = el.dataset.tabId ?? null;
+        insertAfter = e.clientX > center;
+      }
+    }
+  }
+
+  if (targetId && targetId !== reorder.sourceId) {
+    const ordered = getOrderedTabs();
+    const allIds = ordered.map(t => t.id);
+    const sourceIdx = allIds.indexOf(reorder.sourceId);
+
+    if (sourceIdx !== -1) {
+      // Remove source
+      allIds.splice(sourceIdx, 1);
+      // Find target position (after removal)
+      let targetIdx = allIds.indexOf(targetId);
+      if (targetIdx !== -1) {
+        if (insertAfter) targetIdx += 1;
+        allIds.splice(targetIdx, 0, reorder.sourceId);
+        setProjectTabOrder(allIds);
+      }
+    }
+  }
+
+  cleanupReorder();
+}
+
+function cleanupReorder(): void {
+  if (reorder.sourceEl) {
+    reorder.sourceEl.style.opacity = '';
+  }
+  if (reorder.ghostEl) {
+    reorder.ghostEl.remove();
+  }
+  // Clear all indicators
+  document.querySelectorAll<HTMLElement>('[data-tab-id]').forEach(el => {
+    el.style.borderLeft = '';
+    el.style.borderRight = '';
+  });
+  reorder.sourceId = null;
+  reorder.sourceEl = null;
+  reorder.ghostEl = null;
+  reorder.startX = 0;
+  reorder.dragging = false;
 }
 
 // ── Component ───────────────────────────────────────────────────────────────────
@@ -606,12 +699,13 @@ function renderTab(
   }
 
   return (
-    <button
+    <div
       key={tab.id}
       role="tab"
+      tabIndex={0}
       aria-selected={isActive}
       data-tab-id={tab.id}
-      class="flex items-center gap-2 cursor-pointer transition-all duration-150 shrink-0"
+      class="flex items-center gap-2 cursor-pointer shrink-0"
       style={{
         backgroundColor: isActive ? colors.bgElevated : 'transparent',
         border: isActive ? `1px solid ${colors.bgSurface}` : '1px solid transparent',
@@ -625,15 +719,11 @@ function renderTab(
         whiteSpace: 'nowrap',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
+        userSelect: 'none',
       }}
       onClick={() => onClick(tab)}
       title={tabTitle}
-      draggable
-      onDragStart={e => handleDragStart(e, tab.id)}
-      onDragOver={e => handleDragOver(e, tab.id)}
-      onDragLeave={e => handleDragLeave(e, tab.id)}
-      onDrop={e => handleDrop(e, tab.id)}
-      onDragEnd={handleDragEnd}
+      onMouseDown={e => onTabMouseDown(e, tab.id)}
     >
       {indicator}
       <span
@@ -661,6 +751,6 @@ function renderTab(
       >
         {'\u00D7'}
       </span>
-    </button>
+    </div>
   );
 }
