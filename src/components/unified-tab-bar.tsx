@@ -332,38 +332,25 @@ function switchToAdjacentTab(currentId: string): void {
 function getOrderedTabs(): UnifiedTab[] {
   const all = allTabs.value;
 
-  // Separate terminals from non-terminals
-  const terminals: UnifiedTab[] = [];
-  const nonTerminals: UnifiedTab[] = [];
-  all.forEach(t => {
-    if (t.type === 'terminal') {
-      terminals.push(t);
-    } else {
-      nonTerminals.push(t);
-    }
-  });
-
-  // Terminals always stay in their original (creation) order — never reordered by tabOrder
-  // Non-terminals (editors, git-changes) are sorted by tabOrder for drag-and-drop
-
   if (tabOrder.value.length === 0) {
     return all; // No custom order yet, return natural order
   }
 
-  // Build ordered non-terminals from tabOrder
-  const orderedNonTerminals = tabOrder.value
-    .map(id => nonTerminals.find(t => t.id === id))
+  // Sort ALL tabs (terminals, editors, git-changes) by their position in tabOrder.
+  // Tabs not in tabOrder get appended at the end in their original order.
+  const order = tabOrder.value;
+  const ordered: UnifiedTab[] = order
+    .map(id => all.find(t => t.id === id))
     .filter((t): t is UnifiedTab => t !== undefined);
 
-  // Fallback: any non-terminal not in tabOrder gets appended at the end
-  nonTerminals.forEach(t => {
-    if (!orderedNonTerminals.find(ot => ot.id === t.id)) {
-      orderedNonTerminals.push(t);
+  // Append any tabs not yet in tabOrder (backward compat for new tabs)
+  all.forEach(t => {
+    if (!ordered.find(ot => ot.id === t.id)) {
+      ordered.push(t);
     }
   });
 
-  // Terminals are ALWAYS first, in their original creation order
-  return [...terminals, ...orderedNonTerminals];
+  return ordered;
 }
 
 // ── Dropdown Items ─────────────────────────────────────────────────────────────
@@ -436,9 +423,11 @@ function handleDrop(e: DragEvent, targetId: string): void {
     return;
   }
 
-  const order = [...tabOrder.value];
-  const sourceIdx = order.indexOf(sourceId);
-  const targetIdx = order.indexOf(targetId);
+  // Operate on the full ordered list (all tab types) so terminal tabs can also be reordered
+  const ordered = getOrderedTabs();
+  const allIds = ordered.map(t => t.id);
+  const sourceIdx = allIds.indexOf(sourceId);
+  const targetIdx = allIds.indexOf(targetId);
 
   if (sourceIdx === -1 || targetIdx === -1) {
     clearDragState();
@@ -446,12 +435,12 @@ function handleDrop(e: DragEvent, targetId: string): void {
   }
 
   // Remove source from order
-  order.splice(sourceIdx, 1);
+  allIds.splice(sourceIdx, 1);
   // Insert source before target
-  const insertAt = order.indexOf(targetId);
-  order.splice(insertAt, 0, sourceId);
+  const insertAt = allIds.indexOf(targetId);
+  allIds.splice(insertAt, 0, sourceId);
 
-  setProjectTabOrder(order);
+  setProjectTabOrder(allIds);
   clearDragState();
 }
 

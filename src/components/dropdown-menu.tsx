@@ -209,8 +209,8 @@ export function Dropdown({ items, trigger }: DropdownProps) {
                   backgroundColor: isSelected ? colors.accentMuted : 'transparent',
                 }}
               >
-                {item.icon && <item.icon size={14} />}
-                {item.label}
+                {item.icon && <item.icon size={14} style={{ pointerEvents: 'none' }} />}
+                <span style={{ pointerEvents: 'none' }}>{item.label}</span>
               </div>
             );
           })}
