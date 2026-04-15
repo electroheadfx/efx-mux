@@ -14,6 +14,7 @@ import {
   activeTabId,
   createNewTab,
   closeTab,
+  switchToTab,
 } from './terminal-tabs';
 import { writeFile, readFile } from '../services/file-service';
 import { getEditorCurrentContent } from '../editor/setup';
@@ -127,8 +128,16 @@ terminalTabs.value.forEach(t => {
 });
 
 // When activeTabId changes from terminal-tabs, sync activeUnifiedTabId
+// Guard: only sync if the current unified tab is already a terminal tab (or empty).
+// This prevents terminal-tabs signal emissions from hijacking focus away from
+// editor/git-changes tabs during unrelated signal cascades.
 activeTabId.subscribe(id => {
-  if (id && activeUnifiedTabId.value !== id) {
+  if (!id) return;
+  const current = activeUnifiedTabId.value;
+  if (current === id) return;
+  // Only sync if no tab is active, or the active tab is a terminal tab
+  const currentTab = allTabs.value.find(t => t.id === current);
+  if (!current || !currentTab || currentTab.type === 'terminal') {
     activeUnifiedTabId.value = id;
   }
 });
@@ -244,6 +253,11 @@ export function closeUnifiedTab(tabId: string): void {
 
   if (tab.type === 'terminal') {
     closeTab(tabId);
+    setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
+    // After closing, if no terminal tabs remain, switch to another unified tab
+    if (terminalTabs.value.length === 0) {
+      switchToAdjacentTab(tabId);
+    }
     return;
   }
 
@@ -365,7 +379,7 @@ function buildDropdownItems(): DropdownItem[] {
     {
       label: 'Agent',
       icon: Bot,
-      action: () => createNewTab(),
+      action: () => createNewTab({ isAgent: true }),
     },
     {
       label: 'Git Changes',
@@ -469,9 +483,10 @@ export function UnifiedTabBar() {
 
   function handleTabClick(tab: UnifiedTab): void {
     activeUnifiedTabId.value = tab.id;
-    // If it's a terminal tab, also sync activeTabId so terminal container visibility works
+    // If it's a terminal tab, sync activeTabId and switch container visibility
     if (tab.type === 'terminal') {
       activeTabId.value = tab.id;
+      switchToTab(tab.id);
     }
   }
 

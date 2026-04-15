@@ -15,6 +15,7 @@ import { registerTerminal, getTheme } from '../theme/theme-manager';
 import { updateSession, activeProjectName, projects, getCurrentState } from '../state-manager';
 import { detectAgent } from '../server/server-bridge';
 import { colors, fonts } from '../tokens';
+import { projectSessionName } from '../utils/session-name';
 import { CrashOverlay } from './crash-overlay';
 
 // ---------------------------------------------------------------------------
@@ -35,6 +36,11 @@ export interface TerminalTab {
   isAgent: boolean;  // true if this tab runs an agent (claude/opencode)
 }
 
+export interface CreateTabOptions {
+  /** When true, resolve and launch the project's configured agent binary */
+  isAgent?: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Signals
 // ---------------------------------------------------------------------------
@@ -53,16 +59,6 @@ const projectTabCache = new Map<string, Array<{ sessionName: string; label: stri
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Derive a tmux session name from a project name.
- * Sanitizes to alphanumeric + hyphen + underscore (matching pty.rs sanitization).
- */
-function projectSessionName(projectName: string | null, suffix?: string): string {
-  if (!projectName) return suffix ? `efx-mux-${suffix}` : 'efx-mux';
-  const base = projectName.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
-  return suffix ? `${base}-${suffix}` : base;
-}
 
 function getTerminalContainersEl(): HTMLElement | null {
   return document.querySelector('.terminal-containers');
@@ -103,19 +99,32 @@ async function resolveAgentBinary(agent?: string): Promise<string | undefined> {
   }
 }
 
+/**
+ * Derive a human-readable label for an agent binary name.
+ */
+function agentLabel(agent?: string): string {
+  if (agent === 'claude') return 'Claude';
+  if (agent === 'opencode') return 'OpenCode';
+  return agent ?? 'Agent';
+}
+
 // ---------------------------------------------------------------------------
 // Tab management functions (exported for keyboard handler)
 // ---------------------------------------------------------------------------
 
 /**
  * Create a new terminal tab with its own tmux session.
+ * @param options.isAgent - When true, resolve the project's configured agent
+ *   binary and launch it instead of a plain shell.
  */
-export async function createNewTab(): Promise<TerminalTab | null> {
+export async function createNewTab(options?: CreateTabOptions): Promise<TerminalTab | null> {
   const wrapper = getTerminalContainersEl();
   if (!wrapper) {
     console.error('[efxmux] .terminal-containers not found');
     return null;
   }
+
+  const wantAgent = options?.isAgent ?? false;
 
   tabCounter++;
   const id = `tab-${Date.now()}-${tabCounter}`;
@@ -125,12 +134,23 @@ export async function createNewTab(): Promise<TerminalTab | null> {
   const sessionSuffix = tabCounter > 1 ? String(tabCounter) : undefined;
   const sessionName = projectSessionName(activeName, sessionSuffix);
 
-  // Label: first tab gets agent name if configured
+  // Resolve project info (needed for working directory and agent config)
   const projectInfo = await getActiveProjectInfo();
-  const isFirstTab = terminalTabs.value.length === 0;
+
+  // Resolve agent binary when requested
+  let agentBinary: string | undefined;
+  if (wantAgent) {
+    agentBinary = await resolveAgentBinary(projectInfo?.agent);
+  }
+  const isAgent = wantAgent && !!agentBinary;
+
+  // Label: agent tabs get the agent name, plain tabs get "Terminal N"
   let label: string;
-  if (isFirstTab && projectInfo?.agent && projectInfo.agent !== 'bash') {
-    label = projectInfo.agent === 'claude' ? 'Claude' : projectInfo.agent === 'opencode' ? 'OpenCode' : `Terminal ${tabCounter}`;
+  if (isAgent) {
+    label = agentLabel(projectInfo?.agent);
+  } else if (wantAgent && !agentBinary) {
+    // User requested agent but binary not found — label makes failure visible
+    label = `${agentLabel(projectInfo?.agent)} (no binary)`;
   } else {
     label = `Terminal ${tabCounter}`;
   }
@@ -159,7 +179,7 @@ export async function createNewTab(): Promise<TerminalTab | null> {
     disconnectPty: undefined,
     detachResize: undefined,
     exitCode: undefined,
-    isAgent: false,  // Ctrl+T / [+] tabs are always plain shell
+    isAgent,
   };
   terminalTabs.value = [...terminalTabs.value, partialTab];
   activeTabId.value = id;
@@ -171,13 +191,17 @@ export async function createNewTab(): Promise<TerminalTab | null> {
   await nextFrame();
   fitAddon.fit();
 
-  // Connect PTY -- Ctrl+T tabs are always plain shell (UAT gap 1)
-  const agentBinary = undefined;
+  // Warn if user requested agent but binary not available
+  if (wantAgent && !agentBinary) {
+    terminal.writeln(`\x1b[33mAgent binary "${projectInfo?.agent ?? 'unknown'}" not found. Starting plain shell.\x1b[0m`);
+  }
+
+  // Connect PTY -- pass agent binary when creating an agent tab
   let disconnectPty: (() => void) | undefined;
   let ptyConnected = false;
 
   try {
-    const conn = await connectPty(terminal, sessionName, projectInfo?.path, agentBinary);
+    const conn = await connectPty(terminal, sessionName, projectInfo?.path, agentBinary, true);
     disconnectPty = conn.disconnect;
     ptyConnected = true;
   } catch (err) {
@@ -211,15 +235,17 @@ export async function closeActiveTab(): Promise<void> {
 
   const tab = tabs[idx];
   // Destroy PTY session in Rust before disposing JS-side resources
-  try { await invoke('destroy_pty_session', { sessionName: tab.sessionName }); } catch {}
+  try { await invoke('destroy_pty_session', { sessionName: tab.sessionName }); } catch (err) {
+    console.warn('[efxmux] Failed to destroy PTY session:', err);
+  }
   disposeTab(tab);
 
   const remaining = tabs.filter(t => t.id !== currentId);
   terminalTabs.value = remaining;
 
   if (remaining.length === 0) {
-    // D-07: closing last tab auto-creates fresh default
-    await createNewTab();
+    // Last terminal tab closed — don't auto-create if other unified tabs exist
+    activeTabId.value = '';
   } else {
     // Switch to previous tab (or first)
     const newIdx = Math.min(idx, remaining.length - 1);
@@ -245,7 +271,9 @@ export async function closeTab(tabId: string): Promise<void> {
   }
 
   const tab = tabs[idx];
-  try { await invoke('destroy_pty_session', { sessionName: tab.sessionName }); } catch {}
+  try { await invoke('destroy_pty_session', { sessionName: tab.sessionName }); } catch (err) {
+    console.warn('[efxmux] Failed to destroy PTY session:', err);
+  }
   disposeTab(tab);
   terminalTabs.value = tabs.filter(t => t.id !== tabId);
   persistTabState();
@@ -365,7 +393,7 @@ export async function initFirstTab(
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function switchToTab(tabId: string): void {
+export function switchToTab(tabId: string): void {
   const tabs = terminalTabs.value;
   for (const tab of tabs) {
     if (tab.id === tabId) {
@@ -449,7 +477,7 @@ export async function restartTabSession(tabId: string): Promise<void> {
   // Connect PTY -- only resolve agent binary if this tab was originally an agent tab
   const restartAgentBinary = tab.isAgent ? await resolveAgentBinary(projectInfo?.agent) : undefined;
   try {
-    const conn = await connectPty(terminal, newSessionName, projectInfo?.path, restartAgentBinary);
+    const conn = await connectPty(terminal, newSessionName, projectInfo?.path, restartAgentBinary, true);
     tab.disconnectPty = conn.disconnect;
     tab.ptyConnected = true;
   } catch (err) {
