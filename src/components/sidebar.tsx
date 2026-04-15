@@ -21,6 +21,7 @@ import {
 import type { ProjectEntry, GitData } from '../state-manager';
 import { openProjectModal } from './project-modal';
 import { colors, fonts, fontSizes, spacing, radii } from '../tokens';
+import { FileTree } from './file-tree';
 
 // ---------------------------------------------------------------------------
 // Local signals for sidebar-only state
@@ -31,6 +32,10 @@ const gitFiles = signal<Array<{ name: string; path: string; status: string }>>([
 const gitSectionOpen = signal(true);
 const removeTarget = signal<string | null>(null);
 const appVersion = signal<string>('');
+
+// Tab navigation state (Phase 16, D-01 through D-04)
+type SidebarTab = 'projects' | 'files' | 'git';
+const activeTab = signal<SidebarTab>('projects');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -72,6 +77,128 @@ async function refreshGitFiles(): Promise<void> {
     console.warn('[efxmux] Failed to fetch git files:', err);
     gitFiles.value = [];
   }
+}
+
+// ---------------------------------------------------------------------------
+// Tab navigation components (Phase 16, D-01 through D-04)
+// ---------------------------------------------------------------------------
+
+function TabRow() {
+  const tabs: { id: SidebarTab; label: string }[] = [
+    { id: 'projects', label: 'Projects' },
+    { id: 'files', label: 'Files' },
+    { id: 'git', label: 'Git' },
+  ];
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: 0,
+        padding: `0 ${spacing['3xl']}px`,
+        borderBottom: `1px solid ${colors.bgBorder}`,
+      }}
+    >
+      {tabs.map(tab => (
+        <button
+          key={tab.id}
+          onClick={() => { activeTab.value = tab.id; }}
+          style={{
+            padding: `${spacing.xl}px ${spacing['3xl']}px`,
+            fontFamily: fonts.sans,
+            fontSize: 11,
+            fontWeight: activeTab.value === tab.id ? 600 : 400,
+            color: activeTab.value === tab.id ? colors.textPrimary : colors.textMuted,
+            backgroundColor: 'transparent',
+            border: 'none',
+            borderBottom: activeTab.value === tab.id
+              ? `2px solid ${colors.accent}`
+              : '2px solid transparent',
+            cursor: 'pointer',
+            marginBottom: -1,
+          }}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function TabContent() {
+  if (activeTab.value === 'projects') {
+    return (
+      <>
+        {/* Projects section label */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '1px 7px 4px',
+          }}
+        >
+          <span
+            style={{
+              fontFamily: fonts.mono,
+              fontSize: 10,
+              fontWeight: 500,
+              letterSpacing: '1.5px',
+              color: colors.textDim,
+            }}
+          >
+            PROJECTS
+          </span>
+        </div>
+
+        {/* Project list */}
+        <div class="flex-1 overflow-y-auto">
+          {projects.value.length === 0 ? (
+            <div
+              style={{
+                padding: `${spacing['4xl']}px ${spacing.md}px`,
+                fontSize: fontSizes.base,
+                color: colors.textMuted,
+                textAlign: 'center',
+              }}
+            >
+              No projects yet
+            </div>
+          ) : (
+            projects.value.map((p, i) => (
+              <ProjectRow key={p.name} project={p} index={i} />
+            ))
+          )}
+        </div>
+      </>
+    );
+  }
+
+  if (activeTab.value === 'files') {
+    return (
+      <div class="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
+        <FileTree />
+      </div>
+    );
+  }
+
+  if (activeTab.value === 'git') {
+    // Placeholder for GitControlTab (implemented in Plan 03)
+    return (
+      <div
+        style={{
+          padding: spacing['4xl'],
+          fontFamily: fonts.sans,
+          fontSize: 12,
+          color: colors.textMuted,
+        }}
+      >
+        Git Control tab coming soon...
+      </div>
+    );
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -583,159 +710,11 @@ export function Sidebar() {
               </button>
             </div>
 
-            {/* Projects section label — matches reference SectionLabel */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '1px 7px 4px',
-              }}
-            >
-              <span
-                style={{
-                  fontFamily: fonts.mono,
-                  fontSize: 10,
-                  fontWeight: 500,
-                  letterSpacing: '1.5px',
-                  color: colors.textDim,
-                }}
-              >
-                PROJECTS
-              </span>
-            </div>
+            {/* Tab row (Phase 16, D-01 through D-04) */}
+            <TabRow />
 
-            {/* Project list */}
-            <div class="flex-1 overflow-y-auto">
-              {projects.value.length === 0 ? (
-                <div
-                  style={{
-                    padding: `${spacing['4xl']}px ${spacing.md}px`,
-                    fontSize: fontSizes.base,
-                    color: colors.textMuted,
-                    textAlign: 'center',
-                  }}
-                >
-                  No projects yet
-                </div>
-              ) : (
-                projects.value.map((p, i) => (
-                  <ProjectRow key={p.name} project={p} index={i} />
-                ))
-              )}
-            </div>
-
-            {/* Divider — matches reference */}
-            <div style={{ padding: '10px 16px' }}>
-              <div style={{ height: 1, width: '100%', backgroundColor: colors.bgBorder }} />
-            </div>
-
-            {/* Git section — matches reference SectionLabel + GitBranch + GitFile */}
-            <div
-              style={{
-                flex: 1,
-                minHeight: 0,
-                display: 'flex',
-                flexDirection: 'column',
-              }}
-            >
-              {/* Section label with badge */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '1px 7px 4px',
-                }}
-              >
-                <span
-                  style={{
-                    fontFamily: fonts.mono,
-                    fontSize: 10,
-                    fontWeight: 500,
-                    letterSpacing: '1.5px',
-                    color: colors.textDim,
-                  }}
-                >
-                  GIT CHANGES
-                </span>
-                {totalChanges.value > 0 && (
-                  <span
-                    style={{
-                      fontFamily: fonts.mono,
-                      fontSize: 10,
-                      fontWeight: 600,
-                      color: colors.accent,
-                      backgroundColor: colors.accentMuted,
-                      borderRadius: 8,
-                      padding: '1px 6px',
-                    }}
-                  >
-                    {totalChanges.value}
-                  </span>
-                )}
-                <div style={{ flex: 1 }} />
-                <div
-                  style={{
-                    width: 20,
-                    height: 20,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: colors.textMuted,
-                    cursor: 'pointer',
-                  }}
-                  class="hover:text-accent"
-                  title="Refresh git status"
-                  aria-label="Refresh git status"
-                  onClick={async () => { await refreshAllGitStatus(); }}
-                >
-                  <RotateCw size={12} />
-                </div>
-              </div>
-
-              {/* Branch name — matches reference GitBranch */}
-              {git.value.branch && (
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '4px',
-                  }}
-                >
-                  <span
-                    style={{ fontFamily: fonts.mono, fontSize: 12, color: colors.textMuted }}
-                  >
-                    {git.value.branch}
-                  </span>
-                </div>
-              )}
-
-              {/* Git file list — matches reference GitFile */}
-              {gitFiles.value.length > 0 && (
-                <div
-                  class="flex-1 overflow-y-auto"
-                  style={{ minHeight: 0 }}
-                >
-                  {gitFiles.value.map(f => (
-                    <GitFileRow key={f.path} file={f} />
-                  ))}
-                </div>
-              )}
-              {gitFiles.value.length === 0 && totalChanges.value === 0 && (
-                <div
-                  style={{
-                    padding: '4px',
-                    fontFamily: fonts.mono,
-                    fontSize: 12,
-                    color: colors.textMuted,
-                  }}
-                >
-                  No changes
-                </div>
-              )}
-            </div>
+            {/* Tab content */}
+            <TabContent />
           </div>
         )}
       </div>
