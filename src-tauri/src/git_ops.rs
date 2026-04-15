@@ -326,14 +326,21 @@ pub fn get_unpushed_count_impl(repo_path: &str) -> Result<usize, GitError> {
         Err(_) => return Ok(0), // No local branch found, no upstream to compare
     };
 
-    let upstream = match branch.upstream() {
-        Ok(upstream) => upstream,
-        Err(_) => return Ok(0), // No upstream configured, cannot determine unpushed
+    // Try upstream of current branch first, then fall back to origin/main or origin/master
+    let upstream_oid = match branch.upstream() {
+        Ok(upstream) => upstream.get().target(),
+        Err(_) => {
+            // No upstream configured — try origin/main or origin/master as fallback
+            repo.find_reference("refs/remotes/origin/main")
+                .or_else(|_| repo.find_reference("refs/remotes/origin/master"))
+                .ok()
+                .and_then(|r| r.target())
+        }
     };
 
-    let upstream_oid = match upstream.get().target() {
+    let upstream_oid = match upstream_oid {
         Some(oid) => oid,
-        None => return Ok(0), // No upstream target
+        None => return Ok(0), // No remote reference at all
     };
 
     let (ahead, _behind) = repo
