@@ -554,8 +554,7 @@ export function Sidebar() {
         // Fetch app version
         const ver = await getVersion();
         appVersion.value = ver;
-        const project = active || 'no project';
-        await getCurrentWindow().setTitle(`EFXMUX v${ver} — ${project}`);
+        await getCurrentWindow().setTitle(`efx-mux v${ver}`);
       } catch (err) {
         console.warn('[efxmux] Failed to load projects:', err);
       }
@@ -568,7 +567,7 @@ export function Sidebar() {
       activeProjectName.value = detail.name;
       refreshAllGitStatus();
       if (appVersion.value) {
-        getCurrentWindow().setTitle(`EFXMUX v${appVersion.value} — ${detail.name}`);
+        getCurrentWindow().setTitle(`efx-mux v${appVersion.value}`);
       }
     }
 
