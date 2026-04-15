@@ -22,6 +22,7 @@ import type { ProjectEntry, GitData } from '../state-manager';
 import { openProjectModal } from './project-modal';
 import { colors, fonts, fontSizes, spacing, radii } from '../tokens';
 import { FileTree } from './file-tree';
+import { GitControlTab } from './git-control-tab';
 
 // ---------------------------------------------------------------------------
 // Local signals for sidebar-only state
@@ -183,17 +184,9 @@ function TabContent() {
   }
 
   if (activeTab.value === 'git') {
-    // Placeholder for GitControlTab (implemented in Plan 03)
     return (
-      <div
-        style={{
-          padding: spacing['4xl'],
-          fontFamily: fonts.sans,
-          fontSize: 12,
-          color: colors.textMuted,
-        }}
-      >
-        Git Control tab coming soon...
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <GitControlTab />
       </div>
     );
   }
