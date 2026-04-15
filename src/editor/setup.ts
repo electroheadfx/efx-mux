@@ -28,7 +28,26 @@ export interface EditorSetupResult {
   setSavedContent: (content: string) => void;
 }
 
-// ── Factory ───────────────────────────────────────────────────────────────────
+// ── EditorView Registry ────────────────────────────────────────────────────────
+
+/** Module-level registry: tabId -> EditorView, so closeUnifiedTab can get current content */
+const editorViewMap = new Map<string, EditorView>();
+
+export function registerEditorView(tabId: string, view: EditorView): void {
+  editorViewMap.set(tabId, view);
+}
+
+export function unregisterEditorView(tabId: string): void {
+  editorViewMap.delete(tabId);
+}
+
+export function getEditorCurrentContent(tabId: string): string | null {
+  const view = editorViewMap.get(tabId);
+  if (!view) return null;
+  return view.state.doc.toString();
+}
+
+// ── Factory ────────────────────────────────────────────────────────────────────
 
 /**
  * Creates a configured CM6 EditorState with all required extensions:

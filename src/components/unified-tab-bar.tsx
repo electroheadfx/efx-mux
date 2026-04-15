@@ -43,14 +43,51 @@ type UnifiedTab =
   | EditorTabData
   | GitChangesTabData;
 
-// ── Signals ───────────────────────────────────────────────────────────────────
+// ── Signals ─────────────────────────────────────────────────────────────────---
 
-export const editorTabs = signal<EditorTabData[]>([]);
+/** Editor tabs keyed by project name */
+const _editorTabsByProject = signal<Map<string, EditorTabData[]>>(new Map());
+/** Tab order keyed by project name */
+const _tabOrderByProject = signal<Map<string, string[]>>(new Map());
+
+/** Get tabs for a specific project */
+function getProjectEditorTabs(projectName: string): EditorTabData[] {
+  return _editorTabsByProject.value.get(projectName) ?? [];
+}
+
+/** Get tab order for a specific project */
+function getProjectTabOrder(projectName: string): string[] {
+  return _tabOrderByProject.value.get(projectName) ?? [];
+}
+
+/** Initialize a project in the Maps if it doesn't exist */
+function ensureProjectInMaps(projectName: string): void {
+  if (!_editorTabsByProject.value.has(projectName)) {
+    _editorTabsByProject.value = new Map(_editorTabsByProject.value).set(projectName, []);
+  }
+  if (!_tabOrderByProject.value.has(projectName)) {
+    _tabOrderByProject.value = new Map(_tabOrderByProject.value).set(projectName, []);
+  }
+}
+
+/** Expose editorTabs as a computed for the active project (for compatibility) */
+export const editorTabs = computed<EditorTabData[]>(() => {
+  const name = activeProjectName.value;
+  if (!name) return [];
+  ensureProjectInMaps(name);
+  return getProjectEditorTabs(name);
+});
+
+/** Expose tabOrder as a computed for the active project (for compatibility) */
+export const tabOrder = computed<string[]>(() => {
+  const name = activeProjectName.value;
+  if (!name) return [];
+  ensureProjectInMaps(name);
+  return getProjectTabOrder(name);
+});
+
 export const gitChangesTab = signal<GitChangesTabData | null>(null);
 export const activeUnifiedTabId = signal<string>('');
-
-/** Ordered list of tab IDs for drag-and-drop reordering */
-export const tabOrder = signal<string[]>([]);
 
 /** Combined tab list: terminals from terminalTabs + editors + git changes */
 export const allTabs = computed<UnifiedTab[]>(() => {

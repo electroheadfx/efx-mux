@@ -3,7 +3,7 @@
 
 import { useRef, useEffect } from 'preact/hooks';
 import { EditorView } from '@codemirror/view';
-import { createEditorState } from '../editor/setup';
+import { createEditorState, registerEditorView, unregisterEditorView } from '../editor/setup';
 import { getLanguageExtension } from '../editor/languages';
 import { writeFile } from '../services/file-service';
 import { showToast } from './toast';
@@ -63,7 +63,11 @@ export function EditorTab({ tabId, filePath, fileName, content, isActive }: Edit
     viewRef.current = view;
     setupRef.current = setup;
 
+    // Register so closeUnifiedTab can get current content via getEditorCurrentContent
+    registerEditorView(tabId, view);
+
     return () => {
+      unregisterEditorView(tabId);
       view.destroy();
       viewRef.current = null;
       setupRef.current = null;
