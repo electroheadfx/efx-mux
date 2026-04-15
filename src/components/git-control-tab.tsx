@@ -14,7 +14,8 @@ import { ChevronDown, ChevronRight, Loader, X, GitBranch, MoreHorizontal, Maximi
 import { colors, fonts, fontSizes, spacing, radii } from '../tokens';
 import { projects, activeProjectName } from '../state-manager';
 import type { ProjectEntry } from '../state-manager';
-import { stageFile, unstageFile, commit, push, getUnpushedCount, getFileDiffStats, GitError } from '../services/git-service';
+import { stageFile, unstageFile, commit, push, getUnpushedCount, getFileDiffStats, getGitLog, GitError } from '../services/git-service';
+import type { GitCommitEntry } from '../services/git-service';
 import { showToast } from './toast';
 
 // ---------------------------------------------------------------------------
@@ -51,6 +52,8 @@ const isPushing = signal(false);
 const gitLog = signal<GitLogEntry[]>([]);
 const branchName = signal('');
 const lastCommitMessage = signal('');
+const historySectionOpen = signal(false);
+const gitHistory = signal<GitCommitEntry[]>([]);
 
 // ---------------------------------------------------------------------------
 // Computed values
@@ -69,6 +72,17 @@ function getActiveProject(): ProjectEntry | undefined {
   return projects.value.find(p => p.name === activeProjectName.value);
 }
 
+function relativeTime(epochSeconds: number): string {
+  const delta = Math.floor(Date.now() / 1000 - epochSeconds);
+  if (delta < 60) return '<1m ago';
+  if (delta < 3600) return `${Math.floor(delta / 60)}m ago`;
+  if (delta < 86400) return `${Math.floor(delta / 3600)}h ago`;
+  if (delta < 604800) return `${Math.floor(delta / 86400)}d ago`;
+  const d = new Date(epochSeconds * 1000);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[d.getMonth()]} ${d.getDate()}`;
+}
+
 function addLogEntry(type: GitLogEntry['type'], message: string, detail?: string): void {
   const now = new Date();
   const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
@@ -85,6 +99,7 @@ async function refreshGitFiles(): Promise<void> {
     gitFiles.value = [];
     unpushedCount.value = 0;
     branchName.value = '';
+    gitHistory.value = [];
     return;
   }
 
@@ -121,11 +136,19 @@ async function refreshGitFiles(): Promise<void> {
     } catch {
       branchName.value = 'main';
     }
+
+    // Fetch commit history
+    try {
+      gitHistory.value = await getGitLog(project.path, 50);
+    } catch {
+      gitHistory.value = [];
+    }
   } catch (err) {
     console.warn('[GitControlTab] Failed to refresh git files:', err);
     gitFiles.value = [];
     unpushedCount.value = 0;
     branchName.value = '';
+    gitHistory.value = [];
   }
 }
 
@@ -442,6 +465,67 @@ function GitFileRow({
   );
 }
 
+function HistoryEntry({ entry }: { entry: GitCommitEntry }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: spacing.xl,
+        padding: `${spacing.sm}px ${spacing.xl}px`,
+        backgroundColor: 'transparent',
+      }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = colors.bgElevated; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
+    >
+      {/* Commit message (primary text, truncated) */}
+      <span style={{
+        fontFamily: fonts.mono,
+        fontSize: fontSizes.base,
+        color: colors.textPrimary,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        flex: 1,
+        minWidth: 0,
+      }}>
+        {entry.message}
+      </span>
+
+      {/* Ref badges (branch/tag pills) */}
+      {entry.refs.length > 0 && (
+        <div style={{ display: 'flex', gap: spacing.sm, flexShrink: 0 }}>
+          {entry.refs.map(ref => (
+            <span key={ref} style={{
+              fontFamily: fonts.mono,
+              fontSize: fontSizes.xs,
+              fontWeight: 600,
+              color: colors.accent,
+              backgroundColor: colors.bgElevated,
+              padding: `${spacing.xs}px ${spacing.md}px`,
+              borderRadius: radii.sm,
+              whiteSpace: 'nowrap',
+            }}>
+              {ref}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Author + relative time (dim, right-aligned) */}
+      <span style={{
+        fontFamily: fonts.mono,
+        fontSize: fontSizes.xs,
+        color: colors.textDim,
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
+      }}>
+        {entry.author}, {relativeTime(entry.timestamp)}
+      </span>
+    </div>
+  );
+}
+
 function GitLogPanel() {
   const entries = gitLog.value;
   if (entries.length === 0) return null;
@@ -655,8 +739,8 @@ export function GitControlTab() {
           overflowY: 'auto',
         }}
       >
-        {totalChanges === 0 ? (
-          /* Empty state */
+        {/* Empty state -- only when no files AND no history */}
+        {totalChanges === 0 && gitHistory.value.length === 0 && (
           <div
             style={{
               display: 'flex',
@@ -670,44 +754,56 @@ export function GitControlTab() {
           >
             No changes to commit
           </div>
-        ) : (
-          <>
-            {/* Staged section */}
-            {stagedFiles.value.length > 0 && (
-              <CollapsibleSection
-                title="Staged"
-                count={stagedFiles.value.length}
-                isOpen={stagedSectionOpen.value}
-                onToggle={() => { stagedSectionOpen.value = !stagedSectionOpen.value; }}
-              >
-                {stagedFiles.value.map(file => (
-                  <GitFileRow
-                    key={file.path}
-                    file={file}
-                    onToggle={() => handleToggleStage(file, false)}
-                  />
-                ))}
-              </CollapsibleSection>
-            )}
+        )}
 
-            {/* Changes section */}
-            {changedFiles.value.length > 0 && (
-              <CollapsibleSection
-                title="Changes"
-                count={changedFiles.value.length}
-                isOpen={changesSectionOpen.value}
-                onToggle={() => { changesSectionOpen.value = !changesSectionOpen.value; }}
-              >
-                {changedFiles.value.map(file => (
-                  <GitFileRow
-                    key={file.path}
-                    file={file}
-                    onToggle={() => handleToggleStage(file, true)}
-                  />
-                ))}
-              </CollapsibleSection>
-            )}
-          </>
+        {/* Staged section */}
+        {stagedFiles.value.length > 0 && (
+          <CollapsibleSection
+            title="Staged"
+            count={stagedFiles.value.length}
+            isOpen={stagedSectionOpen.value}
+            onToggle={() => { stagedSectionOpen.value = !stagedSectionOpen.value; }}
+          >
+            {stagedFiles.value.map(file => (
+              <GitFileRow
+                key={file.path}
+                file={file}
+                onToggle={() => handleToggleStage(file, false)}
+              />
+            ))}
+          </CollapsibleSection>
+        )}
+
+        {/* Changes section */}
+        {changedFiles.value.length > 0 && (
+          <CollapsibleSection
+            title="Changes"
+            count={changedFiles.value.length}
+            isOpen={changesSectionOpen.value}
+            onToggle={() => { changesSectionOpen.value = !changesSectionOpen.value; }}
+          >
+            {changedFiles.value.map(file => (
+              <GitFileRow
+                key={file.path}
+                file={file}
+                onToggle={() => handleToggleStage(file, true)}
+              />
+            ))}
+          </CollapsibleSection>
+        )}
+
+        {/* History section -- always visible in scrollable area */}
+        {gitHistory.value.length > 0 && (
+          <CollapsibleSection
+            title="History"
+            count={gitHistory.value.length}
+            isOpen={historySectionOpen.value}
+            onToggle={() => { historySectionOpen.value = !historySectionOpen.value; }}
+          >
+            {gitHistory.value.map(entry => (
+              <HistoryEntry key={entry.hash} entry={entry} />
+            ))}
+          </CollapsibleSection>
         )}
       </div>
 
