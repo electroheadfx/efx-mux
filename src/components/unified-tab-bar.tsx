@@ -70,7 +70,23 @@ function ensureProjectInMaps(projectName: string): void {
   }
 }
 
-/** Expose editorTabs as a computed for the active project (for compatibility) */
+/** Update editor tabs for the active project */
+function setProjectEditorTabs(tabs: EditorTabData[]): void {
+  const name = activeProjectName.value;
+  if (!name) return;
+  ensureProjectInMaps(name);
+  _editorTabsByProject.value = new Map(_editorTabsByProject.value).set(name, tabs);
+}
+
+/** Update tab order for the active project */
+function setProjectTabOrder(order: string[]): void {
+  const name = activeProjectName.value;
+  if (!name) return;
+  ensureProjectInMaps(name);
+  _tabOrderByProject.value = new Map(_tabOrderByProject.value).set(name, order);
+}
+
+/** Get tabs for the active project (read-only computed for compatibility) */
 export const editorTabs = computed<EditorTabData[]>(() => {
   const name = activeProjectName.value;
   if (!name) return [];
@@ -78,7 +94,7 @@ export const editorTabs = computed<EditorTabData[]>(() => {
   return getProjectEditorTabs(name);
 });
 
-/** Expose tabOrder as a computed for the active project (for compatibility) */
+/** Get tab order for the active project (read-only computed for compatibility) */
 export const tabOrder = computed<string[]>(() => {
   const name = activeProjectName.value;
   if (!name) return [];
@@ -106,7 +122,7 @@ export const allTabs = computed<UnifiedTab[]>(() => {
 // When terminalTabs changes, sync tabOrder (append any new terminal IDs)
 terminalTabs.value.forEach(t => {
   if (!tabOrder.value.includes(t.id)) {
-    tabOrder.value = [...tabOrder.value, t.id];
+    setProjectTabOrder([...tabOrder.value, t.id]);
   }
 });
 
@@ -140,8 +156,8 @@ export function openEditorTab(filePath: string, fileName: string, content: strin
     dirty: false,
   };
 
-  editorTabs.value = [...editorTabs.value, newTab];
-  tabOrder.value = [...tabOrder.value, newTab.id];
+  setProjectEditorTabs([...editorTabs.value, newTab]);
+  setProjectTabOrder([...tabOrder.value, newTab.id]);
   activeUnifiedTabId.value = newTab.id;
 }
 
@@ -215,7 +231,7 @@ export function openGitChangesTab(): void {
   };
 
   gitChangesTab.value = newTab;
-  tabOrder.value = [...tabOrder.value, newTab.id];
+  setProjectTabOrder([...tabOrder.value, newTab.id]);
   activeUnifiedTabId.value = newTab.id;
 }
 
@@ -238,8 +254,8 @@ export function closeUnifiedTab(tabId: string): void {
         message: `${tab.fileName} has unsaved changes that will be lost.`,
         onConfirm: () => {
           // Discard: remove tab
-          editorTabs.value = editorTabs.value.filter(t => t.id !== tabId);
-          tabOrder.value = tabOrder.value.filter(id => id !== tabId);
+          setProjectEditorTabs(editorTabs.value.filter(t => t.id !== tabId));
+          setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
           switchToAdjacentTab(tabId);
         },
         onCancel: () => {},
@@ -249,8 +265,8 @@ export function closeUnifiedTab(tabId: string): void {
           writeFile(tab.filePath, currentContent)
             .then(() => {
               setEditorDirty(tabId, false);
-              editorTabs.value = editorTabs.value.filter(t => t.id !== tabId);
-              tabOrder.value = tabOrder.value.filter(id => id !== tabId);
+              setProjectEditorTabs(editorTabs.value.filter(t => t.id !== tabId));
+              setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
               switchToAdjacentTab(tabId);
             })
             .catch(err => {
@@ -259,8 +275,8 @@ export function closeUnifiedTab(tabId: string): void {
         },
       });
     } else {
-      editorTabs.value = editorTabs.value.filter(t => t.id !== tabId);
-      tabOrder.value = tabOrder.value.filter(id => id !== tabId);
+      setProjectEditorTabs(editorTabs.value.filter(t => t.id !== tabId));
+      setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
       switchToAdjacentTab(tabId);
     }
     return;
@@ -268,7 +284,7 @@ export function closeUnifiedTab(tabId: string): void {
 
   if (tab.type === 'git-changes') {
     gitChangesTab.value = null;
-    tabOrder.value = tabOrder.value.filter(id => id !== tabId);
+    setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
     switchToAdjacentTab(tabId);
   }
 }
@@ -277,11 +293,12 @@ export function closeUnifiedTab(tabId: string): void {
  * Mark an editor tab as dirty/clean.
  */
 export function setEditorDirty(tabId: string, dirty: boolean): void {
-  const tab = editorTabs.value.find(t => t.id === tabId);
+  const tabs = editorTabs.value;
+  const tab = tabs.find(t => t.id === tabId);
   if (!tab) return;
   tab.dirty = dirty;
-  // Trigger reactivity
-  editorTabs.value = [...editorTabs.value];
+  // Trigger reactivity by updating through the map
+  setProjectEditorTabs([...tabs]);
 }
 
 /**

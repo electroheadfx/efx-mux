@@ -68,3 +68,16 @@ export async function createFile(path: string): Promise<void> {
     throw new FileError('CreateError', String(e));
   }
 }
+
+/**
+ * Read content from a file.
+ * @param path Absolute path to the file
+ * @returns File content as string
+ */
+export async function readFile(path: string): Promise<string> {
+  try {
+    return await invoke<string>('read_file_content', { path });
+  } catch (e) {
+    throw new FileError('ReadError', String(e));
+  }
+}

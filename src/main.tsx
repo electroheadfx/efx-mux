@@ -30,7 +30,7 @@ import {
   getProjects, getActiveProject, projects, activeProjectName
 } from './state-manager';
 import { openProjectModal } from './components/project-modal';
-import { openEditorTab } from './components/unified-tab-bar';
+import { openEditorTab, restoreEditorTabs } from './components/unified-tab-bar';
 import { serverPaneState, saveCurrentProjectState, restoreProjectState } from './components/server-pane';
 import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from './components/file-tree';
 import { detectAgent } from './server/server-bridge';
@@ -312,6 +312,11 @@ async function bootstrap() {
         setTimeout(() => fitAddon.fit(), 100);
         terminal.focus();
       }
+    }
+
+    // Restore editor tabs from persisted state
+    if (activeName) {
+      restoreEditorTabs(activeName);
     }
 
     // Apply right-h-pct after DOM is ready
