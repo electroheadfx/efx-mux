@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 Phase: 16 (sidebar-evolution-git-control) — EXECUTING
 Plan: 1 of 1
 Status: Executing Phase 16
-Last activity: 2026-04-15 -- Phase 16 execution started
+Last activity: 2026-04-15 -- Completed quick task 260415-fv4: Redesign git-control-tab to Zed git panel layout
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -68,6 +68,7 @@ None.
 |----|-------------|------|
 | 260413-q8l | Add version to EFXMUX sidebar title | 2026-04-13 |
 | 260414-kil | Enhance TUI tab and preview bar UX (bigger hit targets) | 2026-04-14 |
+| 260415-fv4 | Redesign git-control-tab to Zed editor layout | 2026-04-15 |
 
 ## Session Continuity
 
