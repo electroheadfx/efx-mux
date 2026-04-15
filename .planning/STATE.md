@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: Workspace Evolution
 status: executing
-stopped_at: Phase 17 complete — pending code review fixes (WR-01, WR-02, WR-03, IN-01, IN-02)
-last_updated: "2026-04-15T16:30:00.000Z"
-last_activity: 2026-04-15 -- Phase 17 execution + 9 debug fixes complete
+stopped_at: Phase 17 complete — all 9 issues fixed + verified. Code review fixes pending.
+last_updated: "2026-04-15T16:45:16.511Z"
+last_activity: 2026-04-15 -- Phase 17 execution started
 progress:
   total_phases: 7
-  completed_phases: 3
-  total_plans: 9
+  completed_phases: 2
+  total_plans: 11
   completed_plans: 9
-  percent: 100
+  percent: 82
 ---
 
 # Project State
@@ -21,16 +21,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** A single native macOS window that co-locates AI agent terminals alongside live GSD progress, git diff, and file tree -- all persisted across restarts via tmux.
-**Current focus:** Phase 17 — main-panel-file-tabs (verification complete, code review fixes pending)
+**Current focus:** Phase 17 — main-panel-file-tabs
 
 ## Current Position
 
-Phase: 17 (main-panel-file-tabs) — VERIFICATION COMPLETE, pending code review fixes
-Plan: 3 of 3
-Status: All 3 plans executed + verified. Code review found 1 critical (fixed), 3 warnings, 2 info.
-Last activity: 2026-04-15 -- Phase 17 all waves complete, verification passed, CR-01 hotfixed
+Phase: 17 (main-panel-file-tabs) — EXECUTING
+Plan: 1 of 5
+Status: Executing Phase 17
+Last activity: 2026-04-15 -- Phase 17 execution started
 
 **Code review fixes pending (non-blocking):**
+
 - WR-01: `dropdown-menu.tsx:87-94` — typeaheadTimeout not cleared when items change
 - WR-02: `terminal-tabs.tsx:212,246` — Silent error swallowing in PTY cleanup
 - WR-03: `main.tsx` + `terminal-tabs.tsx` — Duplicate `projectSessionName` function
