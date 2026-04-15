@@ -4,7 +4,7 @@ Please do not run the server, I do on my side
 <!-- GSD:project-start source:PROJECT.md -->
 ## Project
 
-**GSD⚡MUX**
+**GSD⚡MUX
 
 A native macOS desktop application that wraps Claude Code and OpenCode terminal sessions in a structured, multi-panel workspace. The goal is to give AI-assisted developers a single window that co-locates: the AI agent terminal, a live GSD progress viewer (Markdown with write-back), git diff, and a file tree — all around a real terminal that runs the original CLI binaries without any modification or hacking.
 
@@ -159,4 +159,3 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
 > Profile not yet configured. Run `/gsd-profile-user` to generate your developer profile.
 > This section is managed by `generate-claude-profile` -- do not edit manually.
 <!-- GSD:profile-end -->
-

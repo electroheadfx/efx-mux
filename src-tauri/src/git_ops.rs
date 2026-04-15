@@ -86,33 +86,47 @@ pub fn unstage_file_impl(repo_path: &str, file_path: &str) -> Result<(), GitErro
         Path::new(file_path)
     };
 
-    // Check if file exists in HEAD tree
-    let head = repo.head().map_err(|e| GitError::IndexError(e.to_string()))?;
-    let head_commit = head
-        .peel_to_commit()
-        .map_err(|e| GitError::IndexError(e.to_string()))?;
-    let head_tree = head_commit
-        .tree()
-        .map_err(|e| GitError::IndexError(e.to_string()))?;
+    // Get HEAD commit to check if file exists there
+    let head_commit = repo
+        .head()
+        .ok()
+        .and_then(|h| h.peel_to_commit().ok());
 
-    // Check if file exists in HEAD
-    let file_in_head = head_tree.get_path(rel_path).is_ok();
+    match head_commit {
+        Some(commit) => {
+            let tree = commit.tree().map_err(|e| GitError::IndexError(e.to_string()))?;
+            let file_in_head = tree.get_path(rel_path).is_ok();
 
-    if file_in_head {
-        // File exists in HEAD: reset to HEAD state
-        repo.reset_default(Some(head_tree.as_object()), [rel_path.to_string_lossy().as_ref()])
-            .map_err(|e| GitError::IndexError(e.to_string()))?;
-    } else {
-        // File is new (not in HEAD): remove from index entirely
-        let mut index = repo
-            .index()
-            .map_err(|e| GitError::IndexError(e.to_string()))?;
-        index
-            .remove_path(rel_path)
-            .map_err(|e| GitError::IndexError(e.to_string()))?;
-        index
-            .write()
-            .map_err(|e| GitError::IndexError(e.to_string()))?;
+            if file_in_head {
+                // File exists in HEAD: use reset_default to restore index entry from HEAD
+                // Pass the commit (not tree) - reset_default expects a committish
+                repo.reset_default(Some(commit.as_object()), [rel_path.to_string_lossy().as_ref()])
+                    .map_err(|e| GitError::IndexError(e.to_string()))?;
+            } else {
+                // File is new (not in HEAD): remove from index entirely
+                let mut index = repo
+                    .index()
+                    .map_err(|e| GitError::IndexError(e.to_string()))?;
+                index
+                    .remove_path(rel_path)
+                    .map_err(|e| GitError::IndexError(e.to_string()))?;
+                index
+                    .write()
+                    .map_err(|e| GitError::IndexError(e.to_string()))?;
+            }
+        }
+        None => {
+            // No HEAD commit (empty repo) - just remove from index
+            let mut index = repo
+                .index()
+                .map_err(|e| GitError::IndexError(e.to_string()))?;
+            index
+                .remove_path(rel_path)
+                .map_err(|e| GitError::IndexError(e.to_string()))?;
+            index
+                .write()
+                .map_err(|e| GitError::IndexError(e.to_string()))?;
+        }
     }
 
     Ok(())
@@ -413,6 +427,52 @@ mod tests {
         assert!(
             status.contains("?? test.txt"),
             "File should be untracked after unstaging: {}",
+            status
+        );
+    }
+
+    #[test]
+    fn unstage_modified_file_resets_to_head() {
+        // Test unstaging a file that EXISTS in HEAD (the reset_default path)
+        let (dir, path) = setup_git_repo();
+        let file_path = dir.path().join("existing.txt");
+
+        // Create and commit the file first
+        std::fs::write(&file_path, "original content").unwrap();
+        run_git(dir.path(), &["add", "existing.txt"]);
+        run_git(dir.path(), &["commit", "-m", "add existing.txt"]);
+
+        // Modify and stage the file
+        std::fs::write(&file_path, "modified content").unwrap();
+        run_git(dir.path(), &["add", "existing.txt"]);
+
+        // Verify file is staged as modified
+        let output = std::process::Command::new("git")
+            .args(["status", "--porcelain"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        let status = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            status.contains("M  existing.txt"),
+            "File should be staged as modified: {}",
+            status
+        );
+
+        // Unstage the modified file (should use reset_default path)
+        let result = unstage_file_impl(&path, "existing.txt");
+        assert!(result.is_ok(), "unstage_file_impl failed for modified file: {:?}", result);
+
+        // Verify file is now unstaged but still modified (' M existing.txt')
+        let output = std::process::Command::new("git")
+            .args(["status", "--porcelain"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        let status = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            status.contains(" M existing.txt"),
+            "File should be unstaged but modified: {}",
             status
         );
     }
