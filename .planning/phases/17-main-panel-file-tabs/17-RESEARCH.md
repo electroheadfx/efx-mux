@@ -345,6 +345,7 @@ interface EditorTabData extends BaseTab {
   type: 'editor';
   filePath: string;
   fileName: string;
+  content: string;        // initial file content, set once at tab creation
   dirty: boolean;       // true when buffer !== saved content
   editorView?: EditorView;
 }
@@ -625,22 +626,22 @@ export function ConfirmModal() {
 | A4 | Confirmation modal design follows project-modal.tsx pattern | Code Examples: Confirmation Modal | LOW -- well-established pattern in codebase |
 | A5 | Syntax highlighting colors (purple keywords, green strings, etc.) match Solarized Dark well | Pattern 2: Theme | MEDIUM -- exact colors may need tuning by the user; the pattern is correct |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Tab overflow behavior with many open tabs**
+1. **Tab overflow behavior with many open tabs** (RESOLVED)
    - What we know: Claude's discretion per CONTEXT.md
    - What's unclear: Whether to use horizontal scroll, compress tab widths, or show a dropdown for overflow tabs
-   - Recommendation: Implement horizontal scroll with a max-width per tab (truncate filename with ellipsis). Simplest approach, matches VS Code behavior.
+   - RESOLVED: Use horizontal scroll with a max-width per tab (truncate filename with ellipsis). Simplest approach, matches VS Code behavior. Implemented in Plan 02 unified-tab-bar.tsx with `overflow-x: auto`, `maxWidth: 200`, `textOverflow: 'ellipsis'`, and `onWheel` horizontal scroll handler.
 
-2. **External file modification detection**
+2. **External file modification detection** (RESOLVED)
    - What we know: The `notify` crate watches for file changes (file_watcher.rs exists)
    - What's unclear: Whether to show a "file changed on disk" prompt for open editor tabs
-   - Recommendation: Defer to a follow-up. For Phase 17, rely on the user's awareness. The dirty dot correctly shows buffer differs from saved content at save time.
+   - RESOLVED: Deferred to a follow-up phase. For Phase 17, rely on the user's awareness. The dirty dot correctly shows buffer differs from saved content at save time. No external modification detection in scope.
 
-3. **CM6 performance in WKWebView**
+3. **CM6 performance in WKWebView** (RESOLVED)
    - What we know: xterm.js WebGL works in WKWebView. CM6 uses standard DOM (not WebGL).
    - What's unclear: Whether CM6 has any Safari/WebKit-specific issues
-   - Recommendation: LOW risk. CM6 is widely used in Safari-based editors. Monitor during implementation.
+   - RESOLVED: LOW risk accepted. CM6 is widely used in Safari-based editors and uses standard DOM APIs. Monitor during implementation via the human-verify checkpoint in Plan 03 Task 3.
 
 ## Environment Availability
 
