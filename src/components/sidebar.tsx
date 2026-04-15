@@ -7,6 +7,7 @@ import { signal, computed } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getVersion } from '@tauri-apps/api/app';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { GitBranch, Plus, RotateCw, Settings, X } from 'lucide-preact';
 import {
   projects,
@@ -553,6 +554,7 @@ export function Sidebar() {
         // Fetch app version
         const ver = await getVersion();
         appVersion.value = ver;
+        await getCurrentWindow().setTitle(`EFXMUX v${ver}`);
       } catch (err) {
         console.warn('[efxmux] Failed to load projects:', err);
       }
@@ -654,31 +656,15 @@ export function Sidebar() {
               height: '100%',
             }}
           >
-            {/* Header — matches reference Sidebar.tsx SidebarHeader */}
+            {/* Header — just the add-project button */}
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between',
+                justifyContent: 'flex-end',
                 padding: '16px 16px 12px 12px',
               }}
             >
-              <span
-                style={{
-                  fontFamily: fonts.sans,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: colors.textPrimary,
-                  letterSpacing: '3px',
-                }}
-              >
-                EFXMUX
-                {appVersion.value && (
-                  <span style={{ fontWeight: 400, letterSpacing: '1px', marginLeft: 6, color: colors.textMuted }}>
-                    v{appVersion.value}
-                  </span>
-                )}
-              </span>
               <button
                 style={{
                   display: 'flex',
