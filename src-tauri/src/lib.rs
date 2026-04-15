@@ -121,6 +121,7 @@ pub fn run() {
             git_ops::unstage_file,
             git_ops::commit,
             git_ops::push,
+            git_ops::get_unpushed_count,
 
             // Projects
             project::add_project,

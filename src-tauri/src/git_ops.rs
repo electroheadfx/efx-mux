@@ -297,6 +297,47 @@ pub async fn push(
         .map_err(|e| e.to_string())
 }
 
+/// Synchronous inner implementation of get_unpushed_count for testing.
+/// Returns the number of commits ahead of the upstream tracking branch.
+pub fn get_unpushed_count_impl(repo_path: &str) -> Result<usize, GitError> {
+    let repo = Repository::open(repo_path).map_err(|_| GitError::NotARepo)?;
+
+    let head = repo.head().map_err(|e| GitError::IndexError(e.to_string()))?;
+    let local_oid = head.target().ok_or_else(|| GitError::IndexError("No HEAD target".to_string()))?;
+
+    // Get current branch name
+    let branch_name = head.shorthand().unwrap_or("main");
+    let branch = match repo.find_branch(branch_name, git2::BranchType::Local) {
+        Ok(b) => b,
+        Err(_) => return Ok(0), // No local branch found, no upstream to compare
+    };
+
+    let upstream = match branch.upstream() {
+        Ok(upstream) => upstream,
+        Err(_) => return Ok(0), // No upstream configured, cannot determine unpushed
+    };
+
+    let upstream_oid = match upstream.get().target() {
+        Some(oid) => oid,
+        None => return Ok(0), // No upstream target
+    };
+
+    let (ahead, _behind) = repo
+        .graph_ahead_behind(local_oid, upstream_oid)
+        .map_err(|e| GitError::IndexError(e.to_string()))?;
+
+    Ok(ahead)
+}
+
+/// Get the number of commits ahead of upstream (unpushed commits).
+#[tauri::command]
+pub async fn get_unpushed_count(repo_path: String) -> Result<usize, String> {
+    spawn_blocking(move || get_unpushed_count_impl(&repo_path))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -444,5 +485,14 @@ mod tests {
             GitError::FileNotFound => {}
             e => panic!("Expected FileNotFound, got {:?}", e),
         }
+    }
+
+    #[test]
+    fn get_unpushed_count_returns_zero_for_no_upstream() {
+        let (_dir, path) = setup_git_repo();
+        // No remote configured, should return 0
+        let result = get_unpushed_count_impl(&path);
+        assert!(result.is_ok(), "get_unpushed_count_impl failed: {:?}", result);
+        assert_eq!(result.unwrap(), 0);
     }
 }
