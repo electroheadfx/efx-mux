@@ -9,7 +9,7 @@ import { colors, radii, spacing, fonts } from '../tokens';
 export interface DropdownItem {
   label: string;
   action: () => void;
-  icon?: ComponentType<{ size?: number }>;
+  icon?: ComponentType<any>;
   disabled?: boolean;
   separator?: boolean;
 }

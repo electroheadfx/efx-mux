@@ -5,7 +5,8 @@ import { signal } from '@preact/signals';
 import { useEffect } from 'preact/hooks';
 import { marked } from 'marked';
 import { ServerPane, serverPaneState } from './server-pane';
-import { TerminalTabBar, ActiveTabCrashOverlay } from './terminal-tabs';
+import { ActiveTabCrashOverlay } from './terminal-tabs';
+import { UnifiedTabBar } from './unified-tab-bar';
 import { AgentHeader } from './agent-header';
 import { colors } from '../tokens';
 
@@ -233,7 +234,7 @@ export function MainPanel() {
 
   return (
     <main class="main-panel relative" aria-label="Main panel">
-      <TerminalTabBar />
+      <UnifiedTabBar />
       <div class="terminal-area flex-1 bg-bg-terminal overflow-hidden relative min-h-[100px]">
         <AgentHeader />
         <div class="terminal-containers absolute inset-0" />
