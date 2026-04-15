@@ -124,6 +124,7 @@ pub fn run() {
             git_ops::push,
             git_ops::get_unpushed_count,
             git_ops::uncommit,
+            git_ops::get_git_log,
 
             // Projects
             project::add_project,

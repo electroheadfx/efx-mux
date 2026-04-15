@@ -103,6 +103,33 @@ export async function getFileDiffStats(repoPath: string): Promise<FileDiffStats[
 }
 
 /**
+ * A single commit entry from the git log (maps to GitLogCommit in Rust).
+ */
+export interface GitCommitEntry {
+  hash: string;
+  short_hash: string;
+  message: string;
+  author: string;
+  timestamp: number;  // Unix epoch seconds
+  refs: string[];
+}
+
+/**
+ * Get recent commit log entries from the repository.
+ * @param repoPath Path to the git repository root
+ * @param limit Max number of commits to return (default 50)
+ * @returns Array of commit entries, empty array on failure
+ */
+export async function getGitLog(repoPath: string, limit?: number): Promise<GitCommitEntry[]> {
+  try {
+    return await invoke<GitCommitEntry[]>('get_git_log', { repoPath, limit: limit ?? 50 });
+  } catch (e) {
+    console.warn('[git-service] getGitLog failed:', e);
+    return [];
+  }
+}
+
+/**
  * Get the number of commits ahead of upstream (unpushed commits).
  * @param repoPath Path to the git repository root
  * @returns Number of unpushed commits (0 if no upstream configured or on error)

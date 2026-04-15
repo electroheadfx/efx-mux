@@ -355,6 +355,82 @@ pub async fn get_unpushed_count(repo_path: String) -> Result<usize, String> {
         .map_err(|e| e.to_string())
 }
 
+/// A single commit entry for the git log.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct GitLogCommit {
+    pub hash: String,
+    pub short_hash: String,
+    pub message: String,
+    pub author: String,
+    pub timestamp: i64,
+    pub refs: Vec<String>,
+}
+
+/// Synchronous inner implementation of get_git_log for testing.
+/// Walks the commit history from HEAD up to `limit` entries and decorates
+/// each commit with any matching branch/tag ref names.
+pub fn get_git_log_impl(repo_path: &str, limit: usize) -> Result<Vec<GitLogCommit>, GitError> {
+    let repo = Repository::open(repo_path).map_err(|_| GitError::NotARepo)?;
+
+    // Start revwalk from HEAD
+    let mut revwalk = repo.revwalk().map_err(|e| GitError::IndexError(e.to_string()))?;
+    revwalk.push_head().map_err(|e| GitError::IndexError(e.to_string()))?;
+    revwalk.set_sorting(git2::Sort::TIME).map_err(|e| GitError::IndexError(e.to_string()))?;
+
+    // Collect commits
+    let mut commits: Vec<GitLogCommit> = Vec::with_capacity(limit);
+    for oid_result in revwalk.take(limit) {
+        let oid = oid_result.map_err(|e| GitError::IndexError(e.to_string()))?;
+        let c = repo.find_commit(oid).map_err(|e| GitError::IndexError(e.to_string()))?;
+
+        let hash = oid.to_string();
+        let short_hash = hash[..7.min(hash.len())].to_string();
+        let message = c.summary().unwrap_or("").to_string();
+        let author = c.author().name().unwrap_or("Unknown").to_string();
+        let timestamp = c.time().seconds();
+
+        commits.push(GitLogCommit {
+            hash,
+            short_hash,
+            message,
+            author,
+            timestamp,
+            refs: Vec::new(),
+        });
+    }
+
+    // Build oid -> ref names map from all references
+    if let Ok(refs) = repo.references() {
+        for reference in refs.flatten() {
+            let ref_name = match reference.shorthand() {
+                Some(name) => name.to_string(),
+                None => continue,
+            };
+            // Resolve to the commit this ref points to (peel through tags)
+            if let Ok(commit) = reference.peel_to_commit() {
+                let ref_oid = commit.id().to_string();
+                for entry in commits.iter_mut() {
+                    if entry.hash == ref_oid {
+                        entry.refs.push(ref_name.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(commits)
+}
+
+/// Get recent commit log entries.
+#[tauri::command]
+pub async fn get_git_log(repo_path: String, limit: Option<usize>) -> Result<Vec<GitLogCommit>, String> {
+    let max = limit.unwrap_or(50);
+    spawn_blocking(move || get_git_log_impl(&repo_path, max))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}
+
 /// Uncommit: reset HEAD to HEAD^ (soft reset, keeps changes staged).
 pub fn uncommit_impl(repo_path: &str) -> Result<(), GitError> {
     Repository::open(repo_path).map_err(|_| GitError::NotARepo)?;
