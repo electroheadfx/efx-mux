@@ -27,6 +27,7 @@ export function Dropdown({ items, trigger }: DropdownProps) {
   // D-04: Uncontrolled state -- component manages open/close internally
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
   const typeaheadBuffer = useRef('');
@@ -106,8 +107,15 @@ export function Dropdown({ items, trigger }: DropdownProps) {
   const handleToggle = useCallback(() => {
     setIsOpen(prev => {
       if (!prev) {
-        // Opening - reset selection to first item
+        // Opening - reset selection to first item and compute viewport-relative position
         setSelectedIndex(0);
+        if (triggerRef.current) {
+          const rect = triggerRef.current.getBoundingClientRect();
+          setMenuPosition({
+            top: rect.bottom + window.scrollY,
+            left: rect.left + window.scrollX,
+          });
+        }
       }
       return !prev;
     });
@@ -147,9 +155,9 @@ export function Dropdown({ items, trigger }: DropdownProps) {
           tabIndex={-1}
           onKeyDown={handleKeyDown}
           style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
+            position: 'fixed',
+            top: menuPosition.top,
+            left: menuPosition.left,
             backgroundColor: colors.bgElevated,
             border: `1px solid ${colors.bgBorder}`,
             borderRadius: radii.lg,
@@ -157,7 +165,6 @@ export function Dropdown({ items, trigger }: DropdownProps) {
             zIndex: 1000,
             minWidth: 160,
             outline: 'none',
-            marginTop: spacing.xs,
           }}
         >
           {items.map((item, i) => {
