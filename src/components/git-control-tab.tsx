@@ -1,14 +1,16 @@
-// git-control-tab.tsx -- Git staging, commit, and push UI (Phase 16)
+// git-control-tab.tsx -- Git staging, commit, and push UI (Zed-style layout)
 //
-// Renders STAGED/CHANGES sections with file checkboxes, commit textarea,
-// and Commit/Push buttons. Uses git-service.ts for operations.
+// Renders a Zed-editor-style git panel: header bar with Stage All,
+// scrollable file list with click-to-stage rows, bottom-pinned branch bar,
+// commit input, Commit Tracked button, and status bar.
+// Uses git-service.ts for operations.
 // Includes error log panel with clear button for operation feedback.
 
 import { useEffect } from 'preact/hooks';
 import { signal, computed } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { ChevronDown, ChevronRight, Loader, X } from 'lucide-preact';
+import { ChevronDown, ChevronRight, Loader, X, GitBranch, MoreHorizontal, Maximize2, Pencil, ArrowUp, Undo2 } from 'lucide-preact';
 import { colors, fonts, fontSizes, spacing, radii } from '../tokens';
 import { projects, activeProjectName } from '../state-manager';
 import type { ProjectEntry } from '../state-manager';
@@ -45,6 +47,8 @@ const changesSectionOpen = signal(true);
 const isCommitting = signal(false);
 const isPushing = signal(false);
 const gitLog = signal<GitLogEntry[]>([]);
+const branchName = signal('');
+const lastCommitMessage = signal('');
 
 // ---------------------------------------------------------------------------
 // Computed values
@@ -78,6 +82,7 @@ async function refreshGitFiles(): Promise<void> {
   if (!project) {
     gitFiles.value = [];
     unpushedCount.value = 0;
+    branchName.value = '';
     return;
   }
 
@@ -97,10 +102,19 @@ async function refreshGitFiles(): Promise<void> {
 
     // Fetch unpushed count
     unpushedCount.value = await getUnpushedCount(project.path);
+
+    // Fetch branch name
+    try {
+      const gitData = await invoke<{ branch: string }>('get_git_status', { path: project.path });
+      branchName.value = gitData.branch || 'main';
+    } catch {
+      branchName.value = 'main';
+    }
   } catch (err) {
     console.warn('[GitControlTab] Failed to refresh git files:', err);
     gitFiles.value = [];
     unpushedCount.value = 0;
+    branchName.value = '';
   }
 }
 
@@ -108,7 +122,7 @@ async function refreshGitFiles(): Promise<void> {
 // Event handlers
 // ---------------------------------------------------------------------------
 
-async function handleCheckboxChange(file: GitFile, shouldStage: boolean): Promise<void> {
+async function handleToggleStage(file: GitFile, shouldStage: boolean): Promise<void> {
   const project = getActiveProject();
   if (!project) return;
 
@@ -140,14 +154,36 @@ async function handleCheckboxChange(file: GitFile, shouldStage: boolean): Promis
   }
 }
 
+async function handleStageAll(): Promise<void> {
+  const project = getActiveProject();
+  if (!project) return;
+
+  try {
+    for (const file of changedFiles.value) {
+      await stageFile(project.path, file.path);
+    }
+    await refreshGitFiles();
+  } catch (err) {
+    const errMsg = err instanceof GitError ? err.details || err.code : String(err);
+    addLogEntry('error', 'Failed to stage all files', errMsg);
+    showToast({
+      type: 'error',
+      message: 'Failed to stage all files',
+      hint: 'See error log in GIT tab',
+    });
+  }
+}
+
 async function handleCommit(): Promise<void> {
   const project = getActiveProject();
   if (!project || !canCommit.value) return;
 
   isCommitting.value = true;
   try {
-    const oid = await commit(project.path, commitMessage.value.trim());
+    const msg = commitMessage.value.trim();
+    const oid = await commit(project.path, msg);
     const shortOid = oid.slice(0, 7);
+    lastCommitMessage.value = msg;
     commitMessage.value = '';
     addLogEntry('success', `Committed ${shortOid}`);
     showToast({
@@ -177,11 +213,11 @@ async function handlePush(): Promise<void> {
     await push(project.path);
     // Get branch name for toast
     const gitData = await invoke<{ branch: string }>('get_git_status', { path: project.path });
-    const branchName = gitData.branch || 'main';
-    addLogEntry('success', `Pushed to origin/${branchName}`);
+    const branch = gitData.branch || 'main';
+    addLogEntry('success', `Pushed to origin/${branch}`);
     showToast({
       type: 'success',
-      message: `Pushed to origin/${branchName}`,
+      message: `Pushed to origin/${branch}`,
     });
     await refreshGitFiles();
   } catch (err) {
@@ -247,10 +283,12 @@ function CollapsibleSection({
         )}
         <span
           style={{
-            fontFamily: fonts.mono,
-            fontSize: fontSizes.sm,
+            fontFamily: fonts.sans,
+            fontSize: fontSizes.xs,
             fontWeight: 600,
             color: colors.textDim,
+            textTransform: 'uppercase' as const,
+            letterSpacing: '0.5px',
           }}
         >
           {title} ({count})
@@ -274,7 +312,7 @@ function GitFileRow({
   onToggle,
 }: {
   file: GitFile;
-  onToggle: (checked: boolean) => void;
+  onToggle: () => void;
 }) {
   // Badge colors based on status
   const badgeBg =
@@ -288,61 +326,64 @@ function GitFileRow({
     file.status === 'D' ? colors.diffRed :
     colors.textMuted;
 
+  // Dot color matches badge color
+  const dotColor = badgeColor;
+
   return (
     <div
+      onClick={onToggle}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = colors.bgElevated; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
       style={{
         display: 'flex',
         alignItems: 'center',
         gap: spacing.xl,
-        padding: `${spacing.md}px ${spacing.xl}px`,
+        padding: `${spacing.sm}px ${spacing.xl}px`,
+        cursor: 'pointer',
+        backgroundColor: 'transparent',
       }}
     >
-      <input
-        type="checkbox"
-        checked={file.staged}
-        onChange={(e) => onToggle((e.target as HTMLInputElement).checked)}
-        style={{
-          accentColor: colors.accent,
-          width: 16,
-          height: 16,
-          cursor: 'pointer',
-        }}
-      />
+      {/* Status dot */}
       <div
         style={{
-          width: 18,
-          height: 18,
-          borderRadius: radii.sm,
-          backgroundColor: badgeBg,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          width: 6,
+          height: 6,
+          borderRadius: '50%',
+          backgroundColor: dotColor,
           flexShrink: 0,
         }}
-      >
-        <span
-          style={{
-            fontFamily: fonts.mono,
-            fontSize: fontSizes.sm,
-            fontWeight: 600,
-            color: badgeColor,
-          }}
-        >
-          {file.status}
-        </span>
-      </div>
+      />
+
+      {/* Filename */}
       <span
         style={{
           fontFamily: fonts.mono,
           fontSize: fontSizes.base,
-          color: colors.textMuted,
+          color: colors.textPrimary,
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
+          flex: 1,
         }}
         title={file.path}
       >
         {file.name}
+      </span>
+
+      {/* Status badge pill */}
+      <span
+        style={{
+          fontFamily: fonts.mono,
+          fontSize: fontSizes.xs,
+          fontWeight: 600,
+          color: badgeColor,
+          backgroundColor: badgeBg,
+          padding: `${spacing.xs}px ${spacing.md}px`,
+          borderRadius: radii.sm,
+          flexShrink: 0,
+        }}
+      >
+        {file.status}
       </span>
     </div>
   );
@@ -469,52 +510,10 @@ export function GitControlTab() {
     };
   }, []);
 
-  // Empty state: no changes and no unpushed commits
-  if (!hasChangesOrCommits.value) {
-    return (
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          height: '100%',
-        }}
-      >
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: spacing['4xl'],
-          }}
-        >
-          <div
-            style={{
-              fontFamily: fonts.sans,
-              fontSize: fontSizes.lg,
-              fontWeight: 600,
-              color: colors.textMuted,
-              marginBottom: spacing.xl,
-            }}
-          >
-            No changes
-          </div>
-          <div
-            style={{
-              fontFamily: fonts.sans,
-              fontSize: fontSizes.base,
-              color: colors.textDim,
-            }}
-          >
-            Working directory is clean.
-          </div>
-        </div>
-        {/* Show log even in clean state so errors remain visible */}
-        <GitLogPanel />
-      </div>
-    );
-  }
+  const totalChanges = gitFiles.value.length;
+  const changeSummary = totalChanges === 0
+    ? 'No Changes'
+    : `${totalChanges} Changed File${totalChanges > 1 ? 's' : ''}`;
 
   return (
     <div
@@ -525,108 +524,77 @@ export function GitControlTab() {
         minHeight: 0,
       }}
     >
-      {/* Commit textarea -- only show when there are files to stage/commit */}
-      {gitFiles.value.length > 0 && (
-        <div style={{ padding: `${spacing.xl}px ${spacing['3xl']}px` }}>
-          <textarea
-            value={commitMessage.value}
-            onInput={(e) => { commitMessage.value = (e.target as HTMLTextAreaElement).value; }}
-            placeholder="Commit message..."
-            style={{
-              width: '100%',
-              height: 64,
-              maxHeight: 120,
-              resize: 'vertical',
-              backgroundColor: colors.bgElevated,
-              border: `1px solid ${colors.bgBorder}`,
-              borderRadius: radii.md,
-              padding: spacing.xl,
-              fontFamily: fonts.mono,
-              fontSize: fontSizes.base,
-              color: colors.textPrimary,
-              outline: 'none',
-            }}
-            onFocus={(e) => {
-              (e.target as HTMLTextAreaElement).style.borderColor = colors.accent;
-            }}
-            onBlur={(e) => {
-              (e.target as HTMLTextAreaElement).style.borderColor = colors.bgBorder;
-            }}
-          />
-        </div>
-      )}
-
-      {/* Buttons row -- only show when there are actionable items */}
-      {(gitFiles.value.length > 0 || unpushedCount.value > 0) && (
-        <div
+      {/* ── 1. HEADER BAR ─────────────────────────────────────────── */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: `${spacing.md}px ${spacing.xl}px`,
+          borderBottom: `1px solid ${colors.bgBorder}`,
+          gap: spacing.xl,
+          flexShrink: 0,
+        }}
+      >
+        {/* Left: change summary */}
+        <span
           style={{
-            display: 'flex',
-            gap: spacing.xl,
-            padding: `0 ${spacing['3xl']}px ${spacing.xl}px`,
+            fontFamily: fonts.sans,
+            fontSize: fontSizes.base,
+            fontWeight: 600,
+            color: colors.textSecondary,
           }}
         >
-          {/* Commit button (D-11) -- only show when there are files */}
-          {gitFiles.value.length > 0 && (
-            <button
-              disabled={!canCommit.value || isCommitting.value}
-              onClick={handleCommit}
-              style={{
-                flex: 1,
-                height: 28,
-                borderRadius: radii.md,
-                backgroundColor: canCommit.value && !isCommitting.value
-                  ? colors.accent
-                  : colors.bgSurface,
-                border: 'none',
-                fontFamily: fonts.sans,
-                fontSize: fontSizes.base,
-                fontWeight: 600,
-                color: canCommit.value && !isCommitting.value ? 'white' : colors.textDim,
-                cursor: canCommit.value && !isCommitting.value ? 'pointer' : 'not-allowed',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: spacing.xl,
-              }}
-            >
-              {isCommitting.value && <Loader size={12} class="animate-spin" />}
-              Commit ({stagedFiles.value.length} files)
-            </button>
-          )}
+          {changeSummary}
+        </span>
 
-          {/* Push button (D-13) - only visible when unpushed commits exist */}
-          {unpushedCount.value > 0 && (
+        {/* Right: actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: spacing.lg }}>
+          {/* More button */}
+          <button
+            title="More options"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 22,
+              height: 22,
+              borderRadius: radii.sm,
+              backgroundColor: 'transparent',
+              border: 'none',
+              color: colors.textDim,
+              cursor: 'pointer',
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = colors.bgElevated; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'; }}
+          >
+            <MoreHorizontal size={14} />
+          </button>
+
+          {/* Stage All button -- only when there are unstaged changes */}
+          {changedFiles.value.length > 0 && (
             <button
-              disabled={isPushing.value}
-              onClick={handlePush}
+              onClick={handleStageAll}
               style={{
-                flex: 1,
-                height: 28,
+                height: 22,
+                padding: `0 ${spacing.xl}px`,
+                backgroundColor: colors.bgElevated,
+                border: `1px solid ${colors.bgBorder}`,
                 borderRadius: radii.md,
-                backgroundColor: isPushing.value ? colors.bgSurface : colors.accent,
-                border: 'none',
                 fontFamily: fonts.sans,
-                fontSize: fontSizes.base,
-                fontWeight: 600,
-                color: isPushing.value ? colors.textDim : 'white',
-                cursor: isPushing.value ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: spacing.xl,
+                fontSize: fontSizes.sm,
+                color: colors.textSecondary,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
               }}
             >
-              {isPushing.value ? (
-                <Loader size={12} class="animate-spin" />
-              ) : (
-                `Push (${unpushedCount.value})`
-              )}
+              Stage All
             </button>
           )}
         </div>
-      )}
+      </div>
 
-      {/* File sections */}
+      {/* ── 2. FILE LIST (scrollable) ─────────────────────────────── */}
       <div
         style={{
           flex: 1,
@@ -634,107 +602,291 @@ export function GitControlTab() {
           overflowY: 'auto',
         }}
       >
-        {/* Staged section (D-05) */}
-        {stagedFiles.value.length > 0 && (
-          <CollapsibleSection
-            title="STAGED"
-            count={stagedFiles.value.length}
-            isOpen={stagedSectionOpen.value}
-            onToggle={() => { stagedSectionOpen.value = !stagedSectionOpen.value; }}
-          >
-            {stagedFiles.value.map(file => (
-              <GitFileRow
-                key={file.path}
-                file={file}
-                onToggle={(checked) => handleCheckboxChange(file, checked)}
-              />
-            ))}
-          </CollapsibleSection>
-        )}
-
-        {/* Changes section (D-05) */}
-        {changedFiles.value.length > 0 && (
-          <CollapsibleSection
-            title="CHANGES"
-            count={changedFiles.value.length}
-            isOpen={changesSectionOpen.value}
-            onToggle={() => { changesSectionOpen.value = !changesSectionOpen.value; }}
-          >
-            {changedFiles.value.map(file => (
-              <GitFileRow
-                key={file.path}
-                file={file}
-                onToggle={(checked) => handleCheckboxChange(file, checked)}
-              />
-            ))}
-          </CollapsibleSection>
-        )}
-
-        {/* Nothing staged message */}
-        {stagedFiles.value.length === 0 && changedFiles.value.length > 0 && (
+        {totalChanges === 0 ? (
+          /* Empty state */
           <div
             style={{
-              padding: `${spacing['3xl']}px ${spacing['4xl']}px`,
-              textAlign: 'center',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '100%',
+              fontFamily: fonts.sans,
+              fontSize: fontSizes.base,
+              color: colors.textDim,
             }}
           >
-            <div
-              style={{
-                fontFamily: fonts.sans,
-                fontSize: fontSizes.base,
-                fontWeight: 600,
-                color: colors.textMuted,
-                marginBottom: spacing.md,
-              }}
-            >
-              Nothing staged
-            </div>
-            <div
-              style={{
-                fontFamily: fonts.sans,
-                fontSize: fontSizes.sm,
-                color: colors.textDim,
-              }}
-            >
-              Check files below to stage them.
-            </div>
+            No changes to commit
           </div>
-        )}
+        ) : (
+          <>
+            {/* Staged section */}
+            {stagedFiles.value.length > 0 && (
+              <CollapsibleSection
+                title="Staged"
+                count={stagedFiles.value.length}
+                isOpen={stagedSectionOpen.value}
+                onToggle={() => { stagedSectionOpen.value = !stagedSectionOpen.value; }}
+              >
+                {stagedFiles.value.map(file => (
+                  <GitFileRow
+                    key={file.path}
+                    file={file}
+                    onToggle={() => handleToggleStage(file, false)}
+                  />
+                ))}
+              </CollapsibleSection>
+            )}
 
-        {/* Only unpushed commits, no file changes */}
-        {gitFiles.value.length === 0 && unpushedCount.value > 0 && (
-          <div
-            style={{
-              padding: `${spacing['3xl']}px ${spacing['4xl']}px`,
-              textAlign: 'center',
-            }}
-          >
-            <div
-              style={{
-                fontFamily: fonts.sans,
-                fontSize: fontSizes.base,
-                fontWeight: 600,
-                color: colors.textMuted,
-                marginBottom: spacing.md,
-              }}
-            >
-              {unpushedCount.value} unpushed commit{unpushedCount.value > 1 ? 's' : ''}
-            </div>
-            <div
-              style={{
-                fontFamily: fonts.sans,
-                fontSize: fontSizes.sm,
-                color: colors.textDim,
-              }}
-            >
-              Working directory is clean. Click Push to sync.
-            </div>
-          </div>
+            {/* Changes section */}
+            {changedFiles.value.length > 0 && (
+              <CollapsibleSection
+                title="Changes"
+                count={changedFiles.value.length}
+                isOpen={changesSectionOpen.value}
+                onToggle={() => { changesSectionOpen.value = !changesSectionOpen.value; }}
+              >
+                {changedFiles.value.map(file => (
+                  <GitFileRow
+                    key={file.path}
+                    file={file}
+                    onToggle={() => handleToggleStage(file, true)}
+                  />
+                ))}
+              </CollapsibleSection>
+            )}
+          </>
         )}
       </div>
 
-      {/* Error/info log panel at bottom */}
+      {/* ── Git Log Panel ─────────────────────────────────────────── */}
       <GitLogPanel />
+
+      {/* ── 3. BOTTOM SECTION (pinned) ────────────────────────────── */}
+
+      {/* 3a. Branch bar */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: `${spacing.md}px ${spacing.xl}px`,
+          borderTop: `1px solid ${colors.bgBorder}`,
+          flexShrink: 0,
+        }}
+      >
+        {/* Left: branch info */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: spacing.md }}>
+          <GitBranch size={12} style={{ color: colors.textDim }} />
+          <span
+            style={{
+              fontFamily: fonts.mono,
+              fontSize: fontSizes.base,
+              fontWeight: 600,
+              color: colors.textSecondary,
+            }}
+          >
+            {branchName.value || 'main'}
+          </span>
+        </div>
+
+        {/* Right: push pill */}
+        {unpushedCount.value > 0 && (
+          <button
+            disabled={isPushing.value}
+            onClick={handlePush}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: spacing.md,
+              backgroundColor: isPushing.value ? colors.bgSurface : colors.accent,
+              color: isPushing.value ? colors.textDim : 'white',
+              fontFamily: fonts.sans,
+              fontSize: fontSizes.sm,
+              fontWeight: 600,
+              borderRadius: radii.xl,
+              height: 22,
+              padding: `0 ${spacing.xl}px`,
+              border: 'none',
+              cursor: isPushing.value ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {isPushing.value ? (
+              <Loader size={10} class="animate-spin" />
+            ) : (
+              <ArrowUp size={10} />
+            )}
+            Push {unpushedCount.value}
+          </button>
+        )}
+      </div>
+
+      {/* 3b. Commit input */}
+      <div
+        style={{
+          padding: `${spacing.md}px ${spacing.xl}px`,
+          position: 'relative',
+          flexShrink: 0,
+        }}
+      >
+        <textarea
+          value={commitMessage.value}
+          onInput={(e) => { commitMessage.value = (e.target as HTMLTextAreaElement).value; }}
+          placeholder="Enter commit message"
+          style={{
+            width: '100%',
+            height: 56,
+            maxHeight: 120,
+            resize: 'vertical',
+            backgroundColor: colors.bgElevated,
+            border: `1px solid ${colors.bgBorder}`,
+            borderRadius: radii.md,
+            padding: spacing.xl,
+            fontFamily: fonts.mono,
+            fontSize: fontSizes.base,
+            color: colors.textPrimary,
+            outline: 'none',
+          }}
+          onFocus={(e) => {
+            (e.target as HTMLTextAreaElement).style.borderColor = colors.accent;
+          }}
+          onBlur={(e) => {
+            (e.target as HTMLTextAreaElement).style.borderColor = colors.bgBorder;
+          }}
+        />
+        {/* Expand icon (decorative) */}
+        <Maximize2
+          size={10}
+          style={{
+            position: 'absolute',
+            bottom: spacing.md + spacing.xl,
+            right: spacing.md + spacing.xl,
+            color: colors.textDim,
+            pointerEvents: 'none',
+          }}
+        />
+      </div>
+
+      {/* 3c. Bottom toolbar */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: `${spacing.sm}px ${spacing.xl}px`,
+          borderTop: `1px solid ${colors.bgBorder}`,
+          flexShrink: 0,
+        }}
+      >
+        {/* Left: pencil icon */}
+        <button
+          title="Edit"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 22,
+            height: 22,
+            backgroundColor: 'transparent',
+            border: 'none',
+            color: colors.textDim,
+            cursor: 'pointer',
+          }}
+        >
+          <Pencil size={12} />
+        </button>
+
+        {/* Right: Commit Tracked button */}
+        <button
+          disabled={!canCommit.value || isCommitting.value}
+          onClick={handleCommit}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: spacing.md,
+            backgroundColor: canCommit.value && !isCommitting.value ? colors.accent : colors.bgSurface,
+            color: canCommit.value && !isCommitting.value ? 'white' : colors.textDim,
+            fontFamily: fonts.sans,
+            fontSize: fontSizes.sm,
+            fontWeight: 600,
+            borderRadius: radii.md,
+            height: 24,
+            padding: `0 ${spacing.xl}px`,
+            border: 'none',
+            cursor: canCommit.value && !isCommitting.value ? 'pointer' : 'not-allowed',
+          }}
+        >
+          {isCommitting.value ? (
+            <Loader size={10} class="animate-spin" />
+          ) : (
+            <>
+              Commit Tracked
+              <ChevronDown size={8} />
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* 3d. Status bar */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: `${spacing.sm}px ${spacing.xl}px`,
+          borderTop: `1px solid ${colors.bgBorder}`,
+          backgroundColor: colors.bgDeep,
+          flexShrink: 0,
+        }}
+      >
+        {/* Left: last commit message */}
+        <span
+          style={{
+            fontFamily: fonts.mono,
+            fontSize: fontSizes.xs,
+            color: colors.textDim,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: '70%',
+          }}
+        >
+          {lastCommitMessage.value}
+        </span>
+
+        {/* Right: action icons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: spacing.lg }}>
+          <button
+            title="Undo"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: 'transparent',
+              border: 'none',
+              color: colors.textDim,
+              cursor: 'pointer',
+              padding: 0,
+            }}
+          >
+            <Undo2 size={10} />
+          </button>
+          <button
+            title="Branch"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: 'transparent',
+              border: 'none',
+              color: colors.textDim,
+              cursor: 'pointer',
+              padding: 0,
+            }}
+          >
+            <GitBranch size={10} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
