@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: Workspace Evolution
 status: executing
-stopped_at: Phase 16 UI-SPEC approved
-last_updated: "2026-04-15T08:09:31.877Z"
-last_activity: 2026-04-15 - Completed quick task 260415-i4n: Move sidebar header title to OS title bar
+stopped_at: Phase 17 context gathered
+last_updated: "2026-04-15T11:57:35.676Z"
+last_activity: "2026-04-15 -- Completed quick task 260415-he6: Add per-file revert and Revert All"
 progress:
   total_phases: 7
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 5
-  percent: 83
+  completed_plans: 6
+  percent: 100
 ---
 
 # Project State
@@ -76,8 +76,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-14T21:59:49.164Z
-Stopped at: Phase 16 UI-SPEC approved
-Resume file: .planning/phases/16-sidebar-evolution-git-control/16-UI-SPEC.md
+Last session: 2026-04-15T11:57:35.673Z
+Stopped at: Phase 17 context gathered
+Resume file: .planning/phases/17-main-panel-file-tabs/17-CONTEXT.md
 
 Next: `/gsd-plan-phase 15`
