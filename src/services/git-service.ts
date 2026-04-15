@@ -78,3 +78,17 @@ export async function push(repoPath: string, remote?: string, branch?: string): 
     throw new GitError('PushError', msg);
   }
 }
+
+/**
+ * Get the number of commits ahead of upstream (unpushed commits).
+ * @param repoPath Path to the git repository root
+ * @returns Number of unpushed commits (0 if no upstream configured or on error)
+ */
+export async function getUnpushedCount(repoPath: string): Promise<number> {
+  try {
+    return await invoke<number>('get_unpushed_count', { repoPath });
+  } catch (e) {
+    console.warn('[git-service] getUnpushedCount failed:', e);
+    return 0; // Fail safe: hide push button rather than crash
+  }
+}

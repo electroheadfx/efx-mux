@@ -1,7 +1,7 @@
 // git-service.test.ts -- Unit tests for git-service IPC wrappers (Phase 15)
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { mockIPC } from '@tauri-apps/api/mocks';
-import { stageFile, unstageFile, commit, push, GitError } from './git-service';
+import { stageFile, unstageFile, commit, push, getUnpushedCount, GitError } from './git-service';
 
 describe('git-service', () => {
   describe('stageFile', () => {
@@ -144,6 +144,31 @@ describe('git-service', () => {
         expect(e).toBeInstanceOf(GitError);
         expect((e as GitError).code).toBe('PushError');
       }
+    });
+  });
+
+  describe('getUnpushedCount', () => {
+    it('should return number from backend', async () => {
+      mockIPC((cmd) => {
+        if (cmd === 'get_unpushed_count') {
+          return 3;
+        }
+      });
+
+      const count = await getUnpushedCount('/repo');
+      expect(count).toBe(3);
+    });
+
+    it('should return 0 on error (fail safe)', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mockIPC(() => {
+        throw new Error('Backend error');
+      });
+
+      const count = await getUnpushedCount('/repo');
+      expect(count).toBe(0);
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
     });
   });
 });
