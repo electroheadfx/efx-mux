@@ -50,12 +50,52 @@ let rightCurrentSession = '';
 
 function App() {
   return (
-    <div id="app-root" class="flex w-screen h-screen overflow-hidden bg-bg text-text-bright font-mono text-sm font-light antialiased">
-      <Sidebar />
-      <div class="split-handle-v" data-handle="sidebar-main" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" />
-      <MainPanel />
-      <div class="split-handle-v" data-handle="main-right" role="separator" aria-orientation="vertical" aria-label="Resize main panel" />
-      <RightPanel />
+    <div id="app-root" class="flex flex-col w-screen h-screen overflow-hidden bg-bg text-text-bright font-mono text-sm font-light antialiased">
+      {/* Custom title bar region (overlay mode — sits over native title bar) */}
+      <div
+        data-tauri-drag-region
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          height: 28,
+          minHeight: 28,
+          paddingLeft: 78,
+          paddingRight: 12,
+          WebkitAppRegion: 'drag',
+        } as any}
+      >
+        <button
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 18,
+            height: 18,
+            borderRadius: 4,
+            backgroundColor: 'transparent',
+            color: 'var(--color-text-muted)',
+            fontSize: 16,
+            fontWeight: 400,
+            cursor: 'pointer',
+            border: '1px solid var(--color-text-muted)',
+            WebkitAppRegion: 'no-drag',
+            lineHeight: 1,
+          } as any}
+          title="Add Project"
+          aria-label="Add project"
+          onClick={() => { openProjectModal(); }}
+        >
+          +
+        </button>
+      </div>
+      <div class="flex flex-1 overflow-hidden">
+        <Sidebar />
+        <div class="split-handle-v" data-handle="sidebar-main" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" />
+        <MainPanel />
+        <div class="split-handle-v" data-handle="main-right" role="separator" aria-orientation="vertical" aria-label="Resize main panel" />
+        <RightPanel />
+      </div>
       <ProjectModal />
       <FuzzySearch />
       <ShortcutCheatsheet />
