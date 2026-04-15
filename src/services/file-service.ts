@@ -4,6 +4,7 @@
 // Each function throws FileError on failure for try/catch handling.
 
 import { invoke } from '@tauri-apps/api/core';
+import { emit } from '@tauri-apps/api/event';
 
 /**
  * Typed error class for file operations.
@@ -27,6 +28,10 @@ export class FileError extends Error {
 export async function writeFile(path: string, content: string): Promise<void> {
   try {
     await invoke('write_file_content', { path, content });
+    // Trigger git status refresh for sidebar and git-changes-tab.
+    // The Rust file watcher only watches .git/index, not working tree changes.
+    // Emit the same event name so existing listeners pick it up.
+    await emit('git-status-changed');
   } catch (e) {
     throw new FileError('WriteError', String(e));
   }

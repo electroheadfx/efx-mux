@@ -32,6 +32,7 @@ export interface TerminalTab {
   disconnectPty?: () => void;
   detachResize?: () => void;
   exitCode?: number | null;  // undefined = running, number = exited
+  isAgent: boolean;  // true if this tab runs an agent (claude/opencode)
 }
 
 // ---------------------------------------------------------------------------
@@ -47,7 +48,7 @@ let tabCounter = 0;
  * Used to restore tabs when switching back to a previously visited project.
  * Key: project name, Value: array of { sessionName, label } for each tab.
  */
-const projectTabCache = new Map<string, Array<{ sessionName: string; label: string }>>();
+const projectTabCache = new Map<string, Array<{ sessionName: string; label: string; isAgent: boolean }>>();
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -158,6 +159,7 @@ export async function createNewTab(): Promise<TerminalTab | null> {
     disconnectPty: undefined,
     detachResize: undefined,
     exitCode: undefined,
+    isAgent: false,  // Ctrl+T / [+] tabs are always plain shell
   };
   terminalTabs.value = [...terminalTabs.value, partialTab];
   activeTabId.value = id;
@@ -347,6 +349,7 @@ export async function initFirstTab(
     disconnectPty,
     detachResize: resizeHandle.detach,
     exitCode: undefined,
+    isAgent: !!agentBinary,
   };
 
   terminalTabs.value = [tab];
@@ -397,6 +400,7 @@ function persistTabState(): void {
   const tabs = terminalTabs.value.map(t => ({
     sessionName: t.sessionName,
     label: t.label,
+    isAgent: t.isAgent ?? false,
   }));
   const data = JSON.stringify({ tabs, activeTabId: activeTabId.value });
   // Save under per-project key (and legacy flat key for backward compat)
@@ -442,10 +446,10 @@ export async function restartTabSession(tabId: string): Promise<void> {
   await nextFrame();
   fitAddon.fit();
 
-  // Connect PTY
-  const agentBinary = await resolveAgentBinary(projectInfo?.agent);
+  // Connect PTY -- only resolve agent binary if this tab was originally an agent tab
+  const restartAgentBinary = tab.isAgent ? await resolveAgentBinary(projectInfo?.agent) : undefined;
   try {
-    const conn = await connectPty(terminal, newSessionName, projectInfo?.path, agentBinary);
+    const conn = await connectPty(terminal, newSessionName, projectInfo?.path, restartAgentBinary);
     tab.disconnectPty = conn.disconnect;
     tab.ptyConnected = true;
   } catch (err) {
@@ -483,6 +487,7 @@ export function saveProjectTabs(projectName: string): void {
     const tabMeta = tabs.map(t => ({
       sessionName: t.sessionName,
       label: t.label,
+      isAgent: t.isAgent ?? false,
     }));
     projectTabCache.set(projectName, tabMeta);
     // Persist to disk so tabs survive app restart
@@ -586,7 +591,7 @@ export async function clearAllTabs(): Promise<void> {
  * Returns true if at least 1 tab was restored, false otherwise.
  */
 export async function restoreTabs(
-  savedData: { tabs: Array<{ sessionName: string; label: string }>; activeTabId: string },
+  savedData: { tabs: Array<{ sessionName: string; label: string; isAgent?: boolean }>; activeTabId: string },
   projectPath?: string,
   agentBinary?: string,
 ): Promise<boolean> {
@@ -625,8 +630,9 @@ export async function restoreTabs(
     // Hide after measuring — switchToTab will reveal the active tab.
     container.style.display = 'none';
 
-    // Connect PTY -- first tab gets agent binary (it's the agent tab), rest are plain shell
-    const shellCmd = (i === 0 && agentBinary) ? agentBinary : undefined;
+    // Connect PTY -- use persisted isAgent flag (backward compat: old data without isAgent falls back to index heuristic)
+    const isAgentTab = saved.isAgent ?? (i === 0 && !!agentBinary);
+    const shellCmd = (isAgentTab && agentBinary) ? agentBinary : undefined;
     let disconnectPty: (() => void) | undefined;
     let ptyConnected = false;
 
@@ -653,6 +659,7 @@ export async function restoreTabs(
       disconnectPty,
       detachResize: resizeHandle.detach,
       exitCode: undefined,
+      isAgent: isAgentTab,
     });
   }
 

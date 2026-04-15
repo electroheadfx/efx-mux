@@ -3,9 +3,10 @@
 
 import { useRef, useEffect } from 'preact/hooks';
 import { EditorView } from '@codemirror/view';
+import { listen } from '@tauri-apps/api/event';
 import { createEditorState, registerEditorView, unregisterEditorView, registerSaveCallback, unregisterSaveCallback, triggerEditorSave } from '../editor/setup';
 import { getLanguageExtension } from '../editor/languages';
-import { writeFile } from '../services/file-service';
+import { writeFile, readFile } from '../services/file-service';
 import { showToast } from './toast';
 import { setEditorDirty } from './unified-tab-bar';
 
@@ -83,6 +84,33 @@ export function EditorTab({ tabId, filePath, fileName, content, isActive }: Edit
       viewRef.current.focus();
     }
   }, [isActive]);
+
+  // Re-read file content when git status changes (handles git checkout/revert)
+  useEffect(() => {
+    let cancelled = false;
+    const unlistenPromise = listen('git-status-changed', async () => {
+      if (cancelled || !viewRef.current || !setupRef.current) return;
+      try {
+        const diskContent = await readFile(filePath);
+        const savedContent = setupRef.current.getSavedContent();
+        if (diskContent !== savedContent) {
+          // File changed on disk -- update editor
+          const view = viewRef.current;
+          view.dispatch({
+            changes: { from: 0, to: view.state.doc.length, insert: diskContent },
+          });
+          setupRef.current.setSavedContent(diskContent);
+          setEditorDirty(tabId, false);
+        }
+      } catch {
+        // File may have been deleted -- ignore
+      }
+    });
+    return () => {
+      cancelled = true;
+      unlistenPromise.then(fn => fn());
+    };
+  }, [filePath, tabId]);
 
   // Listen for editor-save event (dispatched by main.tsx on Cmd+S)
   useEffect(() => {
