@@ -47,6 +47,28 @@ export function getEditorCurrentContent(tabId: string): string | null {
   return view.state.doc.toString();
 }
 
+/** Module-level registry: tabId -> save callback, so editor-save event can trigger save */
+const saveCallbackMap = new Map<string, (content: string) => Promise<void>>();
+
+export function registerSaveCallback(tabId: string, cb: (content: string) => Promise<void>): void {
+  saveCallbackMap.set(tabId, cb);
+}
+
+export function unregisterSaveCallback(tabId: string): void {
+  saveCallbackMap.delete(tabId);
+}
+
+/**
+ * Triggers save for a given tab by calling its registered callback with the
+ * current EditorView content. Used by the Cmd+S handler in main.tsx.
+ */
+export async function triggerEditorSave(tabId: string): Promise<void> {
+  const cb = saveCallbackMap.get(tabId);
+  if (!cb) return;
+  const content = getEditorCurrentContent(tabId);
+  if (content !== null) await cb(content);
+}
+
 // ── Factory ────────────────────────────────────────────────────────────────────
 
 /**

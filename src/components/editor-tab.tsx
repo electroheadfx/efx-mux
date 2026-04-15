@@ -3,7 +3,7 @@
 
 import { useRef, useEffect } from 'preact/hooks';
 import { EditorView } from '@codemirror/view';
-import { createEditorState, registerEditorView, unregisterEditorView } from '../editor/setup';
+import { createEditorState, registerEditorView, unregisterEditorView, registerSaveCallback, unregisterSaveCallback, triggerEditorSave } from '../editor/setup';
 import { getLanguageExtension } from '../editor/languages';
 import { writeFile } from '../services/file-service';
 import { showToast } from './toast';
@@ -65,9 +65,11 @@ export function EditorTab({ tabId, filePath, fileName, content, isActive }: Edit
 
     // Register so closeUnifiedTab can get current content via getEditorCurrentContent
     registerEditorView(tabId, view);
+    registerSaveCallback(tabId, handleSave);
 
     return () => {
       unregisterEditorView(tabId);
+      unregisterSaveCallback(tabId);
       view.destroy();
       viewRef.current = null;
       setupRef.current = null;
@@ -87,22 +89,12 @@ export function EditorTab({ tabId, filePath, fileName, content, isActive }: Edit
     function onEditorSave() {
       if (viewRef.current) {
         viewRef.current.focus();
-        // Dispatch a synthetic Mod-s event so CM6's keymap handles it
-        const event = new KeyboardEvent('keydown', {
-          key: 's',
-          keyCode: 19,
-          which: 19,
-          bubbles: true,
-          cancelable: true,
-          metaKey: true,
-          ctrlKey: false,
-        });
-        viewRef.current.dom.dispatchEvent(event);
+        triggerEditorSave(tabId);
       }
     }
     document.addEventListener('editor-save', onEditorSave);
     return () => document.removeEventListener('editor-save', onEditorSave);
-  }, []);
+  }, [tabId]);
 
   return (
     <div
