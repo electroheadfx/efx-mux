@@ -19,6 +19,7 @@ pub enum GitError {
     IndexError(String),
     CommitError(String),
     PushRejected(String),
+    RevertError(String),
     AuthFailed,
 }
 
@@ -30,6 +31,7 @@ impl std::fmt::Display for GitError {
             GitError::IndexError(s) => write!(f, "Index error: {}", s),
             GitError::CommitError(s) => write!(f, "Commit error: {}", s),
             GitError::PushRejected(s) => write!(f, "Push rejected: {}", s),
+            GitError::RevertError(s) => write!(f, "Revert error: {}", s),
             GitError::AuthFailed => write!(f, "Authentication failed"),
         }
     }
@@ -458,6 +460,56 @@ pub async fn uncommit(repo_path: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// Synchronous inner implementation of revert_file for testing.
+/// Discards working tree changes for a tracked modified file using system git.
+/// For untracked files (`?` status), git checkout is a no-op which is correct --
+/// untracked files should not be silently deleted.
+pub fn revert_file_impl(repo_path: &str, file_path: &str) -> Result<(), GitError> {
+    let repo = Repository::open(repo_path).map_err(|_| GitError::NotARepo)?;
+
+    // Get workdir for relative path calculation
+    let workdir = repo.workdir().ok_or(GitError::NotARepo)?;
+
+    // file_path can be absolute or relative to repo root
+    let rel_path = if Path::new(file_path).is_absolute() {
+        Path::new(file_path)
+            .strip_prefix(workdir)
+            .map_err(|_| GitError::FileNotFound)?
+    } else {
+        Path::new(file_path)
+    };
+
+    let rel_str = rel_path.to_string_lossy();
+
+    // Drop the repo handle before shelling out to avoid lock contention
+    drop(repo);
+
+    // Shell out to system git for checkout -- same rationale as push_impl:
+    // git2's checkout_index has edge cases with submodules and permissions
+    // that system git handles correctly.
+    let output = Command::new("git")
+        .args(["checkout", "--", &rel_str])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| GitError::RevertError(format!("Failed to run git: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        return Err(GitError::RevertError(stderr));
+    }
+
+    Ok(())
+}
+
+/// Revert (discard) working tree changes for a single file.
+#[tauri::command]
+pub async fn revert_file(repo_path: String, file_path: String) -> Result<(), String> {
+    spawn_blocking(move || revert_file_impl(&repo_path, &file_path))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -728,5 +780,32 @@ mod tests {
             }
             e => panic!("Expected PushRejected for missing remote, got {:?}", e),
         }
+    }
+
+    #[test]
+    fn revert_file_discards_changes() {
+        let (dir, path) = setup_git_repo();
+        let file_path = dir.path().join("tracked.txt");
+
+        // Create and commit a file with known content
+        std::fs::write(&file_path, "original content").unwrap();
+        run_git(dir.path(), &["add", "tracked.txt"]);
+        run_git(dir.path(), &["commit", "-m", "add tracked.txt"]);
+
+        // Modify the file
+        std::fs::write(&file_path, "modified content").unwrap();
+        let content = std::fs::read_to_string(&file_path).unwrap();
+        assert_eq!(content, "modified content", "File should be modified before revert");
+
+        // Revert the file
+        let result = revert_file_impl(&path, "tracked.txt");
+        assert!(result.is_ok(), "revert_file_impl failed: {:?}", result);
+
+        // Verify content matches original
+        let reverted = std::fs::read_to_string(&file_path).unwrap();
+        assert_eq!(
+            reverted, "original content",
+            "File should be reverted to original content"
+        );
     }
 }
