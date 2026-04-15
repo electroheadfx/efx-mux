@@ -54,34 +54,19 @@ function App() {
       {/* Custom title bar region (overlay mode — sits over native title bar) */}
       <div
         data-tauri-drag-region
+        class="titlebar-drag-region"
         style={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'flex-end',
+          justifyContent: 'flex-start',
           height: 28,
           minHeight: 28,
           paddingLeft: 78,
           paddingRight: 12,
-          WebkitAppRegion: 'drag',
-        } as any}
+        }}
       >
         <button
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 18,
-            height: 18,
-            borderRadius: 4,
-            backgroundColor: 'transparent',
-            color: 'var(--color-text-muted)',
-            fontSize: 16,
-            fontWeight: 400,
-            cursor: 'pointer',
-            border: '1px solid var(--color-text-muted)',
-            WebkitAppRegion: 'no-drag',
-            lineHeight: 1,
-          } as any}
+          class="titlebar-add-btn"
           title="Add Project"
           aria-label="Add project"
           onClick={() => { openProjectModal(); }}

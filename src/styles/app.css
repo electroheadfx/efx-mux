@@ -417,3 +417,36 @@ html, body {
 .animate-spin {
   animation: spin 1s linear infinite;
 }
+
+/* Title bar drag region */
+.titlebar-drag-region {
+  -webkit-app-region: drag;
+}
+
+.titlebar-add-btn {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background-color: transparent;
+  color: white;
+  font-size: 16px;
+  font-weight: 400;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  line-height: 1;
+  transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+}
+
+.titlebar-add-btn:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.titlebar-add-btn:active {
+  color: #e67e22;
+  border-color: #e67e22;
+}
