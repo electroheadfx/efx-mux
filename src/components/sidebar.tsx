@@ -24,6 +24,7 @@ import { openProjectModal } from './project-modal';
 import { colors, fonts, fontSizes, spacing, radii } from '../tokens';
 import { FileTree } from './file-tree';
 import { GitControlTab } from './git-control-tab';
+import { openGitChangesTab } from './unified-tab-bar';
 
 // ---------------------------------------------------------------------------
 // Local signals for sidebar-only state
@@ -386,7 +387,7 @@ function GitFileRow({ file }: { file: { name: string; path: string; status: stri
       }}
       class="hover:bg-bg-raised"
       onClick={() => {
-        document.dispatchEvent(new CustomEvent('open-diff', { detail: { path: file.path } }));
+        openGitChangesTab();
       }}
     >
       <div
