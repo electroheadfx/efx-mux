@@ -5,7 +5,7 @@ milestone_name: Workspace Evolution
 status: executing
 stopped_at: Phase 16 UI-SPEC approved
 last_updated: "2026-04-15T08:09:31.877Z"
-last_activity: 2026-04-15 -- Phase 16 execution started
+last_activity: 2026-04-15 - Completed quick task 260415-i4n: Move sidebar header title to OS title bar
 progress:
   total_phases: 7
   completed_phases: 1
@@ -72,6 +72,7 @@ None.
 | 260415-gkz | Redesign git-control-tab to Zed panel layout: gray checkboxes, diff stats, click-to-diff | 2026-04-15 |
 | 260415-h39 | Add git history accordion section with commit log above branch bar | 2026-04-15 |
 | 260415-he6 | Add per-file revert button and replace ellipsis with Revert All in Git tab | 2026-04-15 |
+| 260415-i4n | Move sidebar header title to OS title bar | 2026-04-15 |
 
 ## Session Continuity
 
