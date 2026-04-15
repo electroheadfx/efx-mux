@@ -34,15 +34,7 @@ import { openEditorTab, restoreEditorTabs, activeUnifiedTabId } from './componen
 import { serverPaneState, saveCurrentProjectState, restoreProjectState } from './components/server-pane';
 import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from './components/file-tree';
 import { detectAgent } from './server/server-bridge';
-
-/**
- * Derive a tmux session name from a project name.
- * Sanitizes to alphanumeric + hyphen + underscore (matching pty.rs sanitization).
- */
-function projectSessionName(projectName: string, suffix?: string): string {
-  const base = projectName.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
-  return suffix ? `${base}-${suffix}` : base;
-}
+import { projectSessionName } from './utils/session-name';
 
 // Module-level state for terminal session tracking
 // *PtyKey = original PTY spawn session (for write_pty)

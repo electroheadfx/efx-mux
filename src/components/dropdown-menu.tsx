@@ -96,6 +96,18 @@ export function Dropdown({ items, trigger }: DropdownProps) {
     }
   }, [selectableItems, selectedIndex]);
 
+  // Clear typeahead timeout when dropdown closes or unmounts
+  useEffect(() => {
+    if (!isOpen && typeaheadTimeout.current) {
+      clearTimeout(typeaheadTimeout.current);
+      typeaheadTimeout.current = null;
+      typeaheadBuffer.current = '';
+    }
+    return () => {
+      if (typeaheadTimeout.current) clearTimeout(typeaheadTimeout.current);
+    };
+  }, [isOpen]);
+
   // Focus menu container when opened
   useEffect(() => {
     if (isOpen && menuRef.current) {
@@ -196,6 +208,11 @@ export function Dropdown({ items, trigger }: DropdownProps) {
                   item.action();
                   setIsOpen(false);
                   triggerRef.current?.focus();
+                }}
+                onMouseEnter={() => {
+                  if (!item.disabled && selectableIdx >= 0) {
+                    setSelectedIndex(selectableIdx);
+                  }
                 }}
                 style={{
                   padding: `${spacing.lg}px ${spacing['4xl']}px`,
