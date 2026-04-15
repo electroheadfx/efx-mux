@@ -74,8 +74,8 @@
   4. User can commit staged changes with message input
   5. User can push commits to remote repository
 **Plans**: 3 plans
-  - [ ] 16-01-PLAN.md -- Backend get_unpushed_count and service layer + test stubs
-  - [ ] 16-02-PLAN.md -- Sidebar tab system and Toast notification component
+  - [x] 16-01-PLAN.md -- Backend get_unpushed_count and service layer + test stubs
+  - [x] 16-02-PLAN.md -- Sidebar tab system and Toast notification component
   - [ ] 16-03-PLAN.md -- GitControlTab with staging/commit/push workflow
 **UI hint**: yes
 
@@ -166,7 +166,7 @@ Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21
 | 13. Rust Tests | v0.2.0 | 2/2 | Complete | 2026-04-12 |
 | 14. Consolidation | v0.2.0 | 2/2 | Complete | 2026-04-12 |
 | 15. Foundation Primitives | v0.3.0 | 2/2 | Complete    | 2026-04-14 |
-| 16. Sidebar Evolution + Git Control | v0.3.0 | 0/3 | Planned | - |
+| 16. Sidebar Evolution + Git Control | v0.3.0 | 2/3 | In Progress|  |
 | 17. Main Panel File Tabs | v0.3.0 | 0/? | Not started | - |
 | 18. File Tree Enhancements | v0.3.0 | 0/? | Not started | - |
 | 19. GSD Sub-Tabs | v0.3.0 | 0/? | Not started | - |

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: Workspace Evolution
 status: executing
-stopped_at: Phase 16 context gathered
-last_updated: "2026-04-14T21:43:15.900Z"
-last_activity: 2026-04-14
+stopped_at: Phase 16 UI-SPEC approved
+last_updated: "2026-04-15T05:31:29.344Z"
+last_activity: 2026-04-15 -- Phase 16 execution started
 progress:
   total_phases: 7
   completed_phases: 1
-  total_plans: 2
+  total_plans: 5
   completed_plans: 2
-  percent: 100
+  percent: 40
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** A single native macOS window that co-locates AI agent terminals alongside live GSD progress, git diff, and file tree -- all persisted across restarts via tmux.
-**Current focus:** Phase 15 — foundation-primitives
+**Current focus:** Phase 16 — sidebar-evolution-git-control
 
 ## Current Position
 
-Phase: 16
-Plan: Not started
-Status: Executing Phase 15
-Last activity: 2026-04-14
+Phase: 16 (sidebar-evolution-git-control) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 16
+Last activity: 2026-04-15 -- Phase 16 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -71,8 +71,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-14T21:43:15.897Z
-Stopped at: Phase 16 context gathered
-Resume file: .planning/phases/16-sidebar-evolution-git-control/16-CONTEXT.md
+Last session: 2026-04-14T21:59:49.164Z
+Stopped at: Phase 16 UI-SPEC approved
+Resume file: .planning/phases/16-sidebar-evolution-git-control/16-UI-SPEC.md
 
 Next: `/gsd-plan-phase 15`
