@@ -12,7 +12,22 @@ export default defineConfig({
     strictPort: true,
     host: host || false,
     hmr: host ? { protocol: 'ws', host, port: 1421 } : undefined,
-    watch: { ignored: ['**/src-tauri/**'] },
+    watch: {
+      ignored: [
+        '**/src-tauri/**',
+        '**/.git/**',
+        '**/.planning/**',
+        '**/.claude/**',
+        '**/.github/**',
+        '**/RESEARCH/**',
+        '**/node_modules/**',
+        '**/repomix-output.*',
+        '**/CLAUDE.md',
+        '**/README.md',
+        '**/pnpm-lock.yaml',
+        '**/package-lock.json',
+      ],
+    },
   },
   envPrefix: ['VITE_', 'TAURI_ENV_*'],
   build: {

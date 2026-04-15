@@ -757,23 +757,21 @@ export function GitControlTab() {
               disabled={isReverting.value}
               title="Revert all unstaged changes"
               style={{
-                height: 22,
-                padding: `0 ${spacing.xl}px`,
-                backgroundColor: colors.bgElevated,
-                border: `1px solid ${colors.bgBorder}`,
-                borderRadius: radii.md,
-                fontFamily: fonts.sans,
-                fontSize: fontSizes.sm,
-                color: colors.textSecondary,
-                cursor: isReverting.value ? 'not-allowed' : 'pointer',
-                whiteSpace: 'nowrap',
-                display: 'inline-flex',
+                display: 'flex',
                 alignItems: 'center',
-                gap: `${spacing.md}px`,
+                justifyContent: 'center',
+                width: 22,
+                height: 22,
+                borderRadius: radii.sm,
+                backgroundColor: 'transparent',
+                border: 'none',
+                color: colors.textDim,
+                cursor: isReverting.value ? 'not-allowed' : 'pointer',
               }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = colors.bgElevated; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'; }}
             >
-              {isReverting.value ? <Loader size={10} class="animate-spin" /> : <Undo2 size={10} />}
-              Revert All
+              {isReverting.value ? <Loader size={10} class="animate-spin" /> : <Undo2 size={14} />}
             </button>
           )}
 
