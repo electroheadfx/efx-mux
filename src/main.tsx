@@ -9,6 +9,7 @@
 import { render } from 'preact';
 import { effect } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import './styles/app.css';
 
 import { Sidebar } from './components/sidebar';
@@ -63,6 +64,11 @@ function App() {
           minHeight: 28,
           paddingLeft: 78,
           paddingRight: 12,
+        }}
+        onMouseDown={(e) => {
+          if ((e.target as HTMLElement).closest('.titlebar-add-btn')) return;
+          e.preventDefault();
+          getCurrentWindow().startDragging();
         }}
       >
         <button
