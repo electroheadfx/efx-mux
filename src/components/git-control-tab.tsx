@@ -357,8 +357,8 @@ export function GitControlTab() {
     };
   }, []);
 
-  // Empty state: no changes at all
-  if (gitFiles.value.length === 0) {
+  // Empty state: no changes at all AND no unpushed commits
+  if (gitFiles.value.length === 0 && unpushedCount.value === 0) {
     return (
       <div
         style={{
