@@ -355,6 +355,33 @@ pub async fn get_unpushed_count(repo_path: String) -> Result<usize, String> {
         .map_err(|e| e.to_string())
 }
 
+/// Uncommit: reset HEAD to HEAD^ (soft reset, keeps changes staged).
+pub fn uncommit_impl(repo_path: &str) -> Result<(), GitError> {
+    Repository::open(repo_path).map_err(|_| GitError::NotARepo)?;
+
+    let output = std::process::Command::new("git")
+        .args(["reset", "--soft", "HEAD^"])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| GitError::IndexError(format!("Failed to run git reset: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        return Err(GitError::IndexError(format!("git reset HEAD^ failed: {}", stderr)));
+    }
+
+    Ok(())
+}
+
+/// Uncommit the last commit (soft reset HEAD^).
+#[tauri::command]
+pub async fn uncommit(repo_path: String) -> Result<(), String> {
+    spawn_blocking(move || uncommit_impl(&repo_path))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
