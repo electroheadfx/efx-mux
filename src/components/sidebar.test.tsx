@@ -65,10 +65,45 @@ describe('Sidebar', () => {
     });
   });
 
-  it('renders GIT CHANGES section label', async () => {
-    render(<Sidebar />);
-    await waitFor(() => {
-      expect(document.body.textContent).toContain('GIT CHANGES');
+  describe('Tab navigation', () => {
+    it('should render three tabs: Projects, Files, Git', async () => {
+      render(<Sidebar />);
+      await waitFor(() => {
+        expect(screen.getByText('Projects')).toBeTruthy();
+        expect(screen.getByText('Files')).toBeTruthy();
+        expect(screen.getByText('Git')).toBeTruthy();
+      });
+    });
+
+    it('should show projects content by default', async () => {
+      render(<Sidebar />);
+      await waitFor(() => {
+        // Projects tab should show PROJECTS label
+        expect(screen.getByText('PROJECTS')).toBeTruthy();
+      });
+    });
+
+    it('should switch to Files tab on click', async () => {
+      render(<Sidebar />);
+      await waitFor(() => {
+        expect(screen.getByText('Files')).toBeTruthy();
+      });
+      const filesTab = screen.getByText('Files');
+      fireEvent.click(filesTab);
+      // FileTree should be rendered - it has its own component
+    });
+
+    it('should switch to Git tab on click', async () => {
+      render(<Sidebar />);
+      await waitFor(() => {
+        expect(screen.getByText('Git')).toBeTruthy();
+      });
+      const gitTab = screen.getByText('Git');
+      fireEvent.click(gitTab);
+      // Placeholder text should appear
+      await waitFor(() => {
+        expect(screen.getByText(/Git Control tab/)).toBeTruthy();
+      });
     });
   });
 
@@ -76,6 +111,11 @@ describe('Sidebar', () => {
     projects.value = MOCK_PROJECTS;
     activeProjectName.value = 'proj1';
     render(<Sidebar />);
+    // Click Projects tab to ensure we're on the right tab (tab state persists across tests)
+    await waitFor(() => {
+      expect(screen.getByText('Projects')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByText('Projects'));
     await waitFor(() => {
       expect(document.body.textContent).toContain('proj1');
     });
@@ -102,6 +142,12 @@ describe('Sidebar', () => {
     projects.value = MOCK_PROJECTS;
     activeProjectName.value = 'proj1';
     render(<Sidebar />);
+
+    // Click Projects tab to ensure we're on the right tab (tab state persists across tests)
+    await waitFor(() => {
+      expect(screen.getByText('Projects')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByText('Projects'));
 
     await waitFor(() => {
       expect(document.body.textContent).toContain('proj2');

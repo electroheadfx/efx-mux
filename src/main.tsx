@@ -19,6 +19,7 @@ import { FuzzySearch } from './components/fuzzy-search';
 import { ShortcutCheatsheet, toggleCheatsheet } from './components/shortcut-cheatsheet';
 import { FirstRunWizard, openWizard } from './components/first-run-wizard';
 import { PreferencesPanel, togglePreferences } from './components/preferences-panel';
+import { ToastContainer } from './components/toast';
 import { initDragManager } from './drag-manager';
 import { initTheme, registerTerminal, toggleThemeMode } from './theme/theme-manager';
 import { createNewTab, closeActiveTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs, saveProjectTabs, hasProjectTabs, restoreProjectTabs } from './components/terminal-tabs';
@@ -60,6 +61,7 @@ function App() {
       <ShortcutCheatsheet />
       <FirstRunWizard />
       <PreferencesPanel />
+      <ToastContainer />
     </div>
   );
 }
