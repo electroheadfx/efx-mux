@@ -156,9 +156,16 @@ async function loadGitStatus(): Promise<void> {
 
   isLoading.value = true;
   try {
-    // get_git_status returns GitFile[] (same interface as git-control-tab.tsx)
-    const status = await invoke<GitFile[]>('get_git_status', { path: project.path });
-    changedFiles.value = status;
+    // get_git_files returns GitFileEntry[] (array of {name, path, status})
+    const files = await invoke<Array<{ name: string; path: string; status: string }>>('get_git_files', { path: project.path });
+    changedFiles.value = files.map(f => ({
+      name: f.name,
+      path: f.path,
+      status: f.status,
+      staged: f.status === 'S',
+      additions: 0,
+      deletions: 0,
+    }));
   } catch (err) {
     console.error('[efxmux] Failed to load git status:', err);
   } finally {
