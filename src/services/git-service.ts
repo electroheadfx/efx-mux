@@ -80,15 +80,25 @@ export async function push(repoPath: string, remote?: string, branch?: string): 
 }
 
 /**
- * Uncommit the last commit (soft reset HEAD^).
- * Changes are kept staged.
- * @param repoPath Path to the git repository root
+ * Per-file diff stats (additions/deletions).
  */
-export async function uncommit(repoPath: string): Promise<void> {
+export interface FileDiffStats {
+  path: string;
+  additions: number;
+  deletions: number;
+}
+
+/**
+ * Get per-file diff stats (additions/deletions) for all changed files.
+ * @param repoPath Path to the git repository root
+ * @returns Array of per-file stats, empty array on failure
+ */
+export async function getFileDiffStats(repoPath: string): Promise<FileDiffStats[]> {
   try {
-    await invoke('uncommit', { repoPath });
+    return await invoke<FileDiffStats[]>('get_file_diff_stats', { repoPath });
   } catch (e) {
-    throw new GitError('UncommitError', String(e));
+    console.warn('[git-service] getFileDiffStats failed:', e);
+    return [];
   }
 }
 

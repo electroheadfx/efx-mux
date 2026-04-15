@@ -10,11 +10,11 @@ import { useEffect } from 'preact/hooks';
 import { signal, computed } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { ChevronDown, ChevronRight, Loader, X, GitBranch, Maximize2, Pencil, ArrowUp, Undo2 } from 'lucide-preact';
+import { ChevronDown, ChevronRight, Loader, X, GitBranch, MoreHorizontal, Maximize2, Pencil, ArrowUp, Undo2 } from 'lucide-preact';
 import { colors, fonts, fontSizes, spacing, radii } from '../tokens';
 import { projects, activeProjectName } from '../state-manager';
 import type { ProjectEntry } from '../state-manager';
-import { stageFile, unstageFile, commit, push, getUnpushedCount, uncommit, GitError } from '../services/git-service';
+import { stageFile, unstageFile, commit, push, getUnpushedCount, getFileDiffStats, GitError } from '../services/git-service';
 import { showToast } from './toast';
 
 // ---------------------------------------------------------------------------
@@ -26,6 +26,8 @@ interface GitFile {
   path: string;
   status: string;
   staged: boolean;
+  additions: number;
+  deletions: number;
 }
 
 interface GitLogEntry {
@@ -90,15 +92,24 @@ async function refreshGitFiles(): Promise<void> {
     // Fetch file-level git data
     const files = await invoke<Array<{ name: string; path: string; status: string }>>('get_git_files', { path: project.path });
 
-    // Map status codes to staged/unstaged
+    // Fetch per-file diff stats in parallel
+    const statsArr = await getFileDiffStats(project.path);
+    const statsMap = new Map(statsArr.map(s => [s.path, s]));
+
+    // Map status codes to staged/unstaged, merge diff stats
     // Status codes from git2: 'M' = modified, 'A' = added, 'D' = deleted, '?' = untracked
     // 'S' prefix indicates staged (e.g., 'SM' = staged modified)
-    gitFiles.value = files.map(f => ({
-      name: f.name,
-      path: f.path,
-      status: f.status.replace('S', ''), // Strip S prefix for display
-      staged: f.status.startsWith('S') || f.status === 'A', // A = staged new file
-    }));
+    gitFiles.value = files.map(f => {
+      const stat = statsMap.get(f.path);
+      return {
+        name: f.name,
+        path: f.path,
+        status: f.status.replace('S', ''), // Strip S prefix for display
+        staged: f.status.startsWith('S') || f.status === 'A', // A = staged new file
+        additions: stat?.additions ?? 0,
+        deletions: stat?.deletions ?? 0,
+      };
+    });
 
     // Fetch unpushed count
     unpushedCount.value = await getUnpushedCount(project.path);
@@ -247,22 +258,6 @@ async function handlePush(): Promise<void> {
   }
 }
 
-async function handleUncommit(): Promise<void> {
-  const project = getActiveProject();
-  if (!project) return;
-
-  try {
-    await uncommit(project.path);
-    addLogEntry('success', 'Uncommitted HEAD');
-    showToast({ type: 'success', message: 'Uncommitted last commit' });
-    await refreshGitFiles();
-  } catch (err) {
-    const message = err instanceof GitError ? err.details || err.code : String(err);
-    addLogEntry('error', 'Uncommit failed', message);
-    showToast({ type: 'error', message: 'Uncommit failed', hint: message });
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
@@ -342,12 +337,11 @@ function GitFileRow({
     file.status === 'D' ? colors.diffRed :
     colors.textMuted;
 
-  // Dot color matches badge color
-  const dotColor = badgeColor;
-
   return (
     <div
-      onClick={onToggle}
+      onClick={() => {
+        document.dispatchEvent(new CustomEvent('open-diff', { detail: { path: file.path } }));
+      }}
       onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = colors.bgElevated; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
       style={{
@@ -359,16 +353,38 @@ function GitFileRow({
         backgroundColor: 'transparent',
       }}
     >
-      {/* Status dot */}
+      {/* Checkbox for stage/unstage */}
       <div
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: '50%',
-          backgroundColor: dotColor,
-          flexShrink: 0,
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
         }}
-      />
+        style={{
+          width: 14,
+          height: 14,
+          borderRadius: radii.sm,
+          border: `1.5px solid ${file.staged ? colors.textMuted : colors.textDim}`,
+          backgroundColor: file.staged ? colors.textMuted : 'transparent',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+          cursor: 'pointer',
+        }}
+      >
+        {file.staged && (
+          <svg width="8" height="8" viewBox="0 0 8 8">
+            <path
+              d="M1 4l2 2 4-4"
+              stroke={colors.bgDeep}
+              stroke-width="1.5"
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        )}
+      </div>
 
       {/* Filename */}
       <span
@@ -385,6 +401,27 @@ function GitFileRow({
       >
         {file.name}
       </span>
+
+      {/* Diff stats (+N -N) */}
+      {(file.additions > 0 || file.deletions > 0) && (
+        <span
+          style={{
+            fontFamily: fonts.mono,
+            fontSize: fontSizes.xs,
+            fontWeight: 600,
+            flexShrink: 0,
+            display: 'flex',
+            gap: spacing.md,
+          }}
+        >
+          <span style={{ color: file.additions > 0 ? colors.statusGreen : colors.textDim }}>
+            +{file.additions}
+          </span>
+          <span style={{ color: file.deletions > 0 ? colors.diffRed : colors.textDim }}>
+            -{file.deletions}
+          </span>
+        </span>
+      )}
 
       {/* Status badge pill */}
       <span
@@ -567,6 +604,26 @@ export function GitControlTab() {
         {/* Right: actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: spacing.lg }}>
           {/* More button */}
+          <button
+            title="More options"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 22,
+              height: 22,
+              borderRadius: radii.sm,
+              backgroundColor: 'transparent',
+              border: 'none',
+              color: colors.textDim,
+              cursor: 'pointer',
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = colors.bgElevated; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'; }}
+          >
+            <MoreHorizontal size={14} />
+          </button>
+
           {/* Stage All button -- only when there are unstaged changes */}
           {changedFiles.value.length > 0 && (
             <button
@@ -850,39 +907,36 @@ export function GitControlTab() {
         </span>
 
         {/* Right: action icons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: spacing.xl }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: spacing.lg }}>
           <button
-            title={"Uncommit\ngit reset HEAD^"}
-            onClick={handleUncommit}
+            title="Undo"
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               backgroundColor: 'transparent',
               border: 'none',
-              color: colors.textMuted,
+              color: colors.textDim,
               cursor: 'pointer',
-              padding: spacing.sm,
+              padding: 0,
             }}
           >
-            <Undo2 size={18} />
+            <Undo2 size={10} />
           </button>
           <button
-            title="Switch branch (coming soon)"
-            disabled
+            title="Branch"
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               backgroundColor: 'transparent',
               border: 'none',
-              color: colors.bgSurface,
-              cursor: 'default',
-              padding: spacing.sm,
-              opacity: 0.5,
+              color: colors.textDim,
+              cursor: 'pointer',
+              padding: 0,
             }}
           >
-            <GitBranch size={18} />
+            <GitBranch size={10} />
           </button>
         </div>
       </div>
