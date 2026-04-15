@@ -13,6 +13,8 @@ import { listen } from '@tauri-apps/api/event';
 import { ChevronDown, ChevronRight, Loader, X, GitBranch, Maximize2, Pencil, ArrowUp, Undo2 } from 'lucide-preact';
 import { colors, fonts, fontSizes, spacing, radii } from '../tokens';
 import { projects, activeProjectName } from '../state-manager';
+import { openGitChangesTab } from './unified-tab-bar';
+import { pendingDiffFile } from './git-changes-tab';
 import type { ProjectEntry } from '../state-manager';
 import { stageFile, unstageFile, commit, push, getUnpushedCount, getFileDiffStats, getGitLog, revertFile, GitError } from '../services/git-service';
 import type { GitCommitEntry } from '../services/git-service';
@@ -397,6 +399,8 @@ function GitFileRow({
   return (
     <div
       onClick={() => {
+        pendingDiffFile.value = file.path;
+        openGitChangesTab();
         document.dispatchEvent(new CustomEvent('open-diff', { detail: { path: file.path } }));
       }}
       onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = colors.bgElevated; }}

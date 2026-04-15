@@ -8,6 +8,7 @@ import { listen } from '@tauri-apps/api/event';
 import { ChevronDown, ChevronRight } from 'lucide-preact';
 import { colors, fonts, spacing, radii } from '../tokens';
 import { projects, activeProjectName } from '../state-manager';
+import { openGitChangesTab } from './unified-tab-bar';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -26,6 +27,9 @@ const changedFiles = signal<GitFile[]>([]);
 const expandedFiles = signal<Set<string>>(new Set());
 const fileDiffs = signal<Record<string, string>>({});
 const isLoading = signal(false);
+
+/** Set by git-control-tab before GitChangesTab mounts; consumed on first render */
+export const pendingDiffFile = signal<string | null>(null);
 
 // ── Diff Rendering ────────────────────────────────────────────────────────────
 
@@ -73,9 +77,9 @@ function renderDiffLines(diff: string): string {
       const content = line.substring(1);
       const escaped = escapeHtml(content);
       bodyLines.push(
-        `<div style="background-color: ${colors.diffGreenBg}; border-left: 3px solid ${colors.statusGreen}; padding: 4px; display: flex; gap: 12px;">
-          <span style="font-family: ${fonts.mono}; font-size: 13px; color: ${colors.diffGreenLineno}; width: 32px; text-align: right; shrink: 0; line-height: 24px;">${newLineNo}</span>
-          <span style="font-family: ${fonts.mono}; font-size: 13px; color: ${colors.statusGreen}; line-height: 24px;">${escaped || '&nbsp;'}</span>
+        `<div style="background-color: ${colors.diffGreenBg}; border-left: 3px solid ${colors.statusGreen}; padding: 1px 4px; display: flex; gap: 12px;">
+          <span style="font-family: ${fonts.mono}; font-size: 13px; color: ${colors.diffGreenLineno}; width: 32px; text-align: right; shrink: 0; line-height: 18px;">${newLineNo}</span>
+          <span style="font-family: ${fonts.mono}; font-size: 13px; color: ${colors.statusGreen}; line-height: 18px;">${escaped || '&nbsp;'}</span>
         </div>`
       );
       newLineNo++;
@@ -83,9 +87,9 @@ function renderDiffLines(diff: string): string {
       const content = line.substring(1);
       const escaped = escapeHtml(content);
       bodyLines.push(
-        `<div style="background-color: ${colors.diffRedBg}; border-left: 3px solid ${colors.diffRed}; padding: 4px; display: flex; gap: 12px;">
-          <span style="font-family: ${fonts.mono}; font-size: 13px; color: ${colors.diffRedLineno}; width: 32px; text-align: right; shrink: 0; line-height: 24px;">${oldLineNo}</span>
-          <span style="font-family: ${fonts.mono}; font-size: 13px; color: ${colors.diffRed}; line-height: 24px;">${escaped || '&nbsp;'}</span>
+        `<div style="background-color: ${colors.diffRedBg}; border-left: 3px solid ${colors.diffRed}; padding: 1px 4px; display: flex; gap: 12px;">
+          <span style="font-family: ${fonts.mono}; font-size: 13px; color: ${colors.diffRedLineno}; width: 32px; text-align: right; shrink: 0; line-height: 18px;">${oldLineNo}</span>
+          <span style="font-family: ${fonts.mono}; font-size: 13px; color: ${colors.diffRed}; line-height: 18px;">${escaped || '&nbsp;'}</span>
         </div>`
       );
       oldLineNo++;
@@ -93,9 +97,9 @@ function renderDiffLines(diff: string): string {
       const content = line.substring(1);
       const escaped = escapeHtml(content);
       bodyLines.push(
-        `<div style="padding: 4px; display: flex; gap: 12px;">
-          <span style="font-family: ${fonts.mono}; font-size: 13px; color: ${colors.textDim}; width: 32px; text-align: right; shrink: 0; line-height: 24px;">${newLineNo}</span>
-          <span style="font-family: ${fonts.mono}; font-size: 13px; color: ${colors.textMuted}; line-height: 24px;">${escaped || '&nbsp;'}</span>
+        `<div style="padding: 1px 4px; display: flex; gap: 12px;">
+          <span style="font-family: ${fonts.mono}; font-size: 13px; color: ${colors.textDim}; width: 32px; text-align: right; shrink: 0; line-height: 18px;">${newLineNo}</span>
+          <span style="font-family: ${fonts.mono}; font-size: 13px; color: ${colors.textMuted}; line-height: 18px;">${escaped || '&nbsp;'}</span>
         </div>`
       );
       oldLineNo++;
@@ -196,11 +200,32 @@ async function toggleExpand(filePath: string): Promise<void> {
   }
 }
 
+/** Collapse all files and expand only the selected one */
+async function focusFile(filePath: string): Promise<void> {
+  expandedFiles.value = new Set([filePath]);
+
+  if (!fileDiffs.value[filePath]) {
+    try {
+      const diff = await invoke<string>('get_file_diff', { path: filePath });
+      fileDiffs.value = { ...fileDiffs.value, [filePath]: diff };
+    } catch (err) {
+      fileDiffs.value = { ...fileDiffs.value, [filePath]: 'Error loading diff' };
+    }
+  }
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function GitChangesTab() {
   useEffect(() => {
     loadGitStatus();
+
+    // Handle pending file from sidebar click before this component mounted
+    if (pendingDiffFile.value) {
+      const pending = pendingDiffFile.value;
+      pendingDiffFile.value = null;
+      focusFile(pending);
+    }
 
     // Auto-refresh on git-status-changed (per D-14)
     const unlistenPromise = listen('git-status-changed', () => {
@@ -209,8 +234,17 @@ export function GitChangesTab() {
       fileDiffs.value = {};
     });
 
+    // Listen for open-diff from sidebar git-control-tab file clicks
+    // (fires when this tab is already mounted)
+    const handleOpenDiff = (e: Event) => {
+      const filePath = (e as CustomEvent).detail.path;
+      focusFile(filePath);
+    };
+    document.addEventListener('open-diff', handleOpenDiff);
+
     return () => {
       unlistenPromise.then(fn => fn());
+      document.removeEventListener('open-diff', handleOpenDiff);
     };
   }, []);
 
