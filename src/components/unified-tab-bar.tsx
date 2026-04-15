@@ -15,7 +15,9 @@ import {
   createNewTab,
   closeTab,
 } from './terminal-tabs';
-import { writeFile } from '../services/file-service';
+import { writeFile, readFile } from '../services/file-service';
+import { getEditorCurrentContent } from '../editor/setup';
+import { activeProjectName, updateSession, getCurrentState } from '../state-manager';
 
 // ── Tab Type System ─────────────────────────────────────────────────────────────
 
@@ -106,6 +108,60 @@ export function openEditorTab(filePath: string, fileName: string, content: strin
   activeUnifiedTabId.value = newTab.id;
 }
 
+// ── Editor Tab Persistence ─────────────────────────────────────────────────────
+
+/**
+ * Persist the current editorTabs to state.json under the active project's key.
+ * Saves only filePath and fileName (not content -- file content is re-read from disk on restore).
+ */
+function persistEditorTabs(): void {
+  const activeName = activeProjectName.value;
+  const tabs = editorTabs.value.map(t => ({
+    filePath: t.filePath,
+    fileName: t.fileName,
+  }));
+  const data = JSON.stringify({ tabs, activeTabId: activeUnifiedTabId.value });
+  const patch: Record<string, string> = { 'editor-tabs': data };
+  if (activeName) {
+    patch[`editor-tabs:${activeName}`] = data;
+  }
+  updateSession(patch);
+}
+
+/**
+ * Restore editor tabs from persisted state for a given project.
+ * Re-reads file content from disk (one-tab-per-file policy is enforced by openEditorTab).
+ * Returns true if any tabs were restored.
+ */
+export async function restoreEditorTabs(projectName: string): Promise<boolean> {
+  const state = getCurrentState();
+  const key = `editor-tabs:${projectName}`;
+  const raw = state?.session?.[key] ?? state?.session?.['editor-tabs'];
+  if (!raw) return false;
+
+  let parsed: { tabs: Array<{ filePath: string; fileName: string }>; activeTabId: string } | null = null;
+  try {
+    parsed = JSON.parse(raw);
+  } catch { return false; }
+
+  if (!parsed?.tabs?.length) return false;
+
+  for (const tab of parsed.tabs) {
+    try {
+      const content = await readFile(tab.filePath);
+      openEditorTab(tab.filePath, tab.fileName, content);
+    } catch (err) {
+      console.warn('[efxmux] Could not restore editor tab:', tab.filePath, err);
+    }
+  }
+  return true;
+}
+
+// Watch editorTabs changes and persist
+editorTabs.subscribe(() => {
+  persistEditorTabs();
+});
+
 /**
  * Open the Git Changes tab, or focus it if already open.
  */
@@ -151,8 +207,9 @@ export function closeUnifiedTab(tabId: string): void {
         },
         onCancel: () => {},
         onSave: () => {
-          // Save then close
-          writeFile(tab.filePath, tab.content)
+          // Get CURRENT content from EditorView (not stale tab.content)
+          const currentContent = getEditorCurrentContent(tabId) ?? tab.content;
+          writeFile(tab.filePath, currentContent)
             .then(() => {
               setEditorDirty(tabId, false);
               editorTabs.value = editorTabs.value.filter(t => t.id !== tabId);
@@ -220,17 +277,39 @@ function switchToAdjacentTab(currentId: string): void {
 
 function getOrderedTabs(): UnifiedTab[] {
   const all = allTabs.value;
-  if (tabOrder.value.length === 0) return all;
-  const ordered = tabOrder.value
-    .map(id => all.find(t => t.id === id))
-    .filter((t): t is UnifiedTab => t !== undefined);
-  // Fallback for any tabs not in tabOrder
+
+  // Separate terminals from non-terminals
+  const terminals: UnifiedTab[] = [];
+  const nonTerminals: UnifiedTab[] = [];
   all.forEach(t => {
-    if (!ordered.find(ot => ot.id === t.id)) {
-      ordered.push(t);
+    if (t.type === 'terminal') {
+      terminals.push(t);
+    } else {
+      nonTerminals.push(t);
     }
   });
-  return ordered;
+
+  // Terminals always stay in their original (creation) order — never reordered by tabOrder
+  // Non-terminals (editors, git-changes) are sorted by tabOrder for drag-and-drop
+
+  if (tabOrder.value.length === 0) {
+    return all; // No custom order yet, return natural order
+  }
+
+  // Build ordered non-terminals from tabOrder
+  const orderedNonTerminals = tabOrder.value
+    .map(id => nonTerminals.find(t => t.id === id))
+    .filter((t): t is UnifiedTab => t !== undefined);
+
+  // Fallback: any non-terminal not in tabOrder gets appended at the end
+  nonTerminals.forEach(t => {
+    if (!orderedNonTerminals.find(ot => ot.id === t.id)) {
+      orderedNonTerminals.push(t);
+    }
+  });
+
+  // Terminals are ALWAYS first, in their original creation order
+  return [...terminals, ...orderedNonTerminals];
 }
 
 // ── Dropdown Items ─────────────────────────────────────────────────────────────
