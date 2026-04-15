@@ -56,6 +56,7 @@ export const efxmuxTheme = EditorView.theme(
 // ── Syntax Highlight Style ───────────────────────────────────────────────────
 
 export const efxmuxHighlightStyle = HighlightStyle.define([
+  // JavaScript / TypeScript
   { tag: t.keyword, color: '#C792EA' },
   { tag: t.string, color: '#C3E88D' },
   { tag: t.comment, color: colors.textDim },
@@ -66,6 +67,15 @@ export const efxmuxHighlightStyle = HighlightStyle.define([
   { tag: t.bool, color: '#FF5370' },
   { tag: t.propertyName, color: colors.textSecondary },
   { tag: t.definition(t.variableName), color: '#82AAFF' },
+  // Markdown
+  { tag: t.heading, color: '#C792EA', fontWeight: 'bold' },
+  { tag: t.strong, color: '#FFCB6B', fontWeight: 'bold' },
+  { tag: t.emphasis, color: '#C3E88D', fontStyle: 'italic' },
+  { tag: t.link, color: '#82AAFF', textDecoration: 'underline' },
+  { tag: t.url, color: '#89DDFF' },
+  { tag: t.monospace, color: '#F78C6C' },
+  { tag: t.quote, color: colors.textDim },
+  { tag: t.list, color: '#89DDFF' },
 ]);
 
 // ── Export combined syntax highlighting extension ─────────────────────────────
