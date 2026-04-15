@@ -5,6 +5,7 @@ status: draft
 shadcn_initialized: false
 preset: none
 created: 2026-04-15
+revised: 2026-04-15
 ---
 
 # Phase 17 -- UI Design Contract
@@ -27,23 +28,23 @@ created: 2026-04-15
 
 ## Spacing Scale
 
-Declared values from `tokens.ts` (project uses a compact, non-8-point scale optimized for dense developer tooling):
+**Inherited Project Scale** -- The project uses a compact, non-8-point spacing scale defined in `src/tokens.ts`, inherited from prior phases. These are pre-existing design tokens established before this phase and are intentional for dense developer tooling. This is a locked project constraint (see `tokens.ts` lines 58-69).
 
-| Token | Value | Usage in this phase |
-|-------|-------|---------------------|
-| xs | 1px | Not used |
-| sm | 2px | Minimal internal padding |
-| md | 4px | Icon-to-label gap in tabs, inline padding |
-| lg | 6px | Accordion header vertical padding |
-| xl | 8px | Tab bar horizontal padding (px-2), gap between tabs |
-| 2xl | 10px | Modal input padding |
-| 3xl | 12px | Accordion content padding, gap between action buttons |
-| 4xl | 16px | Tab horizontal padding, modal section gaps, form field gaps |
-| 5xl | 20px | Modal header padding |
-| 6xl | 28px | Not used |
+| Token | Value | Source | Usage in this phase |
+|-------|-------|--------|---------------------|
+| xs | 1px | tokens.ts | Not used |
+| sm | 2px | tokens.ts | Minimal internal padding |
+| md | 4px | tokens.ts | Icon-to-label gap in tabs, inline padding |
+| lg | 6px | tokens.ts | Accordion header vertical padding |
+| xl | 8px | tokens.ts | Tab bar horizontal padding (px-2), gap between tabs |
+| 2xl | 10px | tokens.ts | Modal input padding |
+| 3xl | 12px | tokens.ts | Accordion content padding, gap between action buttons |
+| 4xl | 16px | tokens.ts | Tab horizontal padding, modal section gaps, form field gaps |
+| 5xl | 20px | tokens.ts | Modal header padding |
+| 6xl | 28px | tokens.ts | Not used |
 
 Exceptions:
-- Tab pill padding: `9px 16px` (vertical 9px matches existing TerminalTabBar pattern -- not a token value)
+- Tab pill padding: `9px 16px` (vertical 9px matches existing TerminalTabBar pattern -- not a token value, inherited from prior phase implementation)
 - Unsaved dot: 6px diameter circle (matches existing active terminal dot)
 - [+] button: 28px square (w-7 h-7, matches existing new-tab button)
 - Close button (x): 14px font-size for multiplication sign character (matches existing pattern)
@@ -52,19 +53,23 @@ Exceptions:
 
 ## Typography
 
+Two weights only: 400 (regular/body/inactive) and 500 (active/emphasized/badge).
+
 | Role | Size | Weight | Line Height | Font | Usage |
 |------|------|--------|-------------|------|-------|
 | Tab label | 13px | 400 (inactive), 500 (active) | 1.4 | Geist | Tab titles in unified tab bar |
 | Editor body | 13px | 400 | 1.5 | GeistMono | CodeMirror 6 editor content |
 | Editor gutter | 13px | 400 | 1.5 | GeistMono | Line numbers in CM6 gutter |
-| Modal heading | 14px | 600 | 1.3 | Geist | Confirmation modal title |
+| Modal heading | 16px | 500 | 1.3 | Geist | Confirmation modal title |
 | Modal body | 13px | 400 | 1.5 | Geist | Confirmation modal description |
 | Accordion header | 13px | 500 | 1.4 | GeistMono | File name in git changes accordion |
 | Diff line | 13px | 400 | 24px (fixed) | GeistMono | Diff content lines (matches diff-viewer.tsx) |
 | Diff line number | 13px | 400 | 24px (fixed) | GeistMono | Gutter line numbers in diff |
-| Status badge | 11px | 600 | 1.2 | GeistMono | [M], [A], [D] badges in accordion headers |
+| Status badge | 11px | 500 | 1.2 | GeistMono | [M], [A], [D] badges in accordion headers |
 | Diff stats | 11px | 400 | 1.2 | GeistMono | +N / -N line counts in accordion headers |
 | Dropdown item | 13px | 400 | 1.4 | Geist | [+] menu items (existing Dropdown pattern) |
+
+Font size scale (4 sizes): 11px (badge/stats), 13px (body/tabs/editor), 16px (modal heading), plus inherited from app: 20px+ headings if needed elsewhere.
 
 ---
 
@@ -180,10 +185,16 @@ Syntax highlight theme (HighlightStyle.define):
 | Cancel button text | `#8B949E` (textMuted) |
 | Discard button background | `#F85149` (diffRed) |
 | Discard button text | white |
-| Save button background | `#258AD1` (accent) |
-| Save button text | white |
+| Save File button background | `#258AD1` (accent) |
+| Save File button text | white |
 
 Accent reserved for: CM6 cursor/caret, CM6 selection background, search match outlines, hunk header text color, git changes tab icon, focused tab keyboard ring. Never used for tab backgrounds, text labels, or non-interactive decoration.
+
+---
+
+## Visual Hierarchy
+
+**Primary focal point:** The CodeMirror 6 editor pane occupies the largest area of the main panel and is the primary workspace. The active tab in the UnifiedTabBar has elevated background + primary text color to indicate which content is displayed in this focal area.
 
 ---
 
@@ -199,8 +210,8 @@ Replaces TerminalTabBar. Single row of mixed-type tabs.
 | Tab shape | borderRadius 6px, padding 9px 16px |
 | Active state | bgElevated background, 1px solid bgSurface border, fontWeight 500, textPrimary color |
 | Inactive state | transparent background, 1px solid transparent border, fontWeight 400, textDim color |
-| Close button | multiplication sign (U+00D7), fontSize 14px, textDim color, hover textPrimary |
-| [+] button | 28x28px, rounded, textDim color, hover textPrimary + bgElevated background |
+| Close button | multiplication sign (U+00D7), fontSize 14px, textDim color, hover textPrimary, `aria-label="Close tab {filename}"` |
+| [+] button | 28x28px, rounded, textDim color, hover textPrimary + bgElevated background, `aria-label="Add new tab"` |
 | Role | `tablist` on container, `tab` on each tab button |
 | Drag feedback | 2px left border in accent color on drop target, 50% opacity on dragged tab |
 | Overflow | horizontal scroll with `overflow-x: auto`, hidden scrollbar, max-width per tab 200px, filename truncated with ellipsis |
@@ -226,8 +237,10 @@ Signal-based modal for unsaved changes confirmation.
 | Overlay | fixed inset-0, z-index 50, rgba(0,0,0,0.5), flex center |
 | Surface | 340px wide, bgElevated background, 1px solid bgBorder, borderRadius 8px (radii.xl), padding 20px |
 | Shadow | `0 8px 32px rgba(0,0,0,0.6)` (matches project-modal.tsx) |
+| Title | 16px weight 500 Geist, textPrimary |
+| Body | 13px weight 400 Geist, textMuted |
 | Buttons | flex row, gap 12px, justify-end |
-| Three-button variant | "Cancel" (ghost), "Discard" (destructive/diffRed), "Save" (accent) |
+| Three-button variant | "Cancel" (ghost), "Discard" (destructive/diffRed), "Save File" (accent) |
 | Keyboard | Escape dismisses (cancel), Enter confirms primary action |
 | ARIA | role="dialog", aria-modal="true" |
 
@@ -241,7 +254,7 @@ Accordion panel showing per-file diffs.
 | Accordion header | flex row, items-center, padding 6px 12px, bgBase background, hover bgElevated, border-bottom 1px solid bgBorder, cursor pointer |
 | Chevron | ChevronRight (collapsed) / ChevronDown (expanded), 14px, textMuted color |
 | File name | GeistMono 13px weight 500, textPrimary color, flex-1 overflow ellipsis |
-| Status badge | 11px GeistMono weight 600, 3px borderRadius, padding 1px 4px, color per status (see color table) |
+| Status badge | 11px GeistMono weight 500, 3px borderRadius, padding 1px 4px, color per status (see color table) |
 | Diff stats | 11px GeistMono, +N in statusGreen, -N in diffRed, separated by space |
 | Expanded content | reuse renderDiffHtml() from diff-viewer.tsx, padding 0 |
 | Empty state | centered, textMuted, "No changes" message |
@@ -267,7 +280,7 @@ Accordion panel showing per-file diffs.
 |---------|----------|
 | User edits buffer | CM6 `updateListener` fires on `docChanged`. Compare `doc.toString()` to saved content ref. If different, set tab `dirty: true` -- show yellow dot. If same, set `dirty: false` -- hide dot. |
 | User presses Cmd+S | CM6 keymap intercepts `Mod-s`. Call `file-service.ts writeFile(filePath, doc.toString())`. On success: update saved content ref, set `dirty: false`, show success toast. On error: show error toast. |
-| User clicks close (x) on dirty tab | Show ConfirmModal with three buttons: "Cancel" (dismiss modal, keep tab), "Discard" (close tab without saving), "Save" (save then close). |
+| User clicks close (x) on dirty tab | Show ConfirmModal with three buttons: "Cancel" (dismiss modal, keep tab), "Discard" (close tab without saving), "Save File" (save then close). |
 | User clicks close (x) on clean tab | Close tab immediately, no modal. |
 | Cmd+S when no editor tab active | No-op (only intercept when active tab is editor type). |
 
@@ -301,7 +314,7 @@ Accordion panel showing per-file diffs.
 
 | Element | Copy |
 |---------|------|
-| Primary CTA | "Save" (in confirmation modal when closing dirty tab) |
+| Primary CTA | "Save File" (in confirmation modal when closing dirty tab) |
 | Empty state -- Git Changes tab | "No changes" |
 | Empty state -- Git Changes tab body | "Working tree is clean. Edit files to see changes here." |
 | Error -- file read failure | "Could not open file" / "The file may have been moved or deleted. Check the file tree and try again." |
@@ -310,7 +323,7 @@ Accordion panel showing per-file diffs.
 | Destructive -- Discard unsaved: modal body | "{filename} has unsaved changes that will be lost." |
 | Destructive -- Discard unsaved: cancel button | "Cancel" |
 | Destructive -- Discard unsaved: discard button | "Discard" |
-| Destructive -- Discard unsaved: save button | "Save" |
+| Destructive -- Discard unsaved: save button | "Save File" |
 | Toast -- save success | "Saved {filename}" |
 | Toast -- save error | "Save failed: {error message}" |
 | Dropdown -- new terminal | "Terminal (Zsh)" |
