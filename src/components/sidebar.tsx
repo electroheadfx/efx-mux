@@ -554,7 +554,7 @@ export function Sidebar() {
         // Fetch app version
         const ver = await getVersion();
         appVersion.value = ver;
-        await getCurrentWindow().setTitle(`efx-mux v${ver}`);
+        await getCurrentWindow().setTitle(`${active || 'no project'} - efx-mux v${ver}`);
       } catch (err) {
         console.warn('[efxmux] Failed to load projects:', err);
       }
@@ -567,7 +567,7 @@ export function Sidebar() {
       activeProjectName.value = detail.name;
       refreshAllGitStatus();
       if (appVersion.value) {
-        getCurrentWindow().setTitle(`efx-mux v${appVersion.value}`);
+        getCurrentWindow().setTitle(`${detail.name} - efx-mux v${appVersion.value}`);
       }
     }
 
@@ -659,12 +659,9 @@ export function Sidebar() {
               height: '100%',
             }}
           >
-            {/* Header — current project + add button */}
+            {/* Header — current project name */}
             <div
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
                 padding: '16px 16px 12px 12px',
               }}
             >
@@ -675,33 +672,10 @@ export function Sidebar() {
                   fontWeight: 600,
                   color: colors.textPrimary,
                   letterSpacing: '1px',
-                  textTransform: 'uppercase',
                 }}
               >
-                {activeProjectName.value || 'NO PROJECT'}
+                {activeProjectName.value || 'no project'}
               </span>
-              <button
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 24,
-                  height: 24,
-                  borderRadius: 6,
-                  backgroundColor: colors.accent,
-                  color: 'white',
-                  fontFamily: fonts.sans,
-                  fontSize: 14,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  border: 'none',
-                }}
-                title="Add Project"
-                aria-label="Add project"
-                onClick={() => { openProjectModal(); }}
-              >
-                +
-              </button>
             </div>
 
             {/* Tab row (Phase 16, D-01 through D-04) */}
