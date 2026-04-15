@@ -15,6 +15,7 @@ import { registerTerminal, getTheme } from '../theme/theme-manager';
 import { updateSession, activeProjectName, projects, getCurrentState } from '../state-manager';
 import { detectAgent } from '../server/server-bridge';
 import { colors, fonts } from '../tokens';
+import { CrashOverlay } from './crash-overlay';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -682,75 +683,6 @@ listen<{ session: string; code: number }>('pty-exited', (event) => {
     terminalTabs.value = [...tabs]; // trigger re-render
   }
 });
-
-// ---------------------------------------------------------------------------
-// TerminalTabBar component (UI-SPEC Component 1)
-// ---------------------------------------------------------------------------
-
-import { CrashOverlay } from './crash-overlay';
-
-export function TerminalTabBar() {
-  const tabs = terminalTabs.value;
-  const currentId = activeTabId.value;
-
-  return (
-    <div
-      class="flex gap-1 px-2 py-2 shrink-0 items-center border-b"
-      role="tablist"
-      style={{ backgroundColor: colors.bgBase, borderColor: colors.bgBorder }}
-    >
-      {tabs.map(tab => {
-        const isActive = tab.id === currentId;
-        return (
-          <button
-            key={tab.id}
-            role="tab"
-            aria-selected={isActive}
-            class="flex items-center gap-2 cursor-pointer transition-all duration-150"
-            style={{
-              backgroundColor: isActive ? colors.bgElevated : 'transparent',
-              border: isActive ? `1px solid ${colors.bgSurface}` : '1px solid transparent',
-              borderRadius: 6,
-              padding: '9px 16px',
-              fontFamily: fonts.sans,
-              fontSize: 13,
-              fontWeight: isActive ? 500 : 400,
-              color: isActive ? colors.textPrimary : colors.textDim,
-            }}
-            onClick={() => {
-              activeTabId.value = tab.id;
-              switchToTab(tab.id);
-            }}
-            title={tab.sessionName}
-          >
-            {isActive && <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: colors.statusGreen, flexShrink: 0 }} />}
-            <span>{tab.label}</span>
-            <span
-              class="ml-1 flex items-center justify-center"
-              style={{ color: colors.textDim, fontSize: 14 }}
-              onClick={(e) => {
-                e.stopPropagation();
-                closeTab(tab.id);
-              }}
-              onMouseEnter={(e) => { (e.target as HTMLElement).style.color = colors.textPrimary; }}
-              onMouseLeave={(e) => { (e.target as HTMLElement).style.color = colors.textDim; }}
-              title="Close tab"
-            >{'\u00D7'}</span>
-          </button>
-        );
-      })}
-      {/* New tab button */}
-      <button
-        class="w-7 h-7 rounded flex items-center justify-center text-base cursor-pointer"
-        style={{ color: colors.textDim, fontFamily: fonts.sans }}
-        onMouseEnter={(e) => { const t = e.target as HTMLElement; t.style.color = colors.textPrimary; t.style.backgroundColor = colors.bgElevated; }}
-        onMouseLeave={(e) => { const t = e.target as HTMLElement; t.style.color = colors.textDim; t.style.backgroundColor = 'transparent'; }}
-        onClick={() => createNewTab()}
-        title="New terminal tab (Ctrl+T)"
-      >+</button>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Active tab crash overlay rendering (used in main-panel.tsx)
