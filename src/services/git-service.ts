@@ -80,6 +80,19 @@ export async function push(repoPath: string, remote?: string, branch?: string): 
 }
 
 /**
+ * Revert (discard) working tree changes for a single file.
+ * @param repoPath Path to the git repository root
+ * @param filePath Path to the file to revert (relative to repo root)
+ */
+export async function revertFile(repoPath: string, filePath: string): Promise<void> {
+  try {
+    await invoke('revert_file', { repoPath, filePath });
+  } catch (e) {
+    throw new GitError('RevertError', String(e));
+  }
+}
+
+/**
  * Per-file diff stats (additions/deletions).
  */
 export interface FileDiffStats {

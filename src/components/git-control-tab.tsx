@@ -10,11 +10,11 @@ import { useEffect } from 'preact/hooks';
 import { signal, computed } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { ChevronDown, ChevronRight, Loader, X, GitBranch, MoreHorizontal, Maximize2, Pencil, ArrowUp, Undo2 } from 'lucide-preact';
+import { ChevronDown, ChevronRight, Loader, X, GitBranch, Maximize2, Pencil, ArrowUp, Undo2 } from 'lucide-preact';
 import { colors, fonts, fontSizes, spacing, radii } from '../tokens';
 import { projects, activeProjectName } from '../state-manager';
 import type { ProjectEntry } from '../state-manager';
-import { stageFile, unstageFile, commit, push, getUnpushedCount, getFileDiffStats, getGitLog, GitError } from '../services/git-service';
+import { stageFile, unstageFile, commit, push, getUnpushedCount, getFileDiffStats, getGitLog, revertFile, GitError } from '../services/git-service';
 import type { GitCommitEntry } from '../services/git-service';
 import { showToast } from './toast';
 
@@ -49,6 +49,7 @@ const stagedSectionOpen = signal(true);
 const changesSectionOpen = signal(true);
 const isCommitting = signal(false);
 const isPushing = signal(false);
+const isReverting = signal(false);
 const gitLog = signal<GitLogEntry[]>([]);
 const branchName = signal('');
 const lastCommitMessage = signal('');
@@ -208,6 +209,37 @@ async function handleStageAll(): Promise<void> {
   }
 }
 
+async function handleRevertFile(file: GitFile): Promise<void> {
+  const project = getActiveProject();
+  if (!project) return;
+  try {
+    await revertFile(project.path, file.path);
+    await refreshGitFiles();
+  } catch (err) {
+    const errMsg = err instanceof GitError ? err.details || err.code : String(err);
+    addLogEntry('error', `Failed to revert ${file.name}`, errMsg);
+    showToast({ type: 'error', message: `Failed to revert ${file.name}`, hint: 'See error log in GIT tab' });
+  }
+}
+
+async function handleRevertAll(): Promise<void> {
+  const project = getActiveProject();
+  if (!project) return;
+  isReverting.value = true;
+  try {
+    for (const file of changedFiles.value) {
+      await revertFile(project.path, file.path);
+    }
+    await refreshGitFiles();
+  } catch (err) {
+    const errMsg = err instanceof GitError ? err.details || err.code : String(err);
+    addLogEntry('error', 'Failed to revert all files', errMsg);
+    showToast({ type: 'error', message: 'Failed to revert all files', hint: 'See error log in GIT tab' });
+  } finally {
+    isReverting.value = false;
+  }
+}
+
 async function handleCommit(): Promise<void> {
   const project = getActiveProject();
   if (!project || !canCommit.value) return;
@@ -344,9 +376,11 @@ function CollapsibleSection({
 function GitFileRow({
   file,
   onToggle,
+  onRevert,
 }: {
   file: GitFile;
   onToggle: () => void;
+  onRevert?: () => void;
 }) {
   // Badge colors based on status
   const badgeBg =
@@ -424,6 +458,35 @@ function GitFileRow({
       >
         {file.name}
       </span>
+
+      {/* Per-file revert button (only for unstaged files) */}
+      {onRevert && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onRevert();
+          }}
+          title="Revert changes"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 18,
+            height: 18,
+            borderRadius: radii.sm,
+            backgroundColor: 'transparent',
+            border: 'none',
+            color: colors.textDim,
+            cursor: 'pointer',
+            flexShrink: 0,
+            padding: 0,
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = colors.diffRed; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = colors.textDim; }}
+        >
+          <Undo2 size={12} />
+        </button>
+      )}
 
       {/* Diff stats (+N -N) */}
       {(file.additions > 0 || file.deletions > 0) && (
@@ -687,26 +750,32 @@ export function GitControlTab() {
 
         {/* Right: actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: spacing.lg }}>
-          {/* More button */}
-          <button
-            title="More options"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 22,
-              height: 22,
-              borderRadius: radii.sm,
-              backgroundColor: 'transparent',
-              border: 'none',
-              color: colors.textDim,
-              cursor: 'pointer',
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = colors.bgElevated; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'; }}
-          >
-            <MoreHorizontal size={14} />
-          </button>
+          {/* Revert All button -- only when there are unstaged changes */}
+          {changedFiles.value.length > 0 && (
+            <button
+              onClick={handleRevertAll}
+              disabled={isReverting.value}
+              title="Revert all unstaged changes"
+              style={{
+                height: 22,
+                padding: `0 ${spacing.xl}px`,
+                backgroundColor: colors.bgElevated,
+                border: `1px solid ${colors.bgBorder}`,
+                borderRadius: radii.md,
+                fontFamily: fonts.sans,
+                fontSize: fontSizes.sm,
+                color: colors.textSecondary,
+                cursor: isReverting.value ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: `${spacing.md}px`,
+              }}
+            >
+              {isReverting.value ? <Loader size={10} class="animate-spin" /> : <Undo2 size={10} />}
+              Revert All
+            </button>
+          )}
 
           {/* Stage All button -- only when there are unstaged changes */}
           {changedFiles.value.length > 0 && (
@@ -787,6 +856,7 @@ export function GitControlTab() {
                 key={file.path}
                 file={file}
                 onToggle={() => handleToggleStage(file, true)}
+                onRevert={() => handleRevertFile(file)}
               />
             ))}
           </CollapsibleSection>
