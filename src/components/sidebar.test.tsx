@@ -100,9 +100,9 @@ describe('Sidebar', () => {
       });
       const gitTab = screen.getByText('Git');
       fireEvent.click(gitTab);
-      // Placeholder text should appear
+      // GitControlTab renders empty state when no git files
       await waitFor(() => {
-        expect(screen.getByText(/Git Control tab/)).toBeTruthy();
+        expect(screen.getByText('No changes')).toBeTruthy();
       });
     });
   });
