@@ -291,6 +291,30 @@ export function cycleToNextTab(): void {
 }
 
 /**
+ * Rename a terminal tab's label and persist the change.
+ */
+export function renameTerminalTab(tabId: string, newLabel: string): void {
+  const tabs = terminalTabs.value;
+  const tab = tabs.find(t => t.id === tabId);
+  if (!tab) return;
+  tab.label = newLabel;
+  terminalTabs.value = [...tabs]; // trigger reactivity
+  persistTabState();
+}
+
+/**
+ * Get the default label for a terminal tab (used when resetting a rename).
+ */
+export function getDefaultTerminalLabel(tab: TerminalTab): string {
+  if (tab.isAgent) {
+    const activeName = activeProjectName.value;
+    const activeProject = activeName ? projects.value.find(p => p.name === activeName) : null;
+    return activeProject?.agent ? `Agent ${activeProject.agent}` : 'Agent';
+  }
+  return 'Terminal';
+}
+
+/**
  * Get the active terminal + fitAddon, or null if no tabs.
  */
 export function getActiveTerminal(): { terminal: Terminal; fitAddon: FitAddon } | null {
