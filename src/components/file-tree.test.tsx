@@ -223,3 +223,141 @@ describe('inline create', () => {
     expect(document.body.textContent).toContain('Name required');
   });
 });
+
+// ── Phase 18 Plan 04: Open In submenu + Reveal in Finder + header buttons ───
+
+describe('open in', () => {
+  beforeEach(() => {
+    projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'claude' }];
+    activeProjectName.value = 'testproj';
+    fileTreeFontSize.value = 13;
+    fileTreeLineHeight.value = 2;
+
+    vi.stubGlobal('listen', vi.fn().mockResolvedValue(vi.fn()));
+  });
+
+  it('renders Open In submenu with only detected editors', async () => {
+    mockIPC((cmd, _args) => {
+      if (cmd === 'list_directory') return MOCK_ENTRIES;
+      if (cmd === 'detect_editors') return { zed: true, code: true, subl: false, cursor: false, idea: false };
+      return null;
+    });
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+    const rows = document.querySelectorAll('[data-file-tree-index]');
+    fireEvent.contextMenu(rows[0] as HTMLElement);
+    await new Promise(r => setTimeout(r, 20));
+    expect(document.body.textContent).toContain('Open In');
+    const openInRow = Array.from(document.querySelectorAll('[role="menuitem"]'))
+      .find(el => el.textContent?.trim().startsWith('Open In')) as HTMLElement | undefined;
+    expect(openInRow).toBeDefined();
+    fireEvent.mouseEnter(openInRow!);
+    await new Promise(r => setTimeout(r, 200));
+    expect(document.body.textContent).toContain('Zed');
+    expect(document.body.textContent).toContain('Visual Studio Code');
+    expect(document.body.textContent).not.toContain('Sublime Text');
+  });
+
+  it('invokes launch_external_editor when Zed submenu item is clicked', async () => {
+    let launchArgs: Record<string, unknown> | undefined;
+    mockIPC((cmd, args) => {
+      if (cmd === 'list_directory') return MOCK_ENTRIES;
+      if (cmd === 'detect_editors') return { zed: true, code: false, subl: false, cursor: false, idea: false };
+      if (cmd === 'launch_external_editor') { launchArgs = args as Record<string, unknown>; return null; }
+      return null;
+    });
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+    const rows = document.querySelectorAll('[data-file-tree-index]');
+    fireEvent.contextMenu(rows[0] as HTMLElement);
+    await new Promise(r => setTimeout(r, 20));
+    const openInRow = Array.from(document.querySelectorAll('[role="menuitem"]'))
+      .find(el => el.textContent?.trim().startsWith('Open In')) as HTMLElement;
+    fireEvent.mouseEnter(openInRow);
+    await new Promise(r => setTimeout(r, 200));
+    const zedItem = Array.from(document.querySelectorAll('[role="menuitem"]'))
+      .find(el => el.textContent?.trim() === 'Zed') as HTMLElement;
+    fireEvent.click(zedItem);
+    await new Promise(r => setTimeout(r, 20));
+    expect(launchArgs).toBeDefined();
+    expect(launchArgs?.app).toBe('Zed');
+    expect(launchArgs?.path).toBe(MOCK_ENTRIES[0].path);
+  });
+
+  it('hides Open In when no editors detected', async () => {
+    mockIPC((cmd, _args) => {
+      if (cmd === 'list_directory') return MOCK_ENTRIES;
+      if (cmd === 'detect_editors') return { zed: false, code: false, subl: false, cursor: false, idea: false };
+      return null;
+    });
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+    const rows = document.querySelectorAll('[data-file-tree-index]');
+    fireEvent.contextMenu(rows[0] as HTMLElement);
+    await new Promise(r => setTimeout(r, 20));
+    expect(document.body.textContent).not.toContain('Open In');
+    expect(document.body.textContent).toContain('Reveal in Finder');
+  });
+});
+
+describe('header', () => {
+  beforeEach(() => {
+    projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'claude' }];
+    activeProjectName.value = 'testproj';
+    fileTreeFontSize.value = 13;
+    fileTreeLineHeight.value = 2;
+
+    vi.stubGlobal('listen', vi.fn().mockResolvedValue(vi.fn()));
+  });
+
+  it('renders [+] button with create title', async () => {
+    mockIPC((cmd, _args) => {
+      if (cmd === 'list_directory') return MOCK_ENTRIES;
+      if (cmd === 'detect_editors') return { zed: false, code: false, subl: false, cursor: false, idea: false };
+      return null;
+    });
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+    const plusBtn = document.querySelector('[title="New file or folder"]');
+    expect(plusBtn).not.toBeNull();
+  });
+
+  it('clicking [+] opens menu with New File / New Folder', async () => {
+    mockIPC((cmd, _args) => {
+      if (cmd === 'list_directory') return MOCK_ENTRIES;
+      if (cmd === 'detect_editors') return { zed: false, code: false, subl: false, cursor: false, idea: false };
+      return null;
+    });
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+    const plusBtn = document.querySelector('[title="New file or folder"]') as HTMLElement;
+    fireEvent.click(plusBtn);
+    await new Promise(r => setTimeout(r, 20));
+    expect(document.body.textContent).toContain('New File');
+    expect(document.body.textContent).toContain('New Folder');
+  });
+
+  it('Open In header button visible only when at least one editor detected', async () => {
+    mockIPC((cmd, _args) => {
+      if (cmd === 'list_directory') return MOCK_ENTRIES;
+      if (cmd === 'detect_editors') return { zed: true, code: false, subl: false, cursor: false, idea: false };
+      return null;
+    });
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+    const openInHeaderBtn = document.querySelector('[title="Open project in external editor"]');
+    expect(openInHeaderBtn).not.toBeNull();
+  });
+
+  it('Open In header button hidden when no editors detected', async () => {
+    mockIPC((cmd, _args) => {
+      if (cmd === 'list_directory') return MOCK_ENTRIES;
+      if (cmd === 'detect_editors') return { zed: false, code: false, subl: false, cursor: false, idea: false };
+      return null;
+    });
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+    const openInHeaderBtn = document.querySelector('[title="Open project in external editor"]');
+    expect(openInHeaderBtn).toBeNull();
+  });
+});
