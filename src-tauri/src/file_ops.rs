@@ -6,6 +6,7 @@
 use git2::{DiffOptions, Repository};
 use std::path::Path;
 use tauri::async_runtime::spawn_blocking;
+use tauri::{AppHandle, Emitter};
 
 use crate::state::ManagedAppState;
 
@@ -16,6 +17,15 @@ pub struct FileEntry {
     pub path: String,
     pub is_dir: bool,
     pub size: Option<u64>,
+}
+
+/// Child count result for count_children (Phase 18, D-02).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ChildCount {
+    pub files: u32,
+    pub folders: u32,
+    pub total: u32,
+    pub capped: bool,
 }
 
 /// Validate that a path does not contain traversal components.
@@ -389,6 +399,138 @@ pub async fn write_checkbox(
         .map_err(|e| e.to_string())?
 }
 
+// ============================================================================
+// Phase 18: File tree enhancements (D-17, D-25, D-02)
+// ============================================================================
+
+/// Synchronous inner implementation of create_folder for testing.
+pub fn create_folder_impl(path: &str) -> Result<(), String> {
+    if !is_safe_path(path) {
+        return Err("Invalid path: directory traversal not allowed".to_string());
+    }
+    if Path::new(path).exists() {
+        return Err(format!("Path already exists: {}", path));
+    }
+    std::fs::create_dir_all(path).map_err(|e| e.to_string())
+}
+
+/// Create a directory (Phase 18, D-25).
+#[tauri::command]
+pub async fn create_folder(path: String, app: AppHandle) -> Result<(), String> {
+    if !is_safe_path(&path) {
+        return Err("Invalid path: directory traversal not allowed".to_string());
+    }
+    let path_clone = path.clone();
+    spawn_blocking(move || create_folder_impl(&path_clone))
+        .await
+        .map_err(|e| e.to_string())??;
+    let _ = app.emit("git-status-changed", ());
+    Ok(())
+}
+
+/// Recursive copy helper (std only — matches file_ops.rs style).
+fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        let dst_child = dst.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_recursive(&entry.path(), &dst_child)?;
+        } else {
+            std::fs::copy(entry.path(), &dst_child)?;
+        }
+    }
+    Ok(())
+}
+
+/// Synchronous inner implementation of copy_path for testing.
+pub fn copy_path_impl(from: &str, to: &str) -> Result<(), String> {
+    if !is_safe_path(from) || !is_safe_path(to) {
+        return Err("Invalid path: directory traversal not allowed".to_string());
+    }
+    let from_p = Path::new(from);
+    let to_p = Path::new(to);
+    if to_p.exists() {
+        return Err(format!("Target exists: {}", to));
+    }
+    let meta = std::fs::metadata(from_p).map_err(|e| e.to_string())?;
+    if meta.is_file() {
+        std::fs::copy(from_p, to_p).map(|_| ()).map_err(|e| e.to_string())
+    } else if meta.is_dir() {
+        copy_dir_recursive(from_p, to_p).map_err(|e| {
+            // Best-effort cleanup on partial failure (RESEARCH.md §2 partial-failure policy).
+            let _ = std::fs::remove_dir_all(to_p);
+            e.to_string()
+        })
+    } else {
+        Err("Unsupported file type".to_string())
+    }
+}
+
+/// Copy a file or directory (Phase 18, D-17).
+#[tauri::command]
+pub async fn copy_path(from: String, to: String, app: AppHandle) -> Result<(), String> {
+    if !is_safe_path(&from) || !is_safe_path(&to) {
+        return Err("Invalid path: directory traversal not allowed".to_string());
+    }
+    let from_clone = from.clone();
+    let to_clone = to.clone();
+    spawn_blocking(move || copy_path_impl(&from_clone, &to_clone))
+        .await
+        .map_err(|e| e.to_string())??;
+    let _ = app.emit("git-status-changed", ());
+    Ok(())
+}
+
+fn count_children_walk(dir: &Path, c: &mut ChildCount, cap: u32) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        if c.total >= cap {
+            c.capped = true;
+            return Ok(());
+        }
+        let e = entry?;
+        let ty = e.file_type()?;
+        c.total += 1;
+        if ty.is_dir() {
+            c.folders += 1;
+            let _ = count_children_walk(&e.path(), c, cap);
+            if c.capped {
+                return Ok(());
+            }
+        } else {
+            c.files += 1;
+        }
+    }
+    Ok(())
+}
+
+/// Synchronous inner implementation of count_children for testing.
+pub fn count_children_impl(path: &str, cap: u32) -> Result<ChildCount, String> {
+    if !is_safe_path(path) {
+        return Err("Invalid path: directory traversal not allowed".to_string());
+    }
+    let mut c = ChildCount {
+        files: 0,
+        folders: 0,
+        total: 0,
+        capped: false,
+    };
+    count_children_walk(Path::new(path), &mut c, cap).map_err(|e| e.to_string())?;
+    Ok(c)
+}
+
+/// Count descendants of a directory, capped at 10000 (Phase 18, D-02).
+#[tauri::command]
+pub async fn count_children(path: String) -> Result<ChildCount, String> {
+    if !is_safe_path(&path) {
+        return Err("Invalid path: directory traversal not allowed".to_string());
+    }
+    spawn_blocking(move || count_children_impl(&path, 10_000))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -619,5 +761,160 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.contains("directory traversal"), "Expected traversal error, got: {}", err);
+    }
+
+    // ========== Phase 18: create_folder tests ==========
+
+    #[test]
+    fn create_folder_creates_directory() {
+        let dir = TempDir::new().unwrap();
+        let new_dir = dir.path().join("new_folder");
+        let path = new_dir.to_str().unwrap();
+
+        assert!(!new_dir.exists());
+        create_folder_impl(path).unwrap();
+        assert!(new_dir.exists());
+        assert!(new_dir.is_dir());
+    }
+
+    #[test]
+    fn create_folder_rejects_existing() {
+        let dir = TempDir::new().unwrap();
+        let existing = dir.path().join("existing");
+        std::fs::create_dir(&existing).unwrap();
+        let path = existing.to_str().unwrap();
+
+        let result = create_folder_impl(path);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("already exists"), "Expected 'already exists' error, got: {}", err);
+    }
+
+    #[test]
+    fn create_folder_rejects_traversal() {
+        let result = create_folder_impl("../etc/newdir");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("directory traversal"), "Expected traversal error, got: {}", err);
+    }
+
+    // ========== Phase 18: copy_path tests ==========
+
+    #[test]
+    fn copy_path_copies_file() {
+        let dir = TempDir::new().unwrap();
+        let src = dir.path().join("source.txt");
+        let dst = dir.path().join("dest.txt");
+        std::fs::write(&src, "hello world").unwrap();
+
+        copy_path_impl(src.to_str().unwrap(), dst.to_str().unwrap()).unwrap();
+
+        assert!(src.exists(), "Source should still exist (copy, not move)");
+        assert!(dst.exists(), "Destination should exist");
+        assert_eq!(std::fs::read_to_string(&src).unwrap(), "hello world");
+        assert_eq!(std::fs::read_to_string(&dst).unwrap(), "hello world");
+    }
+
+    #[test]
+    fn copy_path_copies_directory_recursively() {
+        let dir = TempDir::new().unwrap();
+        let src = dir.path().join("src_dir");
+        let dst = dir.path().join("dst_dir");
+        std::fs::create_dir(&src).unwrap();
+        std::fs::write(src.join("file1.txt"), "content1").unwrap();
+        std::fs::create_dir(src.join("subdir")).unwrap();
+        std::fs::write(src.join("subdir").join("file2.txt"), "content2").unwrap();
+
+        copy_path_impl(src.to_str().unwrap(), dst.to_str().unwrap()).unwrap();
+
+        // Destination has the complete tree
+        assert!(dst.exists());
+        assert!(dst.is_dir());
+        assert!(dst.join("file1.txt").exists());
+        assert!(dst.join("subdir").exists());
+        assert!(dst.join("subdir").join("file2.txt").exists());
+        assert_eq!(
+            std::fs::read_to_string(dst.join("file1.txt")).unwrap(),
+            "content1"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dst.join("subdir").join("file2.txt")).unwrap(),
+            "content2"
+        );
+
+        // Source tree still intact (non-destructive)
+        assert!(src.exists());
+        assert!(src.join("file1.txt").exists());
+        assert!(src.join("subdir").join("file2.txt").exists());
+    }
+
+    #[test]
+    fn copy_path_rejects_existing_target() {
+        let dir = TempDir::new().unwrap();
+        let src = dir.path().join("src.txt");
+        let dst = dir.path().join("dst.txt");
+        std::fs::write(&src, "source").unwrap();
+        std::fs::write(&dst, "preexisting").unwrap();
+
+        let result = copy_path_impl(src.to_str().unwrap(), dst.to_str().unwrap());
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Target exists"), "Expected 'Target exists' error, got: {}", err);
+
+        // Filesystem unchanged — destination still has its original content
+        assert_eq!(std::fs::read_to_string(&dst).unwrap(), "preexisting");
+    }
+
+    #[test]
+    fn copy_path_rejects_traversal() {
+        let dir = TempDir::new().unwrap();
+        let src = dir.path().join("src.txt");
+        std::fs::write(&src, "content").unwrap();
+
+        let result = copy_path_impl("../etc/passwd", dir.path().join("dst.txt").to_str().unwrap());
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("directory traversal"), "Expected traversal error, got: {}", err);
+
+        let result = copy_path_impl(src.to_str().unwrap(), "../etc/evil");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("directory traversal"), "Expected traversal error, got: {}", err);
+    }
+
+    // ========== Phase 18: count_children tests ==========
+
+    #[test]
+    fn count_children_counts_files_and_dirs() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        // Fixture: 2 subdirs (a, b) each with 1 file, plus 1 file at root = 3 files, 2 folders
+        std::fs::create_dir(root.join("a")).unwrap();
+        std::fs::create_dir(root.join("b")).unwrap();
+        std::fs::write(root.join("a").join("file_a.txt"), "a").unwrap();
+        std::fs::write(root.join("b").join("file_b.txt"), "b").unwrap();
+        std::fs::write(root.join("root_file.txt"), "r").unwrap();
+
+        let count = count_children_impl(root.to_str().unwrap(), 10_000).unwrap();
+        assert_eq!(count.files, 3);
+        assert_eq!(count.folders, 2);
+        assert_eq!(count.total, 5);
+        assert!(!count.capped);
+    }
+
+    #[test]
+    fn count_children_caps_at_limit() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        // Same fixture as above (5 total entries)
+        std::fs::create_dir(root.join("a")).unwrap();
+        std::fs::create_dir(root.join("b")).unwrap();
+        std::fs::write(root.join("a").join("file_a.txt"), "a").unwrap();
+        std::fs::write(root.join("b").join("file_b.txt"), "b").unwrap();
+        std::fs::write(root.join("root_file.txt"), "r").unwrap();
+
+        // Cap at 3 entries → must set capped: true
+        let count = count_children_impl(root.to_str().unwrap(), 3).unwrap();
+        assert!(count.capped, "Expected capped=true when entries exceed cap");
     }
 }
