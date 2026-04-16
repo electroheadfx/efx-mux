@@ -9,14 +9,14 @@ import { useEffect, useState, useRef } from 'preact/hooks';
 import { signal, computed } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { Trash2, FilePlus, FolderPlus } from 'lucide-preact';
+import { Trash2, FilePlus, FolderPlus, ExternalLink, FolderOpen, Zap, Code2, MousePointer2, Type, Braces, Plus } from 'lucide-preact';
 import { colors, fonts } from '../tokens';
 import { activeProjectName, projects } from '../state-manager';
 import type { ProjectEntry } from '../state-manager';
 import { ContextMenu, type ContextMenuItem } from './context-menu';
 import { showConfirmModal } from './confirm-modal';
 import { showToast } from './toast';
-import { deleteFile, createFile, createFolder } from '../services/file-service';
+import { deleteFile, createFile, createFolder, detectEditors, launchExternalEditor, openDefault, revealInFinder, type DetectedEditors } from '../services/file-service';
 
 interface ChildCount { files: number; folders: number; total: number; capped: boolean; }
 
@@ -51,6 +51,25 @@ const activeMenu = signal<MenuState | null>(null);
 // Inline create row state: tracks which parent dir has an active create-row and its kind
 interface CreateRowState { parentDir: string; kind: 'file' | 'folder'; afterIndex: number; }
 const activeCreateRow = signal<CreateRowState | null>(null);
+// Phase 18 Plan 04 (D-06): cached detected editors — populated once on first FileTree mount.
+export const detectedEditors = signal<DetectedEditors | null>(null);
+let editorsDetectInflight = false;
+async function ensureEditorsDetected(): Promise<void> {
+  if (detectedEditors.value !== null || editorsDetectInflight) return;
+  editorsDetectInflight = true;
+  try {
+    detectedEditors.value = await detectEditors();
+  } catch (err) {
+    console.warn('[efxmux] detect_editors failed:', err);
+    detectedEditors.value = { zed: false, code: false, subl: false, cursor: false, idea: false };
+  } finally {
+    editorsDetectInflight = false;
+  }
+}
+
+// Phase 18 Plan 04 (D-22, D-10): header dropdown anchor state — reused for [+] and Open In header buttons.
+const headerMenu = signal<MenuState | null>(null);
+
 
 // ── Click timer for single-click vs double-click distinction ─────
 let fileClickTimer: ReturnType<typeof setTimeout> | null = null;
@@ -517,6 +536,9 @@ function InlineCreateRow({ parentDir, kind, depth, onDone }: InlineCreateRowProp
  */
 export function FileTree() {
   useEffect(() => {
+    // Phase 18 Plan 04 (D-06): kick off editor detection once on mount (cached thereafter)
+    void ensureEditorsDetected();
+
     function handleProjectChanged() {
       setTimeout(() => {
         const project = getActiveProject();
@@ -619,11 +641,114 @@ export function FileTree() {
    * Phase 18 Plan 03: Build per-row context menu items (Delete, New File, New Folder).
    * Open In / external-editor items land in Plan 18-04.
    */
+  // Phase 18 Plan 04: build Open In submenu children from detected editors (D-06, D-08, D-09)
+  function buildOpenInChildren(path: string): ContextMenuItem[] {
+    const ed = detectedEditors.value;
+    if (!ed) return [];
+    const children: ContextMenuItem[] = [];
+    if (ed.zed)    children.push({ label: 'Zed',                 icon: Zap,           action: () => { void launchOrToast('Zed', path); } });
+    if (ed.code)   children.push({ label: 'Visual Studio Code',  icon: Code2,         action: () => { void launchOrToast('Visual Studio Code', path); } });
+    if (ed.cursor) children.push({ label: 'Cursor',              icon: MousePointer2, action: () => { void launchOrToast('Cursor', path); } });
+    if (ed.subl)   children.push({ label: 'Sublime Text',        icon: Type,          action: () => { void launchOrToast('Sublime Text', path); } });
+    if (ed.idea)   children.push({ label: 'IntelliJ IDEA',       icon: Braces,        action: () => { void launchOrToast('IntelliJ IDEA', path); } });
+    return children;
+  }
+
+  async function launchOrToast(app: string, path: string): Promise<void> {
+    try {
+      await launchExternalEditor(app, path);
+    } catch {
+      showToast({
+        type: 'error',
+        message: `Could not launch ${app}`,
+        hint: 'Make sure the app is installed.',
+      });
+    }
+  }
+
+  // Phase 18 Plan 04 (D-23): resolve target directory for header [+] create
+  function resolveHeaderCreateTarget(): string {
+    const project = getActiveProject();
+    const projectPath = project?.path || '';
+    let selectedEntry: FileEntry | undefined;
+    if (viewMode.value === 'flat') {
+      selectedEntry = entries.value[selectedIndex.value];
+    } else {
+      selectedEntry = flattenedTree.value[selectedIndex.value]?.entry;
+    }
+    if (selectedEntry) {
+      if (selectedEntry.is_dir) return selectedEntry.path;
+      // File → parent directory
+      return selectedEntry.path.replace(/\/[^/]+$/, '') || projectPath;
+    }
+    return projectPath;
+  }
+
+  function openHeaderCreateMenu(e: MouseEvent): void {
+    e.preventDefault();
+    e.stopPropagation();
+    const target = resolveHeaderCreateTarget();
+    const items: ContextMenuItem[] = [
+      {
+        label: 'New File',
+        icon: FilePlus,
+        action: () => {
+          const afterIdx = selectedIndex.value;
+          activeCreateRow.value = { parentDir: target, kind: 'file', afterIndex: afterIdx };
+        },
+      },
+      {
+        label: 'New Folder',
+        icon: FolderPlus,
+        action: () => {
+          const afterIdx = selectedIndex.value;
+          activeCreateRow.value = { parentDir: target, kind: 'folder', afterIndex: afterIdx };
+        },
+      },
+    ];
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    headerMenu.value = { x: rect.left, y: rect.bottom + 2, items };
+  }
+
+  function openHeaderOpenInMenu(e: MouseEvent): void {
+    e.preventDefault();
+    e.stopPropagation();
+    const project = getActiveProject();
+    if (!project?.path) return;
+    const children = buildOpenInChildren(project.path);
+    if (children.length === 0) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    // Render detected-editor children inline as the top-level menu items (simpler than nesting)
+    headerMenu.value = { x: rect.left, y: rect.bottom + 2, items: children };
+  }
+
   function buildRowMenuItems(entry: FileEntry): ContextMenuItem[] {
     const isDir = entry.is_dir;
     // Resolve the target directory for "New File" / "New Folder" (D-23)
     const targetDir = isDir ? entry.path : entry.path.replace(/\/[^/]+$/, '');
     const items: ContextMenuItem[] = [];
+    // Phase 18 Plan 04: Open In submenu (only when editors detected)
+    const openInChildren = buildOpenInChildren(entry.path);
+    if (openInChildren.length > 0) {
+      items.push({
+        label: 'Open In',
+        icon: ExternalLink,
+        children: openInChildren,
+      });
+    }
+    // Open with default app (always)
+    items.push({
+      label: 'Open with default app',
+      icon: ExternalLink,
+      action: () => { void openDefault(entry.path).catch(() => showToast({ type: 'error', message: `Could not open ${entry.name}` })); },
+    });
+    // Reveal in Finder (always)
+    items.push({
+      label: 'Reveal in Finder',
+      icon: FolderOpen,
+      action: () => { void revealInFinder(entry.path).catch(() => showToast({ type: 'error', message: `Could not reveal ${entry.name}` })); },
+    });
+    items.push({ label: '', action: () => {}, separator: true });
     // New File
     items.push({
       label: 'New File',
@@ -826,6 +951,53 @@ export function FileTree() {
 
         <span style={{ flex: 1 }} />
 
+        {/* Phase 18 Plan 04 (D-22): Header [+] create dropdown button */}
+        <span
+          onClick={openHeaderCreateMenu}
+          title="New file or folder"
+          style={{
+            cursor: 'pointer',
+            width: 28,
+            height: 28,
+            borderRadius: 4,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'transparent',
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = colors.bgElevated; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
+        >
+          <Plus size={14} color={colors.textMuted} />
+        </span>
+
+        {/* Phase 18 Plan 04 (D-10): Header Open In button — hidden when no editors detected */}
+        {(() => {
+          const ed = detectedEditors.value;
+          const hasAny = !!(ed && (ed.zed || ed.code || ed.subl || ed.cursor || ed.idea));
+          if (!hasAny) return null;
+          return (
+            <span
+              onClick={openHeaderOpenInMenu}
+              title="Open project in external editor"
+              style={{
+                cursor: 'pointer',
+                width: 28,
+                height: 28,
+                borderRadius: 4,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'transparent',
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = colors.bgElevated; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
+            >
+              <ExternalLink size={14} color={colors.textMuted} />
+            </span>
+          );
+        })()}
+
         {/* Mode toggle */}
         <span
           onClick={switchToFlat}
@@ -985,6 +1157,15 @@ export function FileTree() {
           x={activeMenu.value.x}
           y={activeMenu.value.y}
           onClose={() => { activeMenu.value = null; }}
+        />
+      )}
+      {/* Phase 18 Plan 04: Header dropdown menu (for [+] and Open In header buttons) */}
+      {headerMenu.value && (
+        <ContextMenu
+          items={headerMenu.value.items}
+          x={headerMenu.value.x}
+          y={headerMenu.value.y}
+          onClose={() => { headerMenu.value = null; }}
         />
       )}
     </div>

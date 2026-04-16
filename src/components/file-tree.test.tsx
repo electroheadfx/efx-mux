@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/preact';
 import { mockIPC } from '@tauri-apps/api/mocks';
-import { FileTree, fileTreeFontSize, fileTreeLineHeight } from './file-tree';
+import { FileTree, fileTreeFontSize, fileTreeLineHeight, detectedEditors } from './file-tree';
 import { projects, activeProjectName } from '../state-manager';
 
 const MOCK_ENTRIES = [
@@ -229,6 +229,7 @@ describe('inline create', () => {
 describe('open in', () => {
   beforeEach(() => {
     projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'claude' }];
+    detectedEditors.value = null;
     activeProjectName.value = 'testproj';
     fileTreeFontSize.value = 13;
     fileTreeLineHeight.value = 2;
@@ -303,6 +304,7 @@ describe('open in', () => {
 describe('header', () => {
   beforeEach(() => {
     projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'claude' }];
+    detectedEditors.value = null;
     activeProjectName.value = 'testproj';
     fileTreeFontSize.value = 13;
     fileTreeLineHeight.value = 2;
