@@ -111,3 +111,54 @@ describe('ContextMenu', () => {
     expect(menuItems.length).toBe(3);
   });
 });
+
+describe('submenu', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('renders submenu after 150ms hover on parent row', async () => {
+    const childAction = vi.fn();
+    const parentItems: ContextMenuItem[] = [
+      { label: 'Parent', children: [{ label: 'Child', action: childAction }] },
+    ];
+    const onClose = vi.fn();
+    render(<ContextMenu items={parentItems} x={10} y={10} onClose={onClose} />);
+    const parentRow = screen.getByText('Parent').closest('[role="menuitem"]') as HTMLElement;
+    fireEvent.mouseEnter(parentRow);
+    // Wait past the 150ms hover delay
+    await new Promise((r) => setTimeout(r, 200));
+    expect(screen.queryByText('Child')).not.toBeNull();
+  });
+
+  it('invokes child action and closes whole menu on submenu item click', async () => {
+    const childAction = vi.fn();
+    const onClose = vi.fn();
+    const parentItems: ContextMenuItem[] = [
+      { label: 'Open In', children: [{ label: 'Zed', action: childAction }] },
+    ];
+    render(<ContextMenu items={parentItems} x={10} y={10} onClose={onClose} />);
+    const parentRow = screen.getByText('Open In').closest('[role="menuitem"]') as HTMLElement;
+    fireEvent.mouseEnter(parentRow);
+    await new Promise((r) => setTimeout(r, 200));
+    const childRow = screen.getByText('Zed').closest('[role="menuitem"]') as HTMLElement;
+    fireEvent.click(childRow);
+    expect(childAction).toHaveBeenCalledOnce();
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('renders no submenu chevron when item has no children', () => {
+    const items: ContextMenuItem[] = [{ label: 'Plain Item', action: () => {} }];
+    render(<ContextMenu items={items} x={10} y={10} onClose={() => {}} />);
+    expect(document.body.textContent).not.toContain('▸');
+  });
+
+  it('parent row with children has aria-haspopup menu', () => {
+    const items: ContextMenuItem[] = [
+      { label: 'Open In', children: [{ label: 'Zed', action: () => {} }] },
+    ];
+    render(<ContextMenu items={items} x={10} y={10} onClose={() => {}} />);
+    const parentRow = screen.getByText('Open In').closest('[role="menuitem"]');
+    expect(parentRow?.getAttribute('aria-haspopup')).toBe('menu');
+  });
+});
