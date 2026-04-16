@@ -27,7 +27,7 @@ import { initDragManager } from './drag-manager';
 import { initTheme, registerTerminal, toggleThemeMode } from './theme/theme-manager';
 import { createNewTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs, saveProjectTabs, hasProjectTabs, restoreProjectTabs } from './components/terminal-tabs';
 import {
-  loadAppState, initBeforeUnload, sidebarCollapsed, updateLayout, updateSession,
+  loadAppState, saveAppState, getCurrentState, initBeforeUnload, sidebarCollapsed, updateLayout, updateSession,
   getProjects, getActiveProject, projects, activeProjectName
 } from './state-manager';
 import { openProjectModal } from './components/project-modal';
@@ -123,7 +123,11 @@ async function bootstrap() {
       title: 'Quit Efxmux?',
       message: 'Are you sure you want to quit? Active terminal sessions will be preserved by tmux.',
       confirmLabel: 'Quit',
-      onConfirm: () => { invoke('force_quit'); },
+      onConfirm: async () => {
+        const state = getCurrentState();
+        if (state) await saveAppState(state);
+        invoke('force_quit');
+      },
       onCancel: () => {},
     });
   });
@@ -134,7 +138,11 @@ async function bootstrap() {
       title: 'Quit Efxmux?',
       message: 'Are you sure you want to quit? Active terminal sessions will be preserved by tmux.',
       confirmLabel: 'Quit',
-      onConfirm: () => { invoke('force_quit'); },
+      onConfirm: async () => {
+        const state = getCurrentState();
+        if (state) await saveAppState(state);
+        invoke('force_quit');
+      },
       onCancel: () => {},
     });
   });
