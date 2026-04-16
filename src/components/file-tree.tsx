@@ -16,7 +16,7 @@ import type { ProjectEntry } from '../state-manager';
 import { ContextMenu, type ContextMenuItem } from './context-menu';
 import { showConfirmModal } from './confirm-modal';
 import { showToast } from './toast';
-import { deleteFile, createFile, createFolder, detectEditors, launchExternalEditor, openDefault, revealInFinder, type DetectedEditors } from '../services/file-service';
+import { deleteFile, createFile, createFolder, renameFile, copyPath, detectEditors, launchExternalEditor, openDefault, revealInFinder, type DetectedEditors } from '../services/file-service';
 
 interface ChildCount { files: number; folders: number; total: number; capped: boolean; }
 
@@ -69,6 +69,22 @@ async function ensureEditorsDetected(): Promise<void> {
 
 // Phase 18 Plan 04 (D-22, D-10): header dropdown anchor state — reused for [+] and Open In header buttons.
 const headerMenu = signal<MenuState | null>(null);
+
+// Phase 18 Plan 05 (D-11..D-14): intra-tree mouse-drag state + Finder drop-zone visual signal
+const DRAG_THRESHOLD_PX = 5;
+interface TreeDragState {
+  sourcePath: string | null;
+  sourceEl: HTMLElement | null;
+  ghostEl: HTMLElement | null;
+  startX: number;
+  startY: number;
+  dragging: boolean;
+}
+const treeDrag: TreeDragState = {
+  sourcePath: null, sourceEl: null, ghostEl: null, startX: 0, startY: 0, dragging: false,
+};
+// Finder drop-zone outline/glow state
+const finderDropActive = signal<boolean>(false);
 
 
 // ── Click timer for single-click vs double-click distinction ─────
@@ -354,6 +370,148 @@ function openEntry(entry: FileEntry): void {
       detail: { path: entry.path, name: entry.name }
     }));
   }
+}
+
+// ── Phase 18 Plan 05 (D-11..D-14): intra-tree mouse-drag to move files/folders ────
+
+/**
+ * Look up a tree entry by its data-file-tree-index value.
+ * Flat mode reads from entries.value; tree mode reads from flattenedTree.
+ */
+function getEntryByIndex(i: number): FileEntry | undefined {
+  if (viewMode.value === 'flat') return entries.value[i];
+  return flattenedTree.value[i]?.entry;
+}
+
+function onRowMouseDown(e: MouseEvent, path: string): void {
+  if (e.button !== 0) return;
+  const target = e.currentTarget as HTMLElement;
+  // Prevent text selection during drag
+  e.preventDefault();
+  treeDrag.sourcePath = path;
+  treeDrag.sourceEl = target;
+  treeDrag.startX = e.clientX;
+  treeDrag.startY = e.clientY;
+  treeDrag.dragging = false;
+  document.addEventListener('mousemove', onTreeDocMouseMove);
+  document.addEventListener('mouseup', onTreeDocMouseUp);
+}
+
+function onTreeDocMouseMove(e: MouseEvent): void {
+  if (!treeDrag.sourcePath || !treeDrag.sourceEl) return;
+  const dx = Math.abs(e.clientX - treeDrag.startX);
+  const dy = Math.abs(e.clientY - treeDrag.startY);
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (!treeDrag.dragging && dist >= DRAG_THRESHOLD_PX) {
+    treeDrag.dragging = true;
+    treeDrag.sourceEl.style.opacity = '0.4';
+    const ghost = treeDrag.sourceEl.cloneNode(true) as HTMLElement;
+    ghost.style.position = 'fixed';
+    ghost.style.top = `${treeDrag.sourceEl.getBoundingClientRect().top}px`;
+    ghost.style.left = `${e.clientX - 40}px`;
+    ghost.style.opacity = '0.8';
+    ghost.style.pointerEvents = 'none';
+    ghost.style.zIndex = '9999';
+    ghost.style.transition = 'none';
+    ghost.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+    ghost.style.borderRadius = '6px';
+    document.body.appendChild(ghost);
+    treeDrag.ghostEl = ghost;
+  }
+  if (!treeDrag.dragging) return;
+  if (treeDrag.ghostEl) {
+    treeDrag.ghostEl.style.left = `${e.clientX - 40}px`;
+    treeDrag.ghostEl.style.top = `${e.clientY - 10}px`;
+  }
+  // Clear previous highlights, apply new highlight to row under cursor
+  const rowEls = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+  rowEls.forEach(el => { el.style.borderLeft = ''; el.style.backgroundColor = ''; });
+  for (const el of rowEls) {
+    const rect = el.getBoundingClientRect();
+    if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
+      const idx = el.dataset.fileTreeIndex;
+      if (idx !== undefined) {
+        const entry = getEntryByIndex(parseInt(idx, 10));
+        if (entry && entry.path !== treeDrag.sourcePath) {
+          el.style.borderLeft = `2px solid ${colors.accent}`;
+          el.style.backgroundColor = `${colors.accent}20`;
+        }
+      }
+      break;
+    }
+  }
+}
+
+async function onTreeDocMouseUp(e: MouseEvent): Promise<void> {
+  document.removeEventListener('mousemove', onTreeDocMouseMove);
+  document.removeEventListener('mouseup', onTreeDocMouseUp);
+  const sourcePath = treeDrag.sourcePath;
+  const wasDragging = treeDrag.dragging;
+  cleanupTreeDrag();
+  if (!wasDragging || !sourcePath) return;
+
+  // Resolve drop target (D-12)
+  let targetDir: string | null = null;
+  const rowEls = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+  for (const el of rowEls) {
+    const rect = el.getBoundingClientRect();
+    if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
+      const idx = el.dataset.fileTreeIndex;
+      if (idx !== undefined) {
+        const entry = getEntryByIndex(parseInt(idx, 10));
+        if (entry && entry.path !== sourcePath) {
+          targetDir = entry.is_dir ? entry.path : entry.path.replace(/\/[^/]+$/, '');
+        }
+      }
+      break;
+    }
+  }
+  // Empty-area drop → project root
+  if (!targetDir) {
+    const project = getActiveProject();
+    targetDir = project?.path ?? null;
+  }
+  if (!targetDir) return;
+
+  // Compute source's current parent; abort no-op move (dropping into own parent)
+  const sourceParent = sourcePath.replace(/\/[^/]+$/, '');
+  if (sourceParent === targetDir) return;
+
+  const sourceName = sourcePath.split('/').pop()!;
+  const target = `${targetDir}/${sourceName}`;
+
+  // Prevent moving a folder into itself or its descendant
+  if (target.startsWith(sourcePath + '/') || target === sourcePath) return;
+
+  try {
+    await renameFile(sourcePath, target);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.toLowerCase().includes('exists')) {
+      showToast({ type: 'error', message: `File exists: ${sourceName}` });
+    } else {
+      showToast({
+        type: 'error',
+        message: `Could not move ${sourceName}`,
+        hint: 'Check target folder permissions.',
+      });
+    }
+  }
+}
+
+function cleanupTreeDrag(): void {
+  if (treeDrag.sourceEl) treeDrag.sourceEl.style.opacity = '';
+  if (treeDrag.ghostEl) treeDrag.ghostEl.remove();
+  document.querySelectorAll<HTMLElement>('[data-file-tree-index]').forEach(el => {
+    el.style.borderLeft = '';
+    el.style.backgroundColor = '';
+  });
+  treeDrag.sourcePath = null;
+  treeDrag.sourceEl = null;
+  treeDrag.ghostEl = null;
+  treeDrag.startX = 0;
+  treeDrag.startY = 0;
+  treeDrag.dragging = false;
 }
 
 /**
@@ -1050,6 +1208,7 @@ export function FileTree() {
                     }}
                     onMouseEnter={() => { selectedIndex.value = i; }}
                     onContextMenu={(e) => handleRowContextMenu(e as unknown as MouseEvent, entry, i)}
+                    onMouseDown={(e) => onRowMouseDown(e as unknown as MouseEvent, entry.path)}
                   >
                     {entry.is_dir
                       ? <FolderIcon />
@@ -1112,6 +1271,7 @@ export function FileTree() {
                     }}
                     onMouseEnter={() => { selectedIndex.value = i; }}
                     onContextMenu={(e) => handleRowContextMenu(e as unknown as MouseEvent, node.entry, i)}
+                    onMouseDown={(e) => onRowMouseDown(e as unknown as MouseEvent, node.entry.path)}
                   >
                     {/* Chevron for folders, spacer for files */}
                     {node.entry.is_dir ? (

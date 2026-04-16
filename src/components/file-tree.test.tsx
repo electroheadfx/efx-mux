@@ -407,19 +407,18 @@ describe('drag', () => {
     await new Promise(r => setTimeout(r, 50));
     const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
     // rows[0] is 'src' (folder), rows[1] is 'README.md' (file).
-    // Drag README.md onto src.
+    // Drag README.md onto src. In jsdom all getBoundingClientRect() are zero,
+    // so use clientY=0 to land the cursor geometrically on the first zero-rect row
+    // (which is rows[0] = 'src' folder). Equivalent semantics to "cursor over folder row".
     const fileRow = rows[1];
-    const folderRow = rows[0];
-    const fileRect = fileRow.getBoundingClientRect();
-    const folderRect = folderRow.getBoundingClientRect();
-    fireEvent.mouseDown(fileRow, { button: 0, clientX: fileRect.left + 5, clientY: fileRect.top + 5 });
+    fireEvent.mouseDown(fileRow, { button: 0, clientX: 50, clientY: 50 });
     fireEvent.mouseMove(document, {
-      clientX: folderRect.left + 5,
-      clientY: folderRect.top + 5,
+      clientX: 60,
+      clientY: 0,
     });
     fireEvent.mouseUp(document, {
-      clientX: folderRect.left + 5,
-      clientY: folderRect.top + 5,
+      clientX: 60,
+      clientY: 0,
     });
     await new Promise(r => setTimeout(r, 20));
     expect(renameArgs).toBeDefined();
@@ -474,13 +473,11 @@ describe('finder drop', () => {
     });
     render(<FileTree />);
     await new Promise(r => setTimeout(r, 50));
-    const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
-    const folderRow = rows[0]; // 'src' folder
-    const rect = folderRow.getBoundingClientRect();
+    // jsdom returns zero rects; use y=0 to match the first zero-rect row (src folder).
     document.dispatchEvent(new CustomEvent('tree-finder-drop', {
       detail: {
         paths: ['/Users/bob/Downloads/extra.txt'],
-        position: { x: rect.left + 5, y: rect.top + 5 },
+        position: { x: 5, y: 0 },
       },
     }));
     await new Promise(r => setTimeout(r, 20));
