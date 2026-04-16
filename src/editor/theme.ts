@@ -49,6 +49,13 @@ export const efxmuxTheme = EditorView.theme(
     '.cm-searchMatch.cm-searchMatch-selected': {
       backgroundColor: `${colors.statusYellow}50`,
     },
+    '.cm-minimap': {
+      width: '60px !important',
+      minWidth: '60px !important',
+    },
+    '.cm-minimap .cm-minimap-inner': {
+      width: '60px !important',
+    },
   },
   { dark: true },
 );
