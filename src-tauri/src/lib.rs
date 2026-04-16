@@ -34,6 +34,11 @@ pub fn run() {
                 .item(&MenuItem::with_id(app, "quit", "Quit Efxmux", true, Some("CmdOrCtrl+Q"))?)
                 .build()?;
 
+            // ── File menu — Add Project (Cmd+N) ─────────────────────────────────
+            let file_menu = SubmenuBuilder::new(app, "File")
+                .item(&MenuItem::with_id(app, "add-project", "Add Project", true, Some("CmdOrCtrl+N"))?)
+                .build()?;
+
             // ── Edit menu — wires Cmd+C/V/X/A to WKWebView clipboard (per D-16) ──
             // PredefinedMenuItem maps to OS-level accelerators; WKWebView inherits.
             // @tauri-apps/plugin-clipboard-manager NOT needed for Cmd+C/V.
@@ -55,7 +60,7 @@ pub fn run() {
 
             // Build and set the full menu
             let menu = MenuBuilder::new(app)
-                .items(&[&app_menu, &edit_menu, &window_menu])
+                .items(&[&app_menu, &file_menu, &edit_menu, &window_menu])
                 .build()?;
             app.set_menu(menu)?;
 
@@ -176,8 +181,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .on_menu_event(|app, event| {
-            if event.id().as_ref() == "quit" {
-                let _ = app.emit("quit-requested", ());
+            match event.id().as_ref() {
+                "quit" => { let _ = app.emit("quit-requested", ()); }
+                "add-project" => { let _ = app.emit("add-project-requested", ()); }
+                _ => {}
             }
         })
         .on_window_event(|window, event| {
