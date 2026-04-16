@@ -11,6 +11,7 @@ import { effect } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import './styles/app.css';
 
 import { Sidebar } from './components/sidebar';
@@ -251,6 +252,48 @@ async function bootstrap() {
         break;
     }
   }, { capture: true });
+
+  // Step 6b (Phase 18 D-18): OS-level drag-drop from Finder.
+  // Rust `dragDropEnabled: true` in tauri.conf.json (Plan 18-02) unblocks these events.
+  // We ignore drops that come entirely from INSIDE the active project — those are intra-tree drags
+  // handled by the mouse-event pipeline in file-tree.tsx.
+  (async () => {
+    try {
+      await getCurrentWebviewWindow().onDragDropEvent((event) => {
+        const payload = event.payload as
+          | { type: 'enter'; paths: string[]; position: { x: number; y: number } }
+          | { type: 'over'; paths: string[]; position: { x: number; y: number } }
+          | { type: 'drop'; paths: string[]; position: { x: number; y: number } }
+          | { type: 'leave' };
+        if (payload.type === 'leave') {
+          document.dispatchEvent(new CustomEvent('tree-finder-dragleave'));
+          return;
+        }
+        // Derive project path from module signals (getActiveProject() returns Promise — avoid awaiting here)
+        const projectName = activeProjectName.value;
+        const project = projectName ? projects.value.find(p => p.name === projectName) : undefined;
+        const projectPath = project?.path ?? '';
+        const paths = 'paths' in payload ? payload.paths : [];
+        // Filter: if ANY path is outside the project root, treat as Finder import.
+        // If ALL paths are inside the project, the intra-tree mouse pipeline owns this drag — ignore.
+        const anyOutside = paths.length > 0 && paths.some(p => !projectPath || !p.startsWith(projectPath));
+        if (!anyOutside) return;
+        // Convert physical-pixel position to CSS pixels (per RESEARCH.md §1).
+        const dpr = window.devicePixelRatio || 1;
+        const detail = {
+          paths,
+          position: { x: payload.position.x / dpr, y: payload.position.y / dpr },
+        };
+        if (payload.type === 'enter' || payload.type === 'over') {
+          document.dispatchEvent(new CustomEvent('tree-finder-dragover', { detail }));
+        } else if (payload.type === 'drop') {
+          document.dispatchEvent(new CustomEvent('tree-finder-drop', { detail }));
+        }
+      });
+    } catch (err) {
+      console.warn('[efxmux] onDragDropEvent subscribe failed:', err);
+    }
+  })();
 
   // Restore server pane state from persisted state (map legacy 'collapsed' to 'strip')
   if (appState?.layout?.['server-pane-state']) {
