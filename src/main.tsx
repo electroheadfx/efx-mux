@@ -31,7 +31,7 @@ import {
   getProjects, getActiveProject, projects, activeProjectName
 } from './state-manager';
 import { openProjectModal } from './components/project-modal';
-import { openEditorTab, openEditorTabPinned, restoreEditorTabs, activeUnifiedTabId, closeUnifiedTab } from './components/unified-tab-bar';
+import { openEditorTab, openEditorTabPinned, restoreEditorTabs, activeUnifiedTabId, closeUnifiedTab, suppressEditorPersist } from './components/unified-tab-bar';
 import { serverPaneState, saveCurrentProjectState, restoreProjectState } from './components/server-pane';
 import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from './components/file-tree';
 import { detectAgent } from './server/server-bridge';
@@ -172,6 +172,9 @@ async function bootstrap() {
   requestAnimationFrame(() => initDragManager());
 
   // Step 5: Init project system
+  // Suppress editor tab persist until restore completes — prevents empty-array overwrite race
+  // (activeProjectName change triggers computed → subscribe → persist empty before restore runs)
+  suppressEditorPersist(true);
   initProjects();
 
   // Step 6: Consolidated keyboard handler (D-01, D-02, UX-01)
@@ -367,8 +370,9 @@ async function bootstrap() {
 
     // Restore editor tabs from persisted state
     if (activeName) {
-      restoreEditorTabs(activeName);
+      await restoreEditorTabs(activeName);
     }
+    suppressEditorPersist(false);
 
     // Apply right-h-pct after DOM is ready
     if (appState?.layout?.['right-h-pct']) {

@@ -307,9 +307,14 @@ export async function restoreEditorTabs(projectName: string): Promise<boolean> {
   return true;
 }
 
+// Guard: suppress persist during init/restore to prevent empty-array overwrite race.
+// Set before activeProjectName is assigned (which triggers computed → subscribe → persist empty).
+let _suppressPersist = false;
+export function suppressEditorPersist(on: boolean): void { _suppressPersist = on; }
+
 // Watch editorTabs changes and persist
 editorTabs.subscribe(() => {
-  persistEditorTabs();
+  if (!_suppressPersist) persistEditorTabs();
 });
 
 /**
