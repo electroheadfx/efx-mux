@@ -17,7 +17,7 @@ Developers using Claude Code or OpenCode lose context switching between the term
 
 Laurent (the developer) and other developers who use Claude Code / OpenCode as their primary coding agent and want a structured workspace without leaving the terminal paradigm.
 
-## Key Requirements
+## Requirements
 
 ### Validated
 
