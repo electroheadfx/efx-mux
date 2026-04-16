@@ -4,6 +4,7 @@
 
 import { signal, computed } from '@preact/signals';
 import type { VNode } from 'preact';
+import { invoke } from '@tauri-apps/api/core';
 import { colors, fonts } from '../tokens';
 import { Dropdown, type DropdownItem } from './dropdown-menu';
 import { showConfirmModal } from './confirm-modal';
@@ -253,9 +254,37 @@ export function closeUnifiedTab(tabId: string): void {
   if (!tab) return;
 
   if (tab.type === 'terminal') {
+    // Check if this is an agent tab -- offer graceful quit option
+    const termTab = terminalTabs.value.find(t => t.id === tabId);
+
+    if (termTab?.isAgent) {
+      showConfirmModal({
+        title: 'Quit Agent',
+        message: 'Do you want to quit just the agent or close the terminal session entirely?',
+        confirmLabel: 'Quit Terminal',
+        onConfirm: () => {
+          // Red button: destroy PTY session and remove tab (existing behavior)
+          closeTab(tabId);
+          setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
+          if (terminalTabs.value.length === 0) {
+            switchToAdjacentTab(tabId);
+          }
+        },
+        onCancel: () => {
+          // Cancel: do nothing, keep tab as-is
+        },
+        onSave: () => {
+          // Blue button: send /exit to gracefully quit agent, keep tab open
+          invoke('write_pty', { data: '/exit\r', sessionName: termTab.sessionName });
+        },
+        saveLabel: 'Quit Agent Only',
+      });
+      return;
+    }
+
+    // Non-agent terminal: close immediately (existing behavior, unchanged)
     closeTab(tabId);
     setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
-    // After closing, if no terminal tabs remain, switch to another unified tab
     if (terminalTabs.value.length === 0) {
       switchToAdjacentTab(tabId);
     }
