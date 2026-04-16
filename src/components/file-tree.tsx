@@ -38,6 +38,11 @@ interface FileEntry {
 
 const entries = signal<FileEntry[]>([]);
 const selectedIndex = signal(0);
+// Phase 18 quick-260416-uig (bug 3): hoveredIndex is decoupled from selectedIndex.
+// Click / keyboard / reveal -> selectedIndex (drives white filename + persistent bg).
+// Mouse hover -> hoveredIndex (drives bg tint only; filename color is unchanged).
+// -1 means "no row currently hovered".
+const hoveredIndex = signal(-1);
 const currentPath = signal('');
 const loaded = signal(false);
 
@@ -1300,7 +1305,18 @@ export function FileTree() {
                   <div
                     key={entry.path}
                     data-file-tree-index={i}
-                    style={{ padding: `${fileTreeLineHeight.value}px 12px`, gap: 8, display: 'flex', alignItems: 'center', cursor: 'pointer', backgroundColor: isSelected ? colors.bgElevated : 'transparent' }}
+                    style={{
+                      padding: `${fileTreeLineHeight.value}px 12px`,
+                      gap: 8,
+                      display: 'flex',
+                      alignItems: 'center',
+                      cursor: 'pointer',
+                      // Phase 18 quick-260416-uig (bug 3): hover OR click-selection
+                      // lights up the bg; filename color is driven solely by isSelected below.
+                      backgroundColor: (hoveredIndex.value === i || isSelected) ? colors.bgElevated : 'transparent',
+                      // Phase 18 quick-260416-uig (bug 2): prevent filename text selection on right-click.
+                      userSelect: 'none',
+                    }}
                     onClick={() => {
                       selectedIndex.value = i;
                       if (entry.is_dir) {
@@ -1309,7 +1325,8 @@ export function FileTree() {
                         handleFileClick(entry.path, entry.name);
                       }
                     }}
-                    onMouseEnter={() => { selectedIndex.value = i; }}
+                    onMouseEnter={() => { hoveredIndex.value = i; }}
+                    onMouseLeave={() => { if (hoveredIndex.value === i) hoveredIndex.value = -1; }}
                     onContextMenu={(e) => handleRowContextMenu(e as unknown as MouseEvent, entry, i)}
                     onMouseDown={(e) => onRowMouseDown(e as unknown as MouseEvent, entry.path)}
                   >
@@ -1362,7 +1379,10 @@ export function FileTree() {
                       display: 'flex',
                       alignItems: 'center',
                       cursor: 'pointer',
-                      backgroundColor: isSelected ? colors.bgElevated : 'transparent',
+                      // Phase 18 quick-260416-uig (bug 3): mirror of flat-mode row bg logic.
+                      backgroundColor: (hoveredIndex.value === i || isSelected) ? colors.bgElevated : 'transparent',
+                      // Phase 18 quick-260416-uig (bug 2): no filename selection on right-click.
+                      userSelect: 'none',
                     }}
                     onClick={() => {
                       selectedIndex.value = i;
@@ -1372,7 +1392,8 @@ export function FileTree() {
                         handleFileClick(node.entry.path, node.entry.name);
                       }
                     }}
-                    onMouseEnter={() => { selectedIndex.value = i; }}
+                    onMouseEnter={() => { hoveredIndex.value = i; }}
+                    onMouseLeave={() => { if (hoveredIndex.value === i) hoveredIndex.value = -1; }}
                     onContextMenu={(e) => handleRowContextMenu(e as unknown as MouseEvent, node.entry, i)}
                     onMouseDown={(e) => onRowMouseDown(e as unknown as MouseEvent, node.entry.path)}
                   >
