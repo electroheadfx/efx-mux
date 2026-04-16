@@ -31,6 +31,8 @@ pub fn run() {
             let app_menu = SubmenuBuilder::new(app, "Efxmux")
                 .item(&PredefinedMenuItem::about(app, None, None)?)
                 .separator()
+                .item(&MenuItem::with_id(app, "preferences", "Preferences...", true, Some("CmdOrCtrl+,"))?)
+                .separator()
                 .item(&MenuItem::with_id(app, "quit", "Quit Efxmux", true, Some("CmdOrCtrl+Q"))?)
                 .build()?;
 
@@ -184,6 +186,7 @@ pub fn run() {
             match event.id().as_ref() {
                 "quit" => { let _ = app.emit("quit-requested", ()); }
                 "add-project" => { let _ = app.emit("add-project-requested", ()); }
+                "preferences" => { let _ = app.emit("preferences-requested", ()); }
                 _ => {}
             }
         })

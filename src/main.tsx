@@ -144,6 +144,11 @@ async function bootstrap() {
     openProjectModal();
   });
 
+  // Efxmux > Preferences (Cmd+,) menu action (quick-260416-hk9)
+  listen('preferences-requested', () => {
+    togglePreferences();
+  });
+
   // Step 2: Sidebar collapsed signal effect (replaces Arrow.js watch())
   effect(() => {
     const collapsed = sidebarCollapsed.value;
