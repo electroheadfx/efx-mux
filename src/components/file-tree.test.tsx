@@ -363,3 +363,154 @@ describe('header', () => {
     expect(openInHeaderBtn).toBeNull();
   });
 });
+
+// ── Phase 18 Plan 05: intra-tree mouse-drag + Finder drop routing ───────────
+
+describe('drag', () => {
+  beforeEach(() => {
+    projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'claude' }];
+    detectedEditors.value = null;
+    activeProjectName.value = 'testproj';
+    fileTreeFontSize.value = 13;
+    fileTreeLineHeight.value = 2;
+
+    mockIPC((cmd, _args) => {
+      if (cmd === 'list_directory') return MOCK_ENTRIES;
+      if (cmd === 'detect_editors') return { zed: false, code: false, subl: false, cursor: false, idea: false };
+      return null;
+    });
+
+    vi.stubGlobal('listen', vi.fn().mockResolvedValue(vi.fn()));
+  });
+
+  it('mousemove beyond threshold sets source row opacity to 0.4', async () => {
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+    const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(rows.length).toBeGreaterThan(1);
+    fireEvent.mouseDown(rows[1], { button: 0, clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(document, { clientX: 110, clientY: 110 });
+    expect((rows[1] as HTMLElement).style.opacity).toBe('0.4');
+    // Cleanup to avoid leaking listeners into next test
+    fireEvent.mouseUp(document, { clientX: 110, clientY: 110 });
+  });
+
+  it('mouseup on a folder row invokes rename_file with target folder/name', async () => {
+    let renameArgs: Record<string, unknown> | undefined;
+    mockIPC((cmd, args) => {
+      if (cmd === 'list_directory') return MOCK_ENTRIES;
+      if (cmd === 'detect_editors') return { zed: false, code: false, subl: false, cursor: false, idea: false };
+      if (cmd === 'rename_file') { renameArgs = args as Record<string, unknown>; return null; }
+      return null;
+    });
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+    const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    // rows[0] is 'src' (folder), rows[1] is 'README.md' (file).
+    // Drag README.md onto src.
+    const fileRow = rows[1];
+    const folderRow = rows[0];
+    const fileRect = fileRow.getBoundingClientRect();
+    const folderRect = folderRow.getBoundingClientRect();
+    fireEvent.mouseDown(fileRow, { button: 0, clientX: fileRect.left + 5, clientY: fileRect.top + 5 });
+    fireEvent.mouseMove(document, {
+      clientX: folderRect.left + 5,
+      clientY: folderRect.top + 5,
+    });
+    fireEvent.mouseUp(document, {
+      clientX: folderRect.left + 5,
+      clientY: folderRect.top + 5,
+    });
+    await new Promise(r => setTimeout(r, 20));
+    expect(renameArgs).toBeDefined();
+    expect(renameArgs?.from).toBe('/tmp/proj/README.md');
+    expect(String(renameArgs?.to)).toContain('/tmp/proj/src/');
+    expect(String(renameArgs?.to)).toContain('README.md');
+  });
+
+  it('mousemove under threshold does NOT trigger rename_file', async () => {
+    let renameCalls = 0;
+    mockIPC((cmd, _args) => {
+      if (cmd === 'list_directory') return MOCK_ENTRIES;
+      if (cmd === 'detect_editors') return { zed: false, code: false, subl: false, cursor: false, idea: false };
+      if (cmd === 'rename_file') { renameCalls++; return null; }
+      return null;
+    });
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+    const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    fireEvent.mouseDown(rows[1], { button: 0, clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(document, { clientX: 101, clientY: 101 }); // 1px — under threshold
+    fireEvent.mouseUp(document, { clientX: 101, clientY: 101 });
+    await new Promise(r => setTimeout(r, 20));
+    expect(renameCalls).toBe(0);
+  });
+});
+
+describe('finder drop', () => {
+  beforeEach(() => {
+    projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'claude' }];
+    detectedEditors.value = null;
+    activeProjectName.value = 'testproj';
+    fileTreeFontSize.value = 13;
+    fileTreeLineHeight.value = 2;
+
+    mockIPC((cmd, _args) => {
+      if (cmd === 'list_directory') return MOCK_ENTRIES;
+      if (cmd === 'detect_editors') return { zed: false, code: false, subl: false, cursor: false, idea: false };
+      return null;
+    });
+
+    vi.stubGlobal('listen', vi.fn().mockResolvedValue(vi.fn()));
+  });
+
+  it('tree-finder-drop with outside path invokes copy_path', async () => {
+    let copyArgs: Record<string, unknown> | undefined;
+    mockIPC((cmd, args) => {
+      if (cmd === 'list_directory') return MOCK_ENTRIES;
+      if (cmd === 'detect_editors') return { zed: false, code: false, subl: false, cursor: false, idea: false };
+      if (cmd === 'copy_path') { copyArgs = args as Record<string, unknown>; return null; }
+      return null;
+    });
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+    const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    const folderRow = rows[0]; // 'src' folder
+    const rect = folderRow.getBoundingClientRect();
+    document.dispatchEvent(new CustomEvent('tree-finder-drop', {
+      detail: {
+        paths: ['/Users/bob/Downloads/extra.txt'],
+        position: { x: rect.left + 5, y: rect.top + 5 },
+      },
+    }));
+    await new Promise(r => setTimeout(r, 20));
+    expect(copyArgs).toBeDefined();
+    expect(copyArgs?.from).toBe('/Users/bob/Downloads/extra.txt');
+    expect(String(copyArgs?.to)).toContain('/tmp/proj/src/extra.txt');
+  });
+
+  it('tree-finder-dragover sets finderDropActive visual (outline)', async () => {
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+    document.dispatchEvent(new CustomEvent('tree-finder-dragover', {
+      detail: { paths: ['/Users/bob/x.txt'], position: { x: 0, y: 0 } },
+    }));
+    await new Promise(r => setTimeout(r, 20));
+    // Scroll container's outline changes — find by the existing tabindex anchor
+    const scrollContainer = document.querySelector('[tabindex="0"]') as HTMLElement;
+    expect(scrollContainer.style.outline).toContain('solid');
+  });
+
+  it('tree-finder-dragleave clears finderDropActive outline', async () => {
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+    document.dispatchEvent(new CustomEvent('tree-finder-dragover', {
+      detail: { paths: ['/Users/bob/x.txt'], position: { x: 0, y: 0 } },
+    }));
+    await new Promise(r => setTimeout(r, 20));
+    document.dispatchEvent(new CustomEvent('tree-finder-dragleave'));
+    await new Promise(r => setTimeout(r, 20));
+    const scrollContainer = document.querySelector('[tabindex="0"]') as HTMLElement;
+    expect(scrollContainer.style.outline).toBe('none');
+  });
+});
