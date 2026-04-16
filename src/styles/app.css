@@ -278,7 +278,7 @@ html, body {
 
 /* ─── Minimap overrides (global CSS — plugin uses .cm-minimap-gutter, NOT .cm-minimap) ─── */
 .cm-minimap-inner > canvas {
-  filter: saturate(0) brightness(0.5) !important;
+  filter: saturate(0.5) brightness(0.5) !important;
 }
 
 .cm-minimap-overlay {
@@ -286,12 +286,12 @@ html, body {
   opacity: 1 !important;
   -webkit-backdrop-filter: saturate(3) brightness(2) !important;
   backdrop-filter: saturate(3) brightness(2) !important;
-  border: 1px solid rgba(37, 138, 209, 0.4) !important;
+  border: 1px solid rgba(210, 153, 34, 0.5) !important;
   border-radius: 2px !important;
 }
 
 .cm-minimap-overlay-container:hover .cm-minimap-overlay {
-  border-color: var(--color-warning) !important;
+  border-color: var(--color-accent) !important;
 }
 
 /* ─── Drag state overlay (applied by drag-manager) ─── */
