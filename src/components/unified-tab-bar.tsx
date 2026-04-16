@@ -301,10 +301,12 @@ export function closeUnifiedTab(tabId: string): void {
         title: 'Unsaved Changes',
         message: `${tab.fileName} has unsaved changes that will be lost.`,
         onConfirm: () => {
-          // Discard: remove tab
+          // Discard: switch BEFORE removing so switchToAdjacentTab can find the tab
+          if (tabId === activeUnifiedTabId.value) {
+            switchToAdjacentTab(tabId);
+          }
           setProjectEditorTabs(editorTabs.value.filter(t => t.id !== tabId));
           setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
-          switchToAdjacentTab(tabId);
         },
         onCancel: () => {},
         onSave: () => {
@@ -313,9 +315,12 @@ export function closeUnifiedTab(tabId: string): void {
           writeFile(tab.filePath, currentContent)
             .then(() => {
               setEditorDirty(tabId, false);
+              // Switch BEFORE removing so switchToAdjacentTab can find the tab
+              if (tabId === activeUnifiedTabId.value) {
+                switchToAdjacentTab(tabId);
+              }
               setProjectEditorTabs(editorTabs.value.filter(t => t.id !== tabId));
               setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
-              switchToAdjacentTab(tabId);
             })
             .catch(err => {
               console.error('[efxmux] Save failed:', err);
@@ -323,17 +328,23 @@ export function closeUnifiedTab(tabId: string): void {
         },
       });
     } else {
+      // Switch BEFORE removing — switchToAdjacentTab needs the tab still in allTabs
+      if (tabId === activeUnifiedTabId.value) {
+        switchToAdjacentTab(tabId);
+      }
       setProjectEditorTabs(editorTabs.value.filter(t => t.id !== tabId));
       setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
-      switchToAdjacentTab(tabId);
     }
     return;
   }
 
   if (tab.type === 'git-changes') {
+    // Switch BEFORE removing — switchToAdjacentTab needs the tab still in allTabs
+    if (tabId === activeUnifiedTabId.value) {
+      switchToAdjacentTab(tabId);
+    }
     gitChangesTab.value = null;
     setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
-    switchToAdjacentTab(tabId);
   }
 }
 
