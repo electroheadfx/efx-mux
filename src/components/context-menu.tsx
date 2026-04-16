@@ -34,6 +34,10 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps) {
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [submenuIndex, setSubmenuIndex] = useState<number | null>(null);
   const [submenuPos, setSubmenuPos] = useState<{ x: number; y: number } | null>(null);
+  // Phase 18 quick-260416-uig: per-item hover tint for main menu.
+  // Submenu is rendered via recursive <ContextMenu />, so the child instance
+  // has its own hoveredIndex and inherits identical behaviour automatically.
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   // D-02: Auto-flip positioning -- flip to opposite side when menu would overflow viewport
   useEffect(() => {
@@ -142,6 +146,8 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps) {
             aria-haspopup={item.children ? 'menu' : undefined}
             aria-expanded={item.children ? submenuIndex === i : undefined}
             onMouseEnter={() => {
+              // Phase 18 quick-260416-uig: mark this row as hovered for bgSurface tint
+              setHoveredIndex(i);
               if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
               if (!item.children) {
                 // Close any open submenu when hovering a non-submenu row (with 150ms delay)
@@ -159,6 +165,8 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps) {
               }, 150);
             }}
             onMouseLeave={() => {
+              // Phase 18 quick-260416-uig: clear per-item hover tint
+              setHoveredIndex(null);
               if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
             }}
             onClick={() => handleItemClick(item)}
@@ -171,7 +179,9 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps) {
               display: 'flex',
               alignItems: 'center',
               gap: spacing.xl,
-              backgroundColor: submenuIndex === i ? colors.bgBorder : 'transparent',
+              // Phase 18 quick-260416-uig: open-submenu cue (bgBorder) wins over hover tint (bgSurface);
+              // otherwise plain rows pick up bgSurface on per-item hover.
+              backgroundColor: submenuIndex === i ? colors.bgBorder : (hoveredIndex === i ? colors.bgSurface : 'transparent'),
             }}
           >
             {item.icon && <item.icon size={14} />}
