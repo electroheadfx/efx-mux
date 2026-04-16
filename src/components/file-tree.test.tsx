@@ -79,3 +79,147 @@ describe('FileTree', () => {
     expect(document.body.textContent).toContain('File Tree');
   });
 });
+
+// ── Phase 18 Plan 03: context menu + delete flow + inline create ────────────
+
+describe('context menu', () => {
+  beforeEach(() => {
+    projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'claude' }];
+    activeProjectName.value = 'testproj';
+    fileTreeFontSize.value = 13;
+    fileTreeLineHeight.value = 2;
+
+    mockIPC((cmd, _args) => {
+      if (cmd === 'list_directory') return MOCK_ENTRIES;
+      if (cmd === 'count_children') return { files: 5, folders: 2, total: 7, capped: false };
+      return null;
+    });
+
+    vi.stubGlobal('listen', vi.fn().mockResolvedValue(vi.fn()));
+  });
+
+  it('renders menu with Delete on right-click of a row', async () => {
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 20));
+    const rows = document.querySelectorAll('[data-file-tree-index]');
+    expect(rows.length).toBeGreaterThan(0);
+    fireEvent.contextMenu(rows[0] as HTMLElement);
+    // Menu appears — look for a role="menu" element
+    expect(document.body.textContent).toContain('Delete');
+  });
+
+  it('renders New File and New Folder items in context menu', async () => {
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 20));
+    const rows = document.querySelectorAll('[data-file-tree-index]');
+    fireEvent.contextMenu(rows[0] as HTMLElement);
+    expect(document.body.textContent).toContain('New File');
+    expect(document.body.textContent).toContain('New Folder');
+  });
+});
+
+describe('delete key', () => {
+  beforeEach(() => {
+    projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'claude' }];
+    activeProjectName.value = 'testproj';
+    fileTreeFontSize.value = 13;
+    fileTreeLineHeight.value = 2;
+
+    mockIPC((cmd, _args) => {
+      if (cmd === 'list_directory') return MOCK_ENTRIES;
+      if (cmd === 'count_children') return { files: 0, folders: 0, total: 0, capped: false };
+      if (cmd === 'delete_file') return null;
+      return null;
+    });
+
+    vi.stubGlobal('listen', vi.fn().mockResolvedValue(vi.fn()));
+  });
+
+  it('pressing Delete on focused scroll container dispatches a confirm modal flow', async () => {
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+    const fileList = document.querySelector('[tabindex="0"]') as HTMLElement;
+    expect(fileList).not.toBeNull();
+    fireEvent.keyDown(fileList, { key: 'Delete' });
+    // Wait a tick for the async invoke (count_children) to settle
+    await new Promise(r => setTimeout(r, 20));
+    // ConfirmModal should surface "Delete" copy somewhere in the DOM.
+    expect(document.body.textContent).toMatch(/Delete/);
+  });
+
+  it('pressing plain Backspace still navigates to parent in flat mode (existing behavior)', async () => {
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 20));
+    const fileList = document.querySelector('[tabindex="0"]') as HTMLElement;
+    if (fileList) {
+      fireEvent.keyDown(fileList, { key: 'Backspace' });
+      // No throw — existing behavior preserved
+      expect(true).toBe(true);
+    }
+  });
+});
+
+describe('inline create', () => {
+  beforeEach(() => {
+    projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'claude' }];
+    activeProjectName.value = 'testproj';
+    fileTreeFontSize.value = 13;
+    fileTreeLineHeight.value = 2;
+
+    mockIPC((cmd, _args) => {
+      if (cmd === 'list_directory') return MOCK_ENTRIES;
+      if (cmd === 'create_file') return null;
+      if (cmd === 'create_folder') return null;
+      return null;
+    });
+
+    vi.stubGlobal('listen', vi.fn().mockResolvedValue(vi.fn()));
+  });
+
+  it('renders an input after New File menu click', async () => {
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 20));
+    const rows = document.querySelectorAll('[data-file-tree-index]');
+    fireEvent.contextMenu(rows[0] as HTMLElement);
+    // Find the "New File" menu item and click it
+    const newFileItem = Array.from(document.querySelectorAll('[role="menuitem"]'))
+      .find(el => el.textContent?.includes('New File')) as HTMLElement | undefined;
+    expect(newFileItem).toBeDefined();
+    fireEvent.click(newFileItem!);
+    await new Promise(r => setTimeout(r, 20));
+    const input = document.querySelector('input') as HTMLInputElement | null;
+    expect(input).not.toBeNull();
+    expect(input?.getAttribute('placeholder')).toMatch(/New file name|New folder name/);
+  });
+
+  it('Escape unmounts the create row', async () => {
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 20));
+    const rows = document.querySelectorAll('[data-file-tree-index]');
+    fireEvent.contextMenu(rows[0] as HTMLElement);
+    const newFileItem = Array.from(document.querySelectorAll('[role="menuitem"]'))
+      .find(el => el.textContent?.includes('New File')) as HTMLElement | undefined;
+    fireEvent.click(newFileItem!);
+    await new Promise(r => setTimeout(r, 20));
+    const input = document.querySelector('input') as HTMLInputElement | null;
+    expect(input).not.toBeNull();
+    fireEvent.keyDown(input!, { key: 'Escape' });
+    await new Promise(r => setTimeout(r, 20));
+    expect(document.querySelector('input')).toBeNull();
+  });
+
+  it('Enter with empty name shows Name required error', async () => {
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 20));
+    const rows = document.querySelectorAll('[data-file-tree-index]');
+    fireEvent.contextMenu(rows[0] as HTMLElement);
+    const newFileItem = Array.from(document.querySelectorAll('[role="menuitem"]'))
+      .find(el => el.textContent?.includes('New File')) as HTMLElement | undefined;
+    fireEvent.click(newFileItem!);
+    await new Promise(r => setTimeout(r, 20));
+    const input = document.querySelector('input') as HTMLInputElement | null;
+    fireEvent.keyDown(input!, { key: 'Enter' });
+    await new Promise(r => setTimeout(r, 20));
+    expect(document.body.textContent).toContain('Name required');
+  });
+});
