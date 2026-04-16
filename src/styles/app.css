@@ -277,6 +277,10 @@ html, body {
 *::-webkit-scrollbar-thumb:hover { background: var(--color-text); }
 
 /* ─── Minimap overrides (global CSS — plugin uses .cm-minimap-gutter, NOT .cm-minimap) ─── */
+.cm-minimap-gutter {
+  overflow: hidden !important;
+}
+
 .cm-minimap-overlay-container {
   user-select: none !important;
   -webkit-user-drag: none !important;

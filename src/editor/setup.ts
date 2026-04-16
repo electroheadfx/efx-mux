@@ -23,6 +23,12 @@ function minimapExtension(): Extension {
     create: () => ({ dom: document.createElement('div') }),
     displayText: 'blocks',
     showOverlay: 'always',
+    eventHandlers: {
+      mousedown: (e: MouseEvent) => {
+        // Prevent browser native drag — locks interaction to vertical only
+        e.preventDefault();
+      },
+    },
   }));
 }
 
