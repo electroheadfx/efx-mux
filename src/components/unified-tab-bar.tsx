@@ -264,6 +264,10 @@ function persistEditorTabs(): void {
     fileName: t.fileName,
     pinned: t.pinned,
   }));
+  // Never overwrite saved tabs with empty — prevents init race where computed
+  // fires with [] before restoreEditorTabs runs (activeProjectName set triggers
+  // recompute on empty _editorTabsByProject Map)
+  if (tabs.length === 0) return;
   const data = JSON.stringify({ tabs, activeTabId: activeUnifiedTabId.value });
   const patch: Record<string, string> = { 'editor-tabs': data };
   if (activeName) {
