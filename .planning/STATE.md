@@ -5,7 +5,7 @@ milestone_name: Workspace Evolution
 status: executing
 stopped_at: Phase 17 complete — all 9 issues fixed + verified. Code review fixes pending.
 last_updated: "2026-04-15T16:45:16.511Z"
-last_activity: 2026-04-16 -- Completed quick task 260416-gma: Add quit confirmation modal on Cmd+Q
+last_activity: 2026-04-16 -- Completed quick task 260416-h3i: Add agent quit modal when closing agent tabs
 progress:
   total_phases: 7
   completed_phases: 2
@@ -89,6 +89,7 @@ None.
 | 260416-g36 | Remove commit names from git history sidebar, show in tooltip instead | 2026-04-16 |
 | 260416-gah | Click commit history row to copy commit hash with toast notification | 2026-04-16 |
 | 260416-gma | Add quit confirmation modal on Cmd+Q | 2026-04-16 |
+| 260416-h3i | Add agent quit modal when closing agent tabs | 2026-04-16 |
 
 ## Session Continuity
 
