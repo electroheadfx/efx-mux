@@ -536,6 +536,7 @@ function GitFileRow({
 function HistoryEntry({ entry }: { entry: GitCommitEntry }) {
   return (
     <div
+      title={`${entry.author} -- ${entry.short_hash} -- ${new Date(entry.timestamp * 1000).toLocaleString()}`}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -589,7 +590,7 @@ function HistoryEntry({ entry }: { entry: GitCommitEntry }) {
         whiteSpace: 'nowrap',
         flexShrink: 0,
       }}>
-        {entry.author}, {relativeTime(entry.timestamp)}
+        {relativeTime(entry.timestamp)}
       </span>
     </div>
   );
