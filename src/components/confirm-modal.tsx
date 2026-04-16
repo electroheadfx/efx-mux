@@ -14,6 +14,7 @@ interface ConfirmModalState {
   onConfirm: () => void;
   onCancel: () => void;
   onSave?: () => void;
+  confirmLabel?: string;
 }
 
 const modalState = signal<ConfirmModalState>({
@@ -33,6 +34,7 @@ export interface ShowConfirmModalOptions {
   onConfirm: () => void;
   onCancel: () => void;
   onSave?: () => void;
+  confirmLabel?: string;
 }
 
 /**
@@ -75,7 +77,7 @@ export function ConfirmModal() {
 
   if (!modalState.value.visible) return null;
 
-  const { title, message, onConfirm, onCancel, onSave } = modalState.value;
+  const { title, message, onConfirm, onCancel, onSave, confirmLabel } = modalState.value;
 
   return (
     <div
@@ -180,7 +182,7 @@ export function ConfirmModal() {
               cursor: 'pointer',
             }}
           >
-            Discard
+            {confirmLabel ?? 'Discard'}
           </button>
 
           {/* Save File (only if onSave is provided) */}

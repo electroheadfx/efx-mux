@@ -21,7 +21,7 @@ import { ShortcutCheatsheet, toggleCheatsheet } from './components/shortcut-chea
 import { FirstRunWizard, openWizard } from './components/first-run-wizard';
 import { PreferencesPanel, togglePreferences } from './components/preferences-panel';
 import { ToastContainer, showToast } from './components/toast';
-import { ConfirmModal } from './components/confirm-modal';
+import { ConfirmModal, showConfirmModal } from './components/confirm-modal';
 import { initDragManager } from './drag-manager';
 import { initTheme, registerTerminal, toggleThemeMode } from './theme/theme-manager';
 import { createNewTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs, saveProjectTabs, hasProjectTabs, restoreProjectTabs } from './components/terminal-tabs';
@@ -114,6 +114,20 @@ async function bootstrap() {
 
   // Wire beforeunload
   initBeforeUnload();
+
+  // Quit confirmation modal: intercept Cmd+Q / window close (quick-260416-gma)
+  getCurrentWindow().onCloseRequested(async (event) => {
+    event.preventDefault();
+    showConfirmModal({
+      title: 'Quit Efxmux?',
+      message: 'Are you sure you want to quit? Active terminal sessions will be preserved by tmux.',
+      confirmLabel: 'Quit',
+      onConfirm: () => {
+        getCurrentWindow().destroy();
+      },
+      onCancel: () => {},
+    });
+  });
 
   // Step 2: Sidebar collapsed signal effect (replaces Arrow.js watch())
   effect(() => {
