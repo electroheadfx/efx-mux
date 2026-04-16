@@ -123,10 +123,11 @@ export function RightPanel() {
         role="separator"
         aria-orientation="horizontal"
         aria-label="Resize right panels"
+        style={{ borderBottom: `1px solid ${colors.bgBorder}` }}
       />
 
       {/* Bottom panel: Bash */}
-      <div class="right-bottom flex flex-col min-h-0" style={{ borderTop: `1px solid ${colors.bgBorder}` }}>
+      <div class="right-bottom flex flex-col min-h-0">
         <TabBar
           tabs={RIGHT_BOTTOM_TABS}
           activeTab={rightBottomTab}
