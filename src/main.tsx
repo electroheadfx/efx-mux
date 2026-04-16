@@ -9,6 +9,7 @@
 import { render } from 'preact';
 import { effect } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import './styles/app.css';
 
@@ -115,16 +116,25 @@ async function bootstrap() {
   // Wire beforeunload
   initBeforeUnload();
 
-  // Quit confirmation modal: intercept Cmd+Q / window close (quick-260416-gma)
+  // Quit confirmation: intercept window X button (quick-260416-gma)
   getCurrentWindow().onCloseRequested(async (event) => {
     event.preventDefault();
     showConfirmModal({
       title: 'Quit Efxmux?',
       message: 'Are you sure you want to quit? Active terminal sessions will be preserved by tmux.',
       confirmLabel: 'Quit',
-      onConfirm: () => {
-        getCurrentWindow().destroy();
-      },
+      onConfirm: () => { invoke('force_quit'); },
+      onCancel: () => {},
+    });
+  });
+
+  // Quit confirmation: intercept Cmd+Q / Menu > Quit (quick-260416-gma)
+  listen('quit-requested', () => {
+    showConfirmModal({
+      title: 'Quit Efxmux?',
+      message: 'Are you sure you want to quit? Active terminal sessions will be preserved by tmux.',
+      confirmLabel: 'Quit',
+      onConfirm: () => { invoke('force_quit'); },
       onCancel: () => {},
     });
   });

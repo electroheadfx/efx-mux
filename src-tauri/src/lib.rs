@@ -10,13 +10,18 @@ mod terminal;
 mod theme;
 
 use std::collections::HashMap;
-use tauri::Manager;
-use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
+use tauri::{Emitter, Manager};
+use tauri::menu::{MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder};
 use terminal::pty::{ack_bytes, check_tmux, cleanup_dead_sessions, destroy_pty_session, get_agent_version, get_pty_sessions, resize_pty, send_literal_sequence, spawn_terminal, write_pty, PtyManager};
 use theme::iterm2::import_iterm2_theme;
 use server::{detect_agent, kill_all_servers, restart_server, start_server, stop_server, ServerProcesses};
 use state::{get_config_dir, load_state, save_state, ManagedAppState};
 use theme::types::load_theme;
+
+#[tauri::command]
+fn force_quit(app_handle: tauri::AppHandle) {
+    app_handle.exit(0);
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -26,7 +31,7 @@ pub fn run() {
             let app_menu = SubmenuBuilder::new(app, "Efxmux")
                 .item(&PredefinedMenuItem::about(app, None, None)?)
                 .separator()
-                .item(&PredefinedMenuItem::quit(app, None)?)
+                .item(&MenuItem::with_id(app, "quit", "Quit Efxmux", true, Some("CmdOrCtrl+Q"))?)
                 .build()?;
 
             // ── Edit menu — wires Cmd+C/V/X/A to WKWebView clipboard (per D-16) ──
@@ -164,9 +169,17 @@ pub fn run() {
             stop_server,
             restart_server,
             detect_agent,
+
+            // App lifecycle
+            force_quit,
         ])
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .on_menu_event(|app, event| {
+            if event.id().as_ref() == "quit" {
+                let _ = app.emit("quit-requested", ());
+            }
+        })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 // Kill ALL server processes on close (07-06: per-project HashMap, T-07-10)
