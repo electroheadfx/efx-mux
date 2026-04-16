@@ -37,8 +37,8 @@ const removeTarget = signal<string | null>(null);
 const appVersion = signal<string>('');
 
 // Tab navigation state (Phase 16, D-01 through D-04)
-type SidebarTab = 'projects' | 'files' | 'git';
-const activeTab = signal<SidebarTab>('projects');
+export type SidebarTab = 'projects' | 'files' | 'git';
+export const leftSidebarActiveTab = signal<SidebarTab>('projects');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -105,16 +105,16 @@ function TabRow() {
       {tabs.map(tab => (
         <button
           key={tab.id}
-          onClick={() => { activeTab.value = tab.id; }}
+          onClick={() => { leftSidebarActiveTab.value = tab.id; }}
           style={{
             padding: `${spacing.xl}px ${spacing['3xl']}px`,
             fontFamily: fonts.sans,
             fontSize: 11,
-            fontWeight: activeTab.value === tab.id ? 600 : 400,
-            color: activeTab.value === tab.id ? colors.textPrimary : colors.textMuted,
+            fontWeight: leftSidebarActiveTab.value === tab.id ? 600 : 400,
+            color: leftSidebarActiveTab.value === tab.id ? colors.textPrimary : colors.textMuted,
             backgroundColor: 'transparent',
             border: 'none',
-            borderBottom: activeTab.value === tab.id
+            borderBottom: leftSidebarActiveTab.value === tab.id
               ? `2px solid ${colors.accent}`
               : '2px solid transparent',
             cursor: 'pointer',
@@ -129,7 +129,7 @@ function TabRow() {
 }
 
 function TabContent() {
-  if (activeTab.value === 'projects') {
+  if (leftSidebarActiveTab.value === 'projects') {
     return (
       <>
         {/* Projects section label */}
@@ -177,7 +177,7 @@ function TabContent() {
     );
   }
 
-  if (activeTab.value === 'files') {
+  if (leftSidebarActiveTab.value === 'files') {
     return (
       <div class="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
         <FileTree />
@@ -185,7 +185,7 @@ function TabContent() {
     );
   }
 
-  if (activeTab.value === 'git') {
+  if (leftSidebarActiveTab.value === 'git') {
     return (
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <GitControlTab />
