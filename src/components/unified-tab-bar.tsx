@@ -16,6 +16,8 @@ import {
   createNewTab,
   closeTab,
   switchToTab,
+  renameTerminalTab,
+  getDefaultTerminalLabel,
 } from './terminal-tabs';
 import { writeFile, readFile } from '../services/file-service';
 import { getEditorCurrentContent, minimapVisible, toggleMinimap } from '../editor/setup';
@@ -35,6 +37,7 @@ interface EditorTabData extends BaseTab {
   content: string;
   dirty: boolean;
   pinned: boolean;
+  displayName?: string;  // Custom user-set name; falls back to fileName
 }
 
 interface GitChangesTabData extends BaseTab {
@@ -107,6 +110,7 @@ export const tabOrder = computed<string[]>(() => {
 
 export const gitChangesTab = signal<GitChangesTabData | null>(null);
 export const activeUnifiedTabId = signal<string>('');
+const renamingTabId = signal<string>('');
 
 /** Combined tab list: terminals from terminalTabs + editors + git changes */
 export const allTabs = computed<UnifiedTab[]>(() => {
@@ -251,6 +255,16 @@ export function togglePinEditorTab(tabId: string): void {
   else pinEditorTab(tabId);
 }
 
+/**
+ * Rename an editor tab. Empty string resets to fileName (clears displayName).
+ */
+export function renameEditorTab(tabId: string, newName: string): void {
+  const tabs = editorTabs.value.map(t =>
+    t.id === tabId ? { ...t, displayName: newName || undefined } : t
+  );
+  setProjectEditorTabs(tabs);
+}
+
 // ── Editor Tab Persistence ─────────────────────────────────────────────────────
 
 /**
@@ -263,6 +277,7 @@ function persistEditorTabs(): void {
     filePath: t.filePath,
     fileName: t.fileName,
     pinned: t.pinned,
+    ...(t.displayName ? { displayName: t.displayName } : {}),
   }));
   // Never overwrite saved tabs with empty — prevents init race where computed
   // fires with [] before restoreEditorTabs runs (activeProjectName set triggers
@@ -290,7 +305,7 @@ export async function restoreEditorTabs(projectName: string): Promise<boolean> {
   const raw = state?.session?.[key] ?? state?.session?.['editor-tabs'];
   if (!raw) return false;
 
-  let parsed: { tabs: Array<{ filePath: string; fileName: string; pinned?: boolean }>; activeTabId: string } | null = null;
+  let parsed: { tabs: Array<{ filePath: string; fileName: string; pinned?: boolean; displayName?: string }>; activeTabId: string } | null = null;
   try {
     parsed = JSON.parse(raw);
   } catch { return false; }
@@ -306,6 +321,13 @@ export async function restoreEditorTabs(projectName: string): Promise<boolean> {
         openEditorTab(tab.filePath, tab.fileName, content);
       } else {
         openEditorTabPinned(tab.filePath, tab.fileName, content);
+      }
+      // Restore custom display name if present
+      if (tab.displayName) {
+        const opened = editorTabs.value.find(t => t.filePath === tab.filePath);
+        if (opened) {
+          renameEditorTab(opened.id, tab.displayName);
+        }
       }
     } catch (err) {
       console.warn('[efxmux] Could not restore editor tab:', tab.filePath, err);
@@ -574,6 +596,9 @@ function onTabMouseDown(e: MouseEvent, tabId: string): void {
   if ((e.target as HTMLElement).closest('[title="Close tab"]') ||
       (e.target as HTMLElement).closest('[title="Pin tab"]') ||
       (e.target as HTMLElement).closest('[title="Unpin tab"]')) return;
+
+  // Don't start drag while renaming a tab
+  if (renamingTabId.value === tabId) return;
 
   // Prevent text selection during drag
   e.preventDefault();
@@ -875,7 +900,7 @@ function renderTab(
       );
     }
   } else if (tab.type === 'editor') {
-    label = tab.fileName;
+    label = tab.displayName || tab.fileName;
     tabTitle = tab.filePath;
     indicator = (
       <span
@@ -942,16 +967,66 @@ function renderTab(
       onMouseDown={e => onTabMouseDown(e, tab.id)}
     >
       {indicator}
-      <span
-        style={{
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          fontStyle: isUnpinnedEditor ? 'italic' : 'normal',
-        }}
-      >
-        {label}
-      </span>
+      {renamingTabId.value === tab.id ? (
+        <input
+          type="text"
+          style={{
+            background: colors.bgElevated,
+            color: colors.textPrimary,
+            border: `1px solid ${colors.accent}`,
+            borderRadius: 3,
+            padding: '0 4px',
+            fontFamily: fonts.sans,
+            fontSize: 11,
+            fontWeight: 400,
+            width: 100,
+            outline: 'none',
+          }}
+          value={label}
+          onKeyDown={(e: KeyboardEvent) => {
+            if (e.key === 'Enter') {
+              const input = e.currentTarget as HTMLInputElement;
+              const newName = input.value.trim();
+              if (tab.type === 'terminal') {
+                renameTerminalTab(tab.id, newName || getDefaultTerminalLabel(
+                  terminalTabs.value.find(t => t.id === tab.terminalTabId)!
+                ));
+              } else if (tab.type === 'editor') {
+                renameEditorTab(tab.id, newName);
+              }
+              renamingTabId.value = '';
+            } else if (e.key === 'Escape') {
+              renamingTabId.value = '';
+            }
+            e.stopPropagation();
+          }}
+          onBlur={() => { renamingTabId.value = ''; }}
+          ref={(el: HTMLInputElement | null) => {
+            if (el) {
+              el.focus();
+              el.select();
+            }
+          }}
+          onClick={(e: MouseEvent) => e.stopPropagation()}
+          onMouseDown={(e: MouseEvent) => e.stopPropagation()}
+        />
+      ) : (
+        <span
+          style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            fontStyle: isUnpinnedEditor ? 'italic' : 'normal',
+          }}
+          onDblClick={(e: MouseEvent) => {
+            e.stopPropagation();
+            e.preventDefault();
+            renamingTabId.value = tab.id;
+          }}
+        >
+          {label}
+        </span>
+      )}
       {tab.type === 'editor' && !tab.pinned && tab.dirty && (
         <span
           style={{
