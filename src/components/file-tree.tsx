@@ -3,13 +3,22 @@
 // Dispatches file-opened CustomEvent for main.js to handle.
 // Rewritten with inline SVG icons and tokens.ts colors (Phase 10)
 // Added tree mode with collapsible folders and parent nav button (quick-260411-e3e)
+// Phase 18 Plan 03: context menu wiring, delete flow, inline create row, git-status-changed listener
 
-import { useEffect } from 'preact/hooks';
+import { useEffect, useState, useRef } from 'preact/hooks';
 import { signal, computed } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { Trash2, FilePlus, FolderPlus } from 'lucide-preact';
 import { colors, fonts } from '../tokens';
 import { activeProjectName, projects } from '../state-manager';
 import type { ProjectEntry } from '../state-manager';
+import { ContextMenu, type ContextMenuItem } from './context-menu';
+import { showConfirmModal } from './confirm-modal';
+import { showToast } from './toast';
+import { deleteFile, createFile, createFolder } from '../services/file-service';
+
+interface ChildCount { files: number; folders: number; total: number; capped: boolean; }
 
 // File Tree appearance settings (shared with preferences panel)
 export const fileTreeFontSize = signal(13);
@@ -31,6 +40,17 @@ const entries = signal<FileEntry[]>([]);
 const selectedIndex = signal(0);
 const currentPath = signal('');
 const loaded = signal(false);
+
+// Phase 18 (D-01..D-26): context menu + create-row state
+interface MenuState {
+  x: number;
+  y: number;
+  items: ContextMenuItem[];
+}
+const activeMenu = signal<MenuState | null>(null);
+// Inline create row state: tracks which parent dir has an active create-row and its kind
+interface CreateRowState { parentDir: string; kind: 'file' | 'folder'; afterIndex: number; }
+const activeCreateRow = signal<CreateRowState | null>(null);
 
 // ── Click timer for single-click vs double-click distinction ─────
 let fileClickTimer: ReturnType<typeof setTimeout> | null = null;
@@ -379,6 +399,118 @@ export async function revealFileInTree(filePath: string): Promise<void> {
 }
 
 /**
+ * Phase 18 Plan 03: Inline create row for New File / New Folder.
+ * VSCode-style: renders an autofocused input inside the tree list.
+ * Enter commits via createFile/createFolder, Escape cancels, blur commits.
+ * Invalid names show inline error text and keep the row mounted.
+ */
+interface InlineCreateRowProps {
+  parentDir: string;
+  kind: 'file' | 'folder';
+  depth: number;
+  onDone: () => void;
+}
+
+function InlineCreateRow({ parentDir, kind, depth, onDone }: InlineCreateRowProps) {
+  const [name, setName] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const committedRef = useRef(false);
+
+  useEffect(() => {
+    // Autofocus on mount (RESEARCH.md §5)
+    inputRef.current?.focus();
+  }, []);
+
+  function validate(raw: string): string | null {
+    const v = raw.trim();
+    if (!v) return 'Name required';
+    if (v.includes('/') || v.includes('\0')) return 'Invalid characters (no / or null)';
+    return null;
+  }
+
+  async function commit() {
+    if (committedRef.current) return;
+    const err = validate(name);
+    if (err) { setError(err); return; }
+    committedRef.current = true;
+    const target = `${parentDir}/${name.trim()}`;
+    try {
+      if (kind === 'file') await createFile(target);
+      else await createFolder(target);
+      onDone();
+    } catch (e) {
+      committedRef.current = false;
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.toLowerCase().includes('already exists') || msg.toLowerCase().includes('exists')) {
+        setError(`'${name.trim()}' already exists`);
+      } else {
+        setError(msg);
+      }
+      // Re-focus input so the user can fix and retry
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  }
+
+  const paddingLeft = 12 + (depth * 16);
+  const Icon = kind === 'folder' ? FolderIcon : FileTextIcon;
+  const placeholder = kind === 'file' ? 'New file name' : 'New folder name';
+
+  return (
+    <div>
+      <div
+        style={{
+          padding: `${fileTreeLineHeight.value}px 12px`,
+          paddingLeft,
+          gap: 6,
+          display: 'flex',
+          alignItems: 'center',
+          backgroundColor: colors.bgElevated,
+        }}
+      >
+        <span style={{ width: 10, flexShrink: 0 }} />
+        <Icon />
+        <input
+          ref={inputRef}
+          value={name}
+          placeholder={placeholder}
+          aria-label={placeholder}
+          aria-invalid={!!error}
+          onInput={(e) => { setName((e.target as HTMLInputElement).value); setError(null); }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); void commit(); }
+            else if (e.key === 'Escape') { e.preventDefault(); committedRef.current = true; onDone(); }
+          }}
+          onBlur={() => { if (!committedRef.current) void commit(); }}
+          style={{
+            flex: 1,
+            background: 'transparent',
+            border: `1px solid ${error ? colors.diffRed : colors.bgBorder}`,
+            borderRadius: 3,
+            padding: '2px 4px',
+            color: colors.textPrimary,
+            fontFamily: 'var(--file-tree-font, Geist)',
+            fontSize: fileTreeFontSize.value,
+            outline: 'none',
+          }}
+          onFocus={(e) => { (e.currentTarget as HTMLInputElement).style.borderColor = colors.accent; }}
+        />
+      </div>
+      {error && (
+        <div
+          style={{
+            fontSize: 11,
+            color: colors.diffRed,
+            paddingLeft: 28 + depth * 16,
+            paddingBottom: 2,
+          }}
+        >{error}</div>
+      )}
+    </div>
+  );
+}
+
+/**
  * FileTree component.
  * Renders a navigable file tree for the active project directory.
  * Supports flat mode (drill-down) and tree mode (collapsible hierarchy).
@@ -408,6 +540,17 @@ export function FileTree() {
     }
     document.addEventListener('file-tree-scroll-to-selected', handleScrollToSelected);
 
+    // Phase 18 Plan 03: listen for git-status-changed to refresh tree after file ops
+    let unlistenFs: (() => void) | null = null;
+    (async () => {
+      unlistenFs = await listen('git-status-changed', () => {
+        const project = getActiveProject();
+        if (!project?.path) return;
+        if (viewMode.value === 'tree') initTree();
+        else loadDir(currentPath.value);
+      });
+    })();
+
     // Initial load
     const project = getActiveProject();
     if (project && project.path) {
@@ -418,10 +561,116 @@ export function FileTree() {
     }
 
     return () => {
+      if (unlistenFs) unlistenFs();
       document.removeEventListener('project-changed', handleProjectChanged);
       document.removeEventListener('file-tree-scroll-to-selected', handleScrollToSelected);
     };
   }, []);
+
+  /**
+   * Phase 18 Plan 03: Reusable delete confirm dispatcher.
+   * Triggered by context menu "Delete" action, Delete key, or Cmd+Backspace.
+   * For folders, fetches child count for the confirm message.
+   */
+  async function triggerDeleteConfirm(entry: FileEntry): Promise<void> {
+    const name = entry.name;
+    const path = entry.path;
+    let msg: string;
+    if (entry.is_dir) {
+      // Count descendants for the confirm message (D-02)
+      let countSuffix = '';
+      try {
+        const c = await invoke<ChildCount>('count_children', { path });
+        if (c.capped) countSuffix = ` and 10000+ items`;
+        else if (c.total > 0) countSuffix = ` and ${c.total} items`;
+      } catch {
+        countSuffix = '';  // fall back to no-count message on error
+      }
+      msg = `'${name}'${countSuffix} will be permanently deleted. This cannot be undone.`;
+    } else {
+      msg = `'${name}' will be permanently deleted. This cannot be undone.`;
+    }
+    const title = entry.is_dir ? `Delete folder ${name}?` : `Delete ${name}?`;
+    showConfirmModal({
+      title,
+      message: msg,
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        try {
+          await deleteFile(path);
+          // Clamp selectedIndex to valid range so UI doesn't crash on empty
+          const flatLen = viewMode.value === 'flat'
+            ? Math.max(0, entries.value.length - 1)
+            : Math.max(0, flattenedTree.value.length - 1);
+          selectedIndex.value = Math.min(selectedIndex.value, flatLen);
+        } catch (e) {
+          showToast({
+            type: 'error',
+            message: `Could not delete ${name}`,
+            hint: 'Check file permissions and try again.',
+          });
+        }
+      },
+      onCancel: () => {},
+    });
+  }
+
+  /**
+   * Phase 18 Plan 03: Build per-row context menu items (Delete, New File, New Folder).
+   * Open In / external-editor items land in Plan 18-04.
+   */
+  function buildRowMenuItems(entry: FileEntry): ContextMenuItem[] {
+    const isDir = entry.is_dir;
+    // Resolve the target directory for "New File" / "New Folder" (D-23)
+    const targetDir = isDir ? entry.path : entry.path.replace(/\/[^/]+$/, '');
+    const items: ContextMenuItem[] = [];
+    // New File
+    items.push({
+      label: 'New File',
+      icon: FilePlus,
+      action: () => {
+        const afterIdx = viewMode.value === 'flat'
+          ? entries.value.findIndex(e => e.path === entry.path)
+          : flattenedTree.value.findIndex(n => n.entry.path === entry.path);
+        activeCreateRow.value = { parentDir: targetDir, kind: 'file', afterIndex: afterIdx };
+        // If targetDir is a collapsed folder in tree mode, expand it first
+        if (viewMode.value === 'tree' && isDir) {
+          const node = flattenedTree.value[afterIdx];
+          if (node && !node.expanded) toggleTreeNode(node);
+        }
+      },
+    });
+    // New Folder
+    items.push({
+      label: 'New Folder',
+      icon: FolderPlus,
+      action: () => {
+        const afterIdx = viewMode.value === 'flat'
+          ? entries.value.findIndex(e => e.path === entry.path)
+          : flattenedTree.value.findIndex(n => n.entry.path === entry.path);
+        activeCreateRow.value = { parentDir: targetDir, kind: 'folder', afterIndex: afterIdx };
+        if (viewMode.value === 'tree' && isDir) {
+          const node = flattenedTree.value[afterIdx];
+          if (node && !node.expanded) toggleTreeNode(node);
+        }
+      },
+    });
+    items.push({ label: '', action: () => {}, separator: true });
+    // Delete
+    items.push({
+      label: 'Delete',
+      icon: Trash2,
+      action: () => { void triggerDeleteConfirm(entry); },
+    });
+    return items;
+  }
+
+  function handleRowContextMenu(e: MouseEvent, entry: FileEntry, rowIndex: number): void {
+    e.preventDefault();
+    e.stopPropagation();
+    selectedIndex.value = rowIndex;
+    activeMenu.value = { x: e.clientX, y: e.clientY, items: buildRowMenuItems(entry) };
+  }
 
   /**
    * Keyboard navigation handler for flat mode.
@@ -444,7 +693,19 @@ export function FileTree() {
           openEntry(entries.value[selectedIndex.value]);
         }
         break;
+      case 'Delete': {
+        e.preventDefault();
+        const entry = entries.value[selectedIndex.value];
+        if (entry) void triggerDeleteConfirm(entry);
+        break;
+      }
       case 'Backspace': {
+        if (e.metaKey) {
+          e.preventDefault();
+          const entry = entries.value[selectedIndex.value];
+          if (entry) void triggerDeleteConfirm(entry);
+          break;
+        }
         e.preventDefault();
         navigateToParent();
         break;
@@ -504,6 +765,20 @@ export function FileTree() {
             if (parentIdx >= 0) selectedIndex.value = parentIdx;
           }
         }
+        break;
+      }
+      case 'Backspace': {
+        if (e.metaKey) {
+          e.preventDefault();
+          const entry = flattenedTree.value[selectedIndex.value]?.entry;
+          if (entry) void triggerDeleteConfirm(entry);
+        }
+        break;
+      }
+      case 'Delete': {
+        e.preventDefault();
+        const entry = flattenedTree.value[selectedIndex.value]?.entry;
+        if (entry) void triggerDeleteConfirm(entry);
         break;
       }
     }
@@ -586,37 +861,49 @@ export function FileTree() {
           ) : (
             entries.value.map((entry, i) => {
               const isSelected = selectedIndex.value === i;
+              const cr = activeCreateRow.value;
               return (
-                <div
-                  key={entry.path}
-                  data-file-tree-index={i}
-                  style={{ padding: `${fileTreeLineHeight.value}px 12px`, gap: 8, display: 'flex', alignItems: 'center', cursor: 'pointer', backgroundColor: isSelected ? colors.bgElevated : 'transparent' }}
-                  onClick={() => {
-                    selectedIndex.value = i;
-                    if (entry.is_dir) {
-                      loadDir(entry.path);
-                    } else {
-                      handleFileClick(entry.path, entry.name);
+                <>
+                  <div
+                    key={entry.path}
+                    data-file-tree-index={i}
+                    style={{ padding: `${fileTreeLineHeight.value}px 12px`, gap: 8, display: 'flex', alignItems: 'center', cursor: 'pointer', backgroundColor: isSelected ? colors.bgElevated : 'transparent' }}
+                    onClick={() => {
+                      selectedIndex.value = i;
+                      if (entry.is_dir) {
+                        loadDir(entry.path);
+                      } else {
+                        handleFileClick(entry.path, entry.name);
+                      }
+                    }}
+                    onMouseEnter={() => { selectedIndex.value = i; }}
+                    onContextMenu={(e) => handleRowContextMenu(e as unknown as MouseEvent, entry, i)}
+                  >
+                    {entry.is_dir
+                      ? <FolderIcon />
+                      : (entry.name.match(/\.(ts|tsx|js|jsx|rs|css)$/)
+                          ? <FileCodeIcon />
+                          : <FileTextIcon />
+                        )
                     }
-                  }}
-                  onMouseEnter={() => { selectedIndex.value = i; }}
-                >
-                  {entry.is_dir
-                    ? <FolderIcon />
-                    : (entry.name.match(/\.(ts|tsx|js|jsx|rs|css)$/)
-                        ? <FileCodeIcon />
-                        : <FileTextIcon />
-                      )
-                  }
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'var(--file-tree-font, Geist)', fontSize: fileTreeFontSize.value, color: isSelected ? colors.textPrimary : colors.textMuted }}>
-                    {entry.name}
-                  </span>
-                  {!entry.is_dir && entry.size != null && (
-                    <span style={{ fontFamily: fonts.mono, fontSize: 11, color: colors.textDim, marginLeft: 'auto', flexShrink: 0 }}>
-                      {formatSize(entry.size)}
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'var(--file-tree-font, Geist)', fontSize: fileTreeFontSize.value, color: isSelected ? colors.textPrimary : colors.textMuted }}>
+                      {entry.name}
                     </span>
+                    {!entry.is_dir && entry.size != null && (
+                      <span style={{ fontFamily: fonts.mono, fontSize: 11, color: colors.textDim, marginLeft: 'auto', flexShrink: 0 }}>
+                        {formatSize(entry.size)}
+                      </span>
+                    )}
+                  </div>
+                  {cr && cr.afterIndex === i && (
+                    <InlineCreateRow
+                      parentDir={cr.parentDir}
+                      kind={cr.kind}
+                      depth={0}
+                      onDone={() => { activeCreateRow.value = null; }}
+                    />
                   )}
-                </div>
+                </>
               );
             })
           )
@@ -628,58 +915,78 @@ export function FileTree() {
             flattenedTree.value.map((node, i) => {
               const isSelected = selectedIndex.value === i;
               const paddingLeft = 12 + (node.depth * 16);
+              const cr = activeCreateRow.value;
               return (
-                <div
-                  key={node.entry.path + '-' + node.depth}
-                  data-file-tree-index={i}
-                  style={{
-                    padding: `${fileTreeLineHeight.value}px 12px`,
-                    paddingLeft,
-                    gap: 6,
-                    display: 'flex',
-                    alignItems: 'center',
-                    cursor: 'pointer',
-                    backgroundColor: isSelected ? colors.bgElevated : 'transparent',
-                  }}
-                  onClick={() => {
-                    selectedIndex.value = i;
-                    if (node.entry.is_dir) {
-                      toggleTreeNode(node);
-                    } else {
-                      handleFileClick(node.entry.path, node.entry.name);
+                <>
+                  <div
+                    key={node.entry.path + '-' + node.depth}
+                    data-file-tree-index={i}
+                    style={{
+                      padding: `${fileTreeLineHeight.value}px 12px`,
+                      paddingLeft,
+                      gap: 6,
+                      display: 'flex',
+                      alignItems: 'center',
+                      cursor: 'pointer',
+                      backgroundColor: isSelected ? colors.bgElevated : 'transparent',
+                    }}
+                    onClick={() => {
+                      selectedIndex.value = i;
+                      if (node.entry.is_dir) {
+                        toggleTreeNode(node);
+                      } else {
+                        handleFileClick(node.entry.path, node.entry.name);
+                      }
+                    }}
+                    onMouseEnter={() => { selectedIndex.value = i; }}
+                    onContextMenu={(e) => handleRowContextMenu(e as unknown as MouseEvent, node.entry, i)}
+                  >
+                    {/* Chevron for folders, spacer for files */}
+                    {node.entry.is_dir ? (
+                      <span style={{ display: 'flex', alignItems: 'center', width: 10, flexShrink: 0 }}>
+                        <ChevronIcon expanded={node.expanded} />
+                      </span>
+                    ) : (
+                      <span style={{ width: 10, flexShrink: 0 }} />
+                    )}
+                    {node.entry.is_dir
+                      ? <FolderIcon />
+                      : (node.entry.name.match(/\.(ts|tsx|js|jsx|rs|css)$/)
+                          ? <FileCodeIcon />
+                          : <FileTextIcon />
+                        )
                     }
-                  }}
-                  onMouseEnter={() => { selectedIndex.value = i; }}
-                >
-                  {/* Chevron for folders, spacer for files */}
-                  {node.entry.is_dir ? (
-                    <span style={{ display: 'flex', alignItems: 'center', width: 10, flexShrink: 0 }}>
-                      <ChevronIcon expanded={node.expanded} />
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'var(--file-tree-font, Geist)', fontSize: fileTreeFontSize.value, color: isSelected ? colors.textPrimary : colors.textMuted }}>
+                      {node.entry.name}
                     </span>
-                  ) : (
-                    <span style={{ width: 10, flexShrink: 0 }} />
+                    {!node.entry.is_dir && node.entry.size != null && (
+                      <span style={{ fontFamily: fonts.mono, fontSize: 11, color: colors.textDim, marginLeft: 'auto', flexShrink: 0 }}>
+                        {formatSize(node.entry.size)}
+                      </span>
+                    )}
+                  </div>
+                  {cr && cr.afterIndex === i && (
+                    <InlineCreateRow
+                      parentDir={cr.parentDir}
+                      kind={cr.kind}
+                      depth={node.depth + (node.entry.is_dir ? 1 : 0)}
+                      onDone={() => { activeCreateRow.value = null; }}
+                    />
                   )}
-                  {node.entry.is_dir
-                    ? <FolderIcon />
-                    : (node.entry.name.match(/\.(ts|tsx|js|jsx|rs|css)$/)
-                        ? <FileCodeIcon />
-                        : <FileTextIcon />
-                      )
-                  }
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'var(--file-tree-font, Geist)', fontSize: fileTreeFontSize.value, color: isSelected ? colors.textPrimary : colors.textMuted }}>
-                    {node.entry.name}
-                  </span>
-                  {!node.entry.is_dir && node.entry.size != null && (
-                    <span style={{ fontFamily: fonts.mono, fontSize: 11, color: colors.textDim, marginLeft: 'auto', flexShrink: 0 }}>
-                      {formatSize(node.entry.size)}
-                    </span>
-                  )}
-                </div>
+                </>
               );
             })
           )
         )}
       </div>
+      {activeMenu.value && (
+        <ContextMenu
+          items={activeMenu.value.items}
+          x={activeMenu.value.x}
+          y={activeMenu.value.y}
+          onClose={() => { activeMenu.value = null; }}
+        />
+      )}
     </div>
   );
 }

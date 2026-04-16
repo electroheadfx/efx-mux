@@ -11,7 +11,10 @@ import { colors, radii, spacing, fonts } from '../tokens';
 export interface ContextMenuItem {
   label: string;
   action?: () => void;
-  icon?: ComponentType<{ size?: number }>;
+  // Accept any component with an optional size prop (lucide-preact icons accept
+  // string | number for size, so keep this permissive to avoid coupling the
+  // menu interface to a specific icon library).
+  icon?: ComponentType<{ size?: number | string }>;
   disabled?: boolean;
   separator?: boolean;
   children?: ContextMenuItem[];
