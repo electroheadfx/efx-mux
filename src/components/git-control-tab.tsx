@@ -537,11 +537,20 @@ function HistoryEntry({ entry }: { entry: GitCommitEntry }) {
   return (
     <div
       title={`${entry.author} -- ${entry.short_hash} -- ${new Date(entry.timestamp * 1000).toLocaleString()}`}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(entry.hash);
+          showToast({ type: 'success', message: 'Copied ' + entry.short_hash });
+        } catch {
+          showToast({ type: 'error', message: 'Failed to copy hash' });
+        }
+      }}
       style={{
         display: 'flex',
         alignItems: 'center',
         gap: spacing.xl,
         padding: `${spacing.sm}px ${spacing.xl}px`,
+        cursor: 'pointer',
         backgroundColor: 'transparent',
         userSelect: 'none', WebkitUserSelect: 'none',
       }}
