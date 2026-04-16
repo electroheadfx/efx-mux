@@ -56,6 +56,7 @@ pub async fn spawn_terminal(
     shell_command: Option<String>,
     cols: Option<u16>,
     rows: Option<u16>,
+    force_new: Option<bool>,
 ) -> Result<(), String> {
     // Sanitize session_name: allow only alphanumeric, hyphen, underscore (T-02-01 mitigation)
     let sanitized: String = session_name
@@ -86,18 +87,18 @@ pub async fn spawn_terminal(
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
+    let wants_fresh = force_new.unwrap_or(false);
     if session_exists {
-        if shell_command.as_deref().map(|s| !s.is_empty()).unwrap_or(false) {
-            // Agent tab: kill the old session so the new-session command below creates
-            // a fresh one with the correct environment (CLAUDE_CODE_NO_FLICKER=1 etc.)
-            // baked into the inline-export shell wrapper. Ignoring the kill error is safe
-            // -- if the session is already gone we still proceed to create a new one.
+        if wants_fresh || shell_command.as_deref().map(|s| !s.is_empty()).unwrap_or(false) {
+            // force_new OR agent tab: kill the old session so tmux new-session below
+            // creates a FRESH one. Without this, a plain-shell tab could reattach to a
+            // stale tmux session left by a previously closed agent tab (whose tmux session
+            // was kept alive by destroy_pty_session for tab-restoration purposes).
             let _ = std::process::Command::new("tmux")
                 .args(["kill-session", "-t", &sanitized])
                 .output();
         } else {
-            // Plain shell tab: re-attach to the existing session.
-            // Clear the scrollback history buffer ONLY -- do NOT send Ctrl+L.
+            // Restoration / re-attach: clear scrollback history only -- do NOT send Ctrl+L.
             //
             // Sending `send-keys C-l` to an existing session fires a Ctrl+L keystroke
             // into whatever process is currently running (e.g., Claude Code's Ink TUI)

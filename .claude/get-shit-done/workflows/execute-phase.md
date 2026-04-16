@@ -392,7 +392,7 @@ Execute each selected wave in sequence. Within a wave: parallel if `PARALLELIZAT
 
    Pass paths only — executors read files themselves with their fresh context window.
    For 200k models, this keeps orchestrator context lean (~10-15%).
-   For 1M+ models (Opus 4.6, Sonnet 4.6), richer context can be passed directly.
+   For 1M+ models (Opus 4.7, Sonnet 4.6), richer context can be passed directly.
 
    **Worktree mode** (`USE_WORKTREES` is not `false`):
 

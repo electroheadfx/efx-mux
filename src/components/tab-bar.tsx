@@ -2,7 +2,7 @@
 // Visual rewrite: Phase 10 pill-style pattern (RightPanel TabButton reference)
 
 import type { Signal } from '@preact/signals';
-import { colors, fonts } from '../tokens';
+import { colors, fonts, spacing } from '../tokens';
 
 interface TabBarProps {
   tabs: string[];
@@ -12,21 +12,22 @@ interface TabBarProps {
 
 export function TabBar({ tabs, activeTab, onSwitch }: TabBarProps) {
   return (
-    <div class="flex gap-1 px-2 py-2 border-b shrink-0 items-center" style={{ backgroundColor: colors.bgBase, borderColor: colors.bgBorder }}>
+    <div class="flex px-2 py-2 border-b shrink-0 items-center" style={{ backgroundColor: colors.bgBase, borderColor: colors.bgBorder }}>
       {tabs.map(tab => {
         const active = activeTab.value === tab;
         return (
           <button
             class="cursor-pointer transition-all duration-150"
             style={{
-              backgroundColor: active ? colors.bgElevated : 'transparent',
-              border: active ? `1px solid ${colors.bgSurface}` : '1px solid transparent',
-              borderRadius: 6,
-              padding: '9px 16px',
+              backgroundColor: 'transparent',
+              border: 'none',
+              borderBottom: active ? `2px solid ${colors.accent}` : '2px solid transparent',
+              marginBottom: -1,
+              padding: `${spacing.xl}px ${spacing['3xl']}px`,
               fontFamily: fonts.sans,
-              fontSize: 13,
-              fontWeight: active ? 500 : 400,
-              color: active ? colors.textPrimary : colors.textDim,
+              fontSize: 11,
+              fontWeight: active ? 600 : 400,
+              color: active ? colors.textPrimary : colors.textMuted,
             }}
             onClick={() => onSwitch(tab)}
           >{tab}</button>

@@ -1,0 +1,151 @@
+// editor/setup.ts -- CodeMirror 6 EditorState factory
+// Built per D-06
+
+import { EditorState, Compartment, type Extension } from '@codemirror/state';
+import { EditorView, keymap } from '@codemirror/view';
+import { basicSetup } from 'codemirror';
+import { syntaxHighlighting } from '@codemirror/language';
+import { efxmuxTheme, efxmuxHighlightStyle } from './theme';
+import { getLanguageExtension } from './languages';
+import { showMinimap } from '@replit/codemirror-minimap';
+import { signal } from '@preact/signals';
+
+// ── Minimap Compartment ───────────────────────────────────────────────────────
+
+const minimapCompartment = new Compartment();
+
+/** Signal controlling minimap visibility across all editor views */
+export const minimapVisible = signal(true);
+
+/** Helper: returns the minimap extension configuration */
+function minimapExtension(): Extension {
+  return showMinimap.compute(['doc'], () => ({
+    create: () => ({ dom: document.createElement('div') }),
+    displayText: 'blocks',
+    showOverlay: 'always',
+    eventHandlers: {
+      mousedown: (e: MouseEvent) => {
+        // Prevent browser native drag — locks interaction to vertical only
+        e.preventDefault();
+      },
+    },
+  }));
+}
+
+/** Toggle minimap visibility on all open editor views */
+export function toggleMinimap(): void {
+  minimapVisible.value = !minimapVisible.value;
+  editorViewMap.forEach((view) => {
+    view.dispatch({
+      effects: minimapCompartment.reconfigure(
+        minimapVisible.value ? minimapExtension() : [],
+      ),
+    });
+  });
+}
+
+// ── Options Interface ─────────────────────────────────────────────────────────
+
+export interface EditorSetupOptions {
+  /** CM6 language extension (from getLanguageExtension), or null for plain text */
+  language: Extension | null;
+  /** Called when user presses Mod-s (Cmd+s / Ctrl+s) */
+  onSave: (content: string) => void;
+  /** Called when the document dirty state changes (true = unsaved, false = saved) */
+  onDirtyChange: (dirty: boolean) => void;
+}
+
+// ── Result Interface ──────────────────────────────────────────────────────────
+
+export interface EditorSetupResult {
+  state: EditorState;
+  getSavedContent: () => string;
+  setSavedContent: (content: string) => void;
+}
+
+// ── EditorView Registry ────────────────────────────────────────────────────────
+
+/** Module-level registry: tabId -> EditorView, so closeUnifiedTab can get current content */
+const editorViewMap = new Map<string, EditorView>();
+
+export function registerEditorView(tabId: string, view: EditorView): void {
+  editorViewMap.set(tabId, view);
+}
+
+export function unregisterEditorView(tabId: string): void {
+  editorViewMap.delete(tabId);
+}
+
+export function getEditorCurrentContent(tabId: string): string | null {
+  const view = editorViewMap.get(tabId);
+  if (!view) return null;
+  return view.state.doc.toString();
+}
+
+/** Module-level registry: tabId -> save callback, so editor-save event can trigger save */
+const saveCallbackMap = new Map<string, (content: string) => Promise<void>>();
+
+export function registerSaveCallback(tabId: string, cb: (content: string) => Promise<void>): void {
+  saveCallbackMap.set(tabId, cb);
+}
+
+export function unregisterSaveCallback(tabId: string): void {
+  saveCallbackMap.delete(tabId);
+}
+
+/**
+ * Triggers save for a given tab by calling its registered callback with the
+ * current EditorView content. Used by the Cmd+S handler in main.tsx.
+ */
+export async function triggerEditorSave(tabId: string): Promise<void> {
+  const cb = saveCallbackMap.get(tabId);
+  if (!cb) return;
+  const content = getEditorCurrentContent(tabId);
+  if (content !== null) await cb(content);
+}
+
+// ── Factory ────────────────────────────────────────────────────────────────────
+
+/**
+ * Creates a configured CM6 EditorState with all required extensions:
+ * basicSetup, language support, custom theme, syntax highlighting, minimap,
+ * Mod-s save keymap, and dirty-change tracking.
+ */
+export function createEditorState(
+  content: string,
+  options: EditorSetupOptions,
+): EditorSetupResult {
+  let savedContent = content;
+
+  const extensions: Extension[] = [
+    basicSetup,
+    ...(options.language ? [options.language] : []),
+    efxmuxTheme,
+    syntaxHighlighting(efxmuxHighlightStyle),
+    keymap.of([
+      {
+        key: 'Mod-s',
+        run: (view: EditorView) => {
+          options.onSave(view.state.doc.toString());
+          return true;
+        },
+      },
+    ]),
+    EditorView.updateListener.of((update) => {
+      if (update.docChanged) {
+        options.onDirtyChange(update.state.doc.toString() !== savedContent);
+      }
+    }),
+    minimapCompartment.of(minimapVisible.value ? minimapExtension() : []),
+  ];
+
+  const state = EditorState.create({ doc: content, extensions });
+
+  return {
+    state,
+    getSavedContent: () => savedContent,
+    setSavedContent: (s: string) => {
+      savedContent = s;
+    },
+  };
+}

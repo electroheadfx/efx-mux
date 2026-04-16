@@ -1,5 +1,5 @@
 // right-panel.tsx -- Right panel with tabbed views and Bash Terminal
-// D-11: Tab bars for right-top (GSD/Diff/File Tree) and right-bottom (Bash)
+// D-11: Tab bars for right-top (GSD/File Tree) and right-bottom (Bash)
 // D-12: Bash terminal lazy-connects via connectPty on first tab selection
 // Phase 10: Navy-blue palette rewrite (Plan 06)
 
@@ -10,16 +10,15 @@ import { getTheme, registerTerminal } from '../theme/theme-manager';
 import { colors } from '../tokens';
 import { TabBar } from './tab-bar';
 import { GSDViewer } from './gsd-viewer';
-import { DiffViewer } from './diff-viewer';
 import { FileTree } from './file-tree';
 
-const RIGHT_TOP_TABS = ['File Tree', 'GSD', 'Diff'];
+const RIGHT_TOP_TABS = ['File Tree', 'GSD'];
 const RIGHT_BOTTOM_TABS = ['Bash'];
 
 /**
  * RightPanel component.
  * Two sub-panels separated by a horizontal split handle.
- * Right-top: GSD Viewer, Diff Viewer, File Tree (tabbed)
+ * Right-top: GSD Viewer, File Tree (tabbed)
  * Right-bottom: Bash Terminal (tabbed, lazy-connected)
  */
 export function RightPanel() {
@@ -27,16 +26,15 @@ export function RightPanel() {
   const bashConnected = useRef(false);
   const bashSessionRef = useRef('');
 
-  // Auto-switch to Diff tab when a file is clicked in sidebar GIT CHANGES
-  useEffect(() => {
-    function handleOpenDiff() {
-      rightTopTab.value = 'Diff';
-    }
-    document.addEventListener('open-diff', handleOpenDiff);
-    return () => {
-      document.removeEventListener('open-diff', handleOpenDiff);
-    };
-  }, []);
+  // Guard: if persisted rightTopTab was 'Diff' (now removed), fall back to default
+  if (rightTopTab.value === 'Diff') {
+    rightTopTab.value = 'File Tree';
+  }
+
+  // Guard: if persisted rightBottomTab is not in RIGHT_BOTTOM_TABS, fall back to default
+  if (!RIGHT_BOTTOM_TABS.includes(rightBottomTab.value)) {
+    rightBottomTab.value = RIGHT_BOTTOM_TABS[0];
+  }
 
   // Lazy-connect bash terminal on mount
   useEffect(() => {
@@ -101,7 +99,7 @@ export function RightPanel() {
 
   return (
     <aside class="right-panel" aria-label="Right panel" style={{ backgroundColor: colors.bgBase, borderLeft: `1px solid ${colors.bgBorder}` }}>
-      {/* Top panel: GSD / Diff / File Tree */}
+      {/* Top panel: GSD / File Tree */}
       <div class="right-top flex flex-col min-h-0">
         <TabBar
           tabs={RIGHT_TOP_TABS}
@@ -111,9 +109,6 @@ export function RightPanel() {
         <div class="right-top-content flex-1 min-h-0 overflow-hidden relative p-1">
           <div style={{ height: '100%', display: rightTopTab.value === 'GSD' ? 'block' : 'none' }}>
             <GSDViewer />
-          </div>
-          <div style={{ height: '100%', display: rightTopTab.value === 'Diff' ? 'block' : 'none' }}>
-            <DiffViewer />
           </div>
           <div style={{ height: '100%', display: rightTopTab.value === 'File Tree' ? 'block' : 'none' }}>
             <FileTree />
@@ -128,6 +123,7 @@ export function RightPanel() {
         role="separator"
         aria-orientation="horizontal"
         aria-label="Resize right panels"
+        style={{ boxShadow: `0 1px 0 0 ${colors.bgBorder}` }}
       />
 
       {/* Bottom panel: Bash */}

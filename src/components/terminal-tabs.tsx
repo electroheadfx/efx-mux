@@ -15,6 +15,8 @@ import { registerTerminal, getTheme } from '../theme/theme-manager';
 import { updateSession, activeProjectName, projects, getCurrentState } from '../state-manager';
 import { detectAgent } from '../server/server-bridge';
 import { colors, fonts } from '../tokens';
+import { projectSessionName } from '../utils/session-name';
+import { CrashOverlay } from './crash-overlay';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -31,6 +33,12 @@ export interface TerminalTab {
   disconnectPty?: () => void;
   detachResize?: () => void;
   exitCode?: number | null;  // undefined = running, number = exited
+  isAgent: boolean;  // true if this tab runs an agent (claude/opencode)
+}
+
+export interface CreateTabOptions {
+  /** When true, resolve and launch the project's configured agent binary */
+  isAgent?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -46,21 +54,11 @@ let tabCounter = 0;
  * Used to restore tabs when switching back to a previously visited project.
  * Key: project name, Value: array of { sessionName, label } for each tab.
  */
-const projectTabCache = new Map<string, Array<{ sessionName: string; label: string }>>();
+const projectTabCache = new Map<string, Array<{ sessionName: string; label: string; isAgent: boolean }>>();
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Derive a tmux session name from a project name.
- * Sanitizes to alphanumeric + hyphen + underscore (matching pty.rs sanitization).
- */
-function projectSessionName(projectName: string | null, suffix?: string): string {
-  if (!projectName) return suffix ? `efx-mux-${suffix}` : 'efx-mux';
-  const base = projectName.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
-  return suffix ? `${base}-${suffix}` : base;
-}
 
 function getTerminalContainersEl(): HTMLElement | null {
   return document.querySelector('.terminal-containers');
@@ -101,19 +99,30 @@ async function resolveAgentBinary(agent?: string): Promise<string | undefined> {
   }
 }
 
+/**
+ * Derive a human-readable label for an agent binary name.
+ */
+function agentLabel(agent?: string): string {
+  return agent ? `Agent ${agent}` : 'Agent';
+}
+
 // ---------------------------------------------------------------------------
 // Tab management functions (exported for keyboard handler)
 // ---------------------------------------------------------------------------
 
 /**
  * Create a new terminal tab with its own tmux session.
+ * @param options.isAgent - When true, resolve the project's configured agent
+ *   binary and launch it instead of a plain shell.
  */
-export async function createNewTab(): Promise<TerminalTab | null> {
+export async function createNewTab(options?: CreateTabOptions): Promise<TerminalTab | null> {
   const wrapper = getTerminalContainersEl();
   if (!wrapper) {
     console.error('[efxmux] .terminal-containers not found');
     return null;
   }
+
+  const wantAgent = options?.isAgent ?? false;
 
   tabCounter++;
   const id = `tab-${Date.now()}-${tabCounter}`;
@@ -123,12 +132,23 @@ export async function createNewTab(): Promise<TerminalTab | null> {
   const sessionSuffix = tabCounter > 1 ? String(tabCounter) : undefined;
   const sessionName = projectSessionName(activeName, sessionSuffix);
 
-  // Label: first tab gets agent name if configured
+  // Resolve project info (needed for working directory and agent config)
   const projectInfo = await getActiveProjectInfo();
-  const isFirstTab = terminalTabs.value.length === 0;
+
+  // Resolve agent binary when requested
+  let agentBinary: string | undefined;
+  if (wantAgent) {
+    agentBinary = await resolveAgentBinary(projectInfo?.agent);
+  }
+  const isAgent = wantAgent && !!agentBinary;
+
+  // Label: agent tabs get the agent name, plain tabs get "Terminal N"
   let label: string;
-  if (isFirstTab && projectInfo?.agent && projectInfo.agent !== 'bash') {
-    label = projectInfo.agent === 'claude' ? 'Claude' : projectInfo.agent === 'opencode' ? 'OpenCode' : `Terminal ${tabCounter}`;
+  if (isAgent) {
+    label = agentLabel(projectInfo?.agent);
+  } else if (wantAgent && !agentBinary) {
+    // User requested agent but binary not found — label makes failure visible
+    label = `${agentLabel(projectInfo?.agent)} (no binary)`;
   } else {
     label = `Terminal ${tabCounter}`;
   }
@@ -157,6 +177,7 @@ export async function createNewTab(): Promise<TerminalTab | null> {
     disconnectPty: undefined,
     detachResize: undefined,
     exitCode: undefined,
+    isAgent,
   };
   terminalTabs.value = [...terminalTabs.value, partialTab];
   activeTabId.value = id;
@@ -168,13 +189,17 @@ export async function createNewTab(): Promise<TerminalTab | null> {
   await nextFrame();
   fitAddon.fit();
 
-  // Connect PTY -- Ctrl+T tabs are always plain shell (UAT gap 1)
-  const agentBinary = undefined;
+  // Warn if user requested agent but binary not available
+  if (wantAgent && !agentBinary) {
+    terminal.writeln(`\x1b[33mAgent binary "${projectInfo?.agent ?? 'unknown'}" not found. Starting plain shell.\x1b[0m`);
+  }
+
+  // Connect PTY -- pass agent binary when creating an agent tab
   let disconnectPty: (() => void) | undefined;
   let ptyConnected = false;
 
   try {
-    const conn = await connectPty(terminal, sessionName, projectInfo?.path, agentBinary);
+    const conn = await connectPty(terminal, sessionName, projectInfo?.path, agentBinary, true);
     disconnectPty = conn.disconnect;
     ptyConnected = true;
   } catch (err) {
@@ -208,15 +233,17 @@ export async function closeActiveTab(): Promise<void> {
 
   const tab = tabs[idx];
   // Destroy PTY session in Rust before disposing JS-side resources
-  try { await invoke('destroy_pty_session', { sessionName: tab.sessionName }); } catch {}
+  try { await invoke('destroy_pty_session', { sessionName: tab.sessionName }); } catch (err) {
+    console.warn('[efxmux] Failed to destroy PTY session:', err);
+  }
   disposeTab(tab);
 
   const remaining = tabs.filter(t => t.id !== currentId);
   terminalTabs.value = remaining;
 
   if (remaining.length === 0) {
-    // D-07: closing last tab auto-creates fresh default
-    await createNewTab();
+    // Last terminal tab closed — don't auto-create if other unified tabs exist
+    activeTabId.value = '';
   } else {
     // Switch to previous tab (or first)
     const newIdx = Math.min(idx, remaining.length - 1);
@@ -242,7 +269,9 @@ export async function closeTab(tabId: string): Promise<void> {
   }
 
   const tab = tabs[idx];
-  try { await invoke('destroy_pty_session', { sessionName: tab.sessionName }); } catch {}
+  try { await invoke('destroy_pty_session', { sessionName: tab.sessionName }); } catch (err) {
+    console.warn('[efxmux] Failed to destroy PTY session:', err);
+  }
   disposeTab(tab);
   terminalTabs.value = tabs.filter(t => t.id !== tabId);
   persistTabState();
@@ -259,6 +288,30 @@ export function cycleToNextTab(): void {
   const nextIdx = (idx + 1) % tabs.length;
   activeTabId.value = tabs[nextIdx].id;
   switchToTab(tabs[nextIdx].id);
+}
+
+/**
+ * Rename a terminal tab's label and persist the change.
+ */
+export function renameTerminalTab(tabId: string, newLabel: string): void {
+  const tabs = terminalTabs.value;
+  const tab = tabs.find(t => t.id === tabId);
+  if (!tab) return;
+  tab.label = newLabel;
+  terminalTabs.value = [...tabs]; // trigger reactivity
+  persistTabState();
+}
+
+/**
+ * Get the default label for a terminal tab (used when resetting a rename).
+ */
+export function getDefaultTerminalLabel(tab: TerminalTab): string {
+  if (tab.isAgent) {
+    const activeName = activeProjectName.value;
+    const activeProject = activeName ? projects.value.find(p => p.name === activeName) : null;
+    return activeProject?.agent ? `Agent ${activeProject.agent}` : 'Agent';
+  }
+  return 'Terminal';
 }
 
 /**
@@ -298,7 +351,7 @@ export async function initFirstTab(
   const activeProject = activeName ? projects.value.find(p => p.name === activeName) : null;
   let label: string;
   if (activeProject?.agent && activeProject.agent !== 'bash') {
-    label = activeProject.agent === 'claude' ? 'Claude' : activeProject.agent === 'opencode' ? 'OpenCode' : 'Terminal 1';
+    label = agentLabel(activeProject.agent);
   } else {
     label = 'Terminal 1';
   }
@@ -346,6 +399,7 @@ export async function initFirstTab(
     disconnectPty,
     detachResize: resizeHandle.detach,
     exitCode: undefined,
+    isAgent: !!agentBinary,
   };
 
   terminalTabs.value = [tab];
@@ -361,7 +415,7 @@ export async function initFirstTab(
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function switchToTab(tabId: string): void {
+export function switchToTab(tabId: string): void {
   const tabs = terminalTabs.value;
   for (const tab of tabs) {
     if (tab.id === tabId) {
@@ -396,6 +450,7 @@ function persistTabState(): void {
   const tabs = terminalTabs.value.map(t => ({
     sessionName: t.sessionName,
     label: t.label,
+    isAgent: t.isAgent ?? false,
   }));
   const data = JSON.stringify({ tabs, activeTabId: activeTabId.value });
   // Save under per-project key (and legacy flat key for backward compat)
@@ -441,10 +496,10 @@ export async function restartTabSession(tabId: string): Promise<void> {
   await nextFrame();
   fitAddon.fit();
 
-  // Connect PTY
-  const agentBinary = await resolveAgentBinary(projectInfo?.agent);
+  // Connect PTY -- only resolve agent binary if this tab was originally an agent tab
+  const restartAgentBinary = tab.isAgent ? await resolveAgentBinary(projectInfo?.agent) : undefined;
   try {
-    const conn = await connectPty(terminal, newSessionName, projectInfo?.path, agentBinary);
+    const conn = await connectPty(terminal, newSessionName, projectInfo?.path, restartAgentBinary, true);
     tab.disconnectPty = conn.disconnect;
     tab.ptyConnected = true;
   } catch (err) {
@@ -482,6 +537,7 @@ export function saveProjectTabs(projectName: string): void {
     const tabMeta = tabs.map(t => ({
       sessionName: t.sessionName,
       label: t.label,
+      isAgent: t.isAgent ?? false,
     }));
     projectTabCache.set(projectName, tabMeta);
     // Persist to disk so tabs survive app restart
@@ -585,7 +641,7 @@ export async function clearAllTabs(): Promise<void> {
  * Returns true if at least 1 tab was restored, false otherwise.
  */
 export async function restoreTabs(
-  savedData: { tabs: Array<{ sessionName: string; label: string }>; activeTabId: string },
+  savedData: { tabs: Array<{ sessionName: string; label: string; isAgent?: boolean }>; activeTabId: string },
   projectPath?: string,
   agentBinary?: string,
 ): Promise<boolean> {
@@ -624,8 +680,9 @@ export async function restoreTabs(
     // Hide after measuring — switchToTab will reveal the active tab.
     container.style.display = 'none';
 
-    // Connect PTY -- first tab gets agent binary (it's the agent tab), rest are plain shell
-    const shellCmd = (i === 0 && agentBinary) ? agentBinary : undefined;
+    // Connect PTY -- use persisted isAgent flag (backward compat: old data without isAgent falls back to index heuristic)
+    const isAgentTab = saved.isAgent ?? (i === 0 && !!agentBinary);
+    const shellCmd = (isAgentTab && agentBinary) ? agentBinary : undefined;
     let disconnectPty: (() => void) | undefined;
     let ptyConnected = false;
 
@@ -652,6 +709,7 @@ export async function restoreTabs(
       disconnectPty,
       detachResize: resizeHandle.detach,
       exitCode: undefined,
+      isAgent: isAgentTab,
     });
   }
 
@@ -682,75 +740,6 @@ listen<{ session: string; code: number }>('pty-exited', (event) => {
     terminalTabs.value = [...tabs]; // trigger re-render
   }
 });
-
-// ---------------------------------------------------------------------------
-// TerminalTabBar component (UI-SPEC Component 1)
-// ---------------------------------------------------------------------------
-
-import { CrashOverlay } from './crash-overlay';
-
-export function TerminalTabBar() {
-  const tabs = terminalTabs.value;
-  const currentId = activeTabId.value;
-
-  return (
-    <div
-      class="flex gap-1 px-2 py-2 shrink-0 items-center border-b"
-      role="tablist"
-      style={{ backgroundColor: colors.bgBase, borderColor: colors.bgBorder }}
-    >
-      {tabs.map(tab => {
-        const isActive = tab.id === currentId;
-        return (
-          <button
-            key={tab.id}
-            role="tab"
-            aria-selected={isActive}
-            class="flex items-center gap-2 cursor-pointer transition-all duration-150"
-            style={{
-              backgroundColor: isActive ? colors.bgElevated : 'transparent',
-              border: isActive ? `1px solid ${colors.bgSurface}` : '1px solid transparent',
-              borderRadius: 6,
-              padding: '9px 16px',
-              fontFamily: fonts.sans,
-              fontSize: 13,
-              fontWeight: isActive ? 500 : 400,
-              color: isActive ? colors.textPrimary : colors.textDim,
-            }}
-            onClick={() => {
-              activeTabId.value = tab.id;
-              switchToTab(tab.id);
-            }}
-            title={tab.sessionName}
-          >
-            {isActive && <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: colors.statusGreen, flexShrink: 0 }} />}
-            <span>{tab.label}</span>
-            <span
-              class="ml-1 flex items-center justify-center"
-              style={{ color: colors.textDim, fontSize: 14 }}
-              onClick={(e) => {
-                e.stopPropagation();
-                closeTab(tab.id);
-              }}
-              onMouseEnter={(e) => { (e.target as HTMLElement).style.color = colors.textPrimary; }}
-              onMouseLeave={(e) => { (e.target as HTMLElement).style.color = colors.textDim; }}
-              title="Close tab"
-            >{'\u00D7'}</span>
-          </button>
-        );
-      })}
-      {/* New tab button */}
-      <button
-        class="w-7 h-7 rounded flex items-center justify-center text-base cursor-pointer"
-        style={{ color: colors.textDim, fontFamily: fonts.sans }}
-        onMouseEnter={(e) => { const t = e.target as HTMLElement; t.style.color = colors.textPrimary; t.style.backgroundColor = colors.bgElevated; }}
-        onMouseLeave={(e) => { const t = e.target as HTMLElement; t.style.color = colors.textDim; t.style.backgroundColor = 'transparent'; }}
-        onClick={() => createNewTab()}
-        title="New terminal tab (Ctrl+T)"
-      >+</button>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Active tab crash overlay rendering (used in main-panel.tsx)

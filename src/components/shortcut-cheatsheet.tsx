@@ -38,7 +38,7 @@ const SHORTCUTS = [
   ]},
   { section: 'App', items: [
     { key: 'Ctrl+Shift+T', action: 'Toggle dark/light theme' },
-    { key: 'Ctrl+,', action: 'Preferences' },
+    { key: 'Ctrl+,', action: 'Settings' },
     { key: 'Ctrl+?', action: 'This cheatsheet' },
     { key: 'Cmd+K', action: 'Clear terminal' },
   ]},

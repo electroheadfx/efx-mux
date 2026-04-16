@@ -276,6 +276,38 @@ html, body {
 *::-webkit-scrollbar-thumb { background: var(--color-border-interactive); border-radius: 4px; }
 *::-webkit-scrollbar-thumb:hover { background: var(--color-text); }
 
+/* ─── Minimap overrides (global CSS — plugin uses .cm-minimap-gutter, NOT .cm-minimap) ─── */
+.cm-minimap-gutter {
+  overflow: hidden !important;
+}
+
+.cm-minimap-overlay-container {
+  user-select: none !important;
+  -webkit-user-drag: none !important;
+}
+
+.cm-minimap-inner > canvas {
+  filter: saturate(0.5) brightness(0.5) !important;
+  user-select: none !important;
+  -webkit-user-drag: none !important;
+  pointer-events: none !important;
+}
+
+.cm-minimap-overlay {
+  background: transparent !important;
+  opacity: 1 !important;
+  -webkit-backdrop-filter: saturate(3) brightness(2) !important;
+  backdrop-filter: saturate(3) brightness(2) !important;
+  border: 1px solid rgba(210, 153, 34, 0.5) !important;
+  border-radius: 2px !important;
+  user-select: none !important;
+  -webkit-user-drag: none !important;
+}
+
+.cm-minimap-overlay-container:hover .cm-minimap-overlay {
+  border-color: var(--color-accent) !important;
+}
+
 /* ─── Drag state overlay (applied by drag-manager) ─── */
 .app-dragging .sidebar,
 .app-dragging .main-panel,

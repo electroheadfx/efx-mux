@@ -9,6 +9,7 @@
 import { render } from 'preact';
 import { effect } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import './styles/app.css';
 
@@ -20,27 +21,21 @@ import { FuzzySearch } from './components/fuzzy-search';
 import { ShortcutCheatsheet, toggleCheatsheet } from './components/shortcut-cheatsheet';
 import { FirstRunWizard, openWizard } from './components/first-run-wizard';
 import { PreferencesPanel, togglePreferences } from './components/preferences-panel';
-import { ToastContainer } from './components/toast';
+import { ToastContainer, showToast } from './components/toast';
+import { ConfirmModal, showConfirmModal } from './components/confirm-modal';
 import { initDragManager } from './drag-manager';
 import { initTheme, registerTerminal, toggleThemeMode } from './theme/theme-manager';
-import { createNewTab, closeActiveTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs, saveProjectTabs, hasProjectTabs, restoreProjectTabs } from './components/terminal-tabs';
+import { createNewTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs, saveProjectTabs, hasProjectTabs, restoreProjectTabs } from './components/terminal-tabs';
 import {
-  loadAppState, initBeforeUnload, sidebarCollapsed, updateLayout, updateSession,
+  loadAppState, saveAppState, getCurrentState, initBeforeUnload, sidebarCollapsed, updateLayout, updateSession,
   getProjects, getActiveProject, projects, activeProjectName
 } from './state-manager';
 import { openProjectModal } from './components/project-modal';
+import { openEditorTab, openEditorTabPinned, restoreEditorTabs, activeUnifiedTabId, closeUnifiedTab, suppressEditorPersist } from './components/unified-tab-bar';
 import { serverPaneState, saveCurrentProjectState, restoreProjectState } from './components/server-pane';
 import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from './components/file-tree';
 import { detectAgent } from './server/server-bridge';
-
-/**
- * Derive a tmux session name from a project name.
- * Sanitizes to alphanumeric + hyphen + underscore (matching pty.rs sanitization).
- */
-function projectSessionName(projectName: string, suffix?: string): string {
-  const base = projectName.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
-  return suffix ? `${base}-${suffix}` : base;
-}
+import { projectSessionName } from './utils/session-name';
 
 // Module-level state for terminal session tracking
 // *PtyKey = original PTY spawn session (for write_pty)
@@ -93,6 +88,7 @@ function App() {
       <FirstRunWizard />
       <PreferencesPanel />
       <ToastContainer />
+      <ConfirmModal />
     </div>
   );
 }
@@ -120,6 +116,47 @@ async function bootstrap() {
   // Wire beforeunload
   initBeforeUnload();
 
+  // Quit confirmation: intercept window X button (quick-260416-gma)
+  getCurrentWindow().onCloseRequested(async (event) => {
+    event.preventDefault();
+    showConfirmModal({
+      title: 'Quit Efxmux?',
+      message: 'Are you sure you want to quit? Active terminal sessions will be preserved by tmux.',
+      confirmLabel: 'Quit',
+      onConfirm: async () => {
+        const state = getCurrentState();
+        if (state) await saveAppState(state);
+        invoke('force_quit');
+      },
+      onCancel: () => {},
+    });
+  });
+
+  // Quit confirmation: intercept Cmd+Q / Menu > Quit (quick-260416-gma)
+  listen('quit-requested', () => {
+    showConfirmModal({
+      title: 'Quit Efxmux?',
+      message: 'Are you sure you want to quit? Active terminal sessions will be preserved by tmux.',
+      confirmLabel: 'Quit',
+      onConfirm: async () => {
+        const state = getCurrentState();
+        if (state) await saveAppState(state);
+        invoke('force_quit');
+      },
+      onCancel: () => {},
+    });
+  });
+
+  // File > Add Project (Cmd+N) menu action (quick-260416-hce)
+  listen('add-project-requested', () => {
+    openProjectModal();
+  });
+
+  // Efxmux > Preferences (Cmd+,) menu action (quick-260416-hk9)
+  listen('preferences-requested', () => {
+    togglePreferences();
+  });
+
   // Step 2: Sidebar collapsed signal effect (replaces Arrow.js watch())
   effect(() => {
     const collapsed = sidebarCollapsed.value;
@@ -135,6 +172,9 @@ async function bootstrap() {
   requestAnimationFrame(() => initDragManager());
 
   // Step 5: Init project system
+  // Suppress editor tab persist until restore completes — prevents empty-array overwrite race
+  // (activeProjectName change triggers computed → subscribe → persist empty before restore runs)
+  suppressEditorPersist(true);
   initProjects();
 
   // Step 6: Consolidated keyboard handler (D-01, D-02, UX-01)
@@ -158,6 +198,13 @@ async function bootstrap() {
         e.preventDefault(); e.stopPropagation();
         sidebarCollapsed.value = !sidebarCollapsed.value;
         break;
+      case key === 's' && e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey:
+        // Cmd+S: prevent browser Save Page dialog, dispatch save event to active editor
+        e.preventDefault();
+        if (activeUnifiedTabId.value.startsWith('editor-')) {
+          document.dispatchEvent(new CustomEvent('editor-save'));
+        }
+        break;
       case key === 's' && e.ctrlKey && !e.shiftKey && !e.altKey:
         e.preventDefault(); e.stopPropagation();
         serverPaneState.value = serverPaneState.value === 'strip' ? 'expanded' : 'strip';
@@ -172,7 +219,9 @@ async function bootstrap() {
         break;
       case key === 'w' && !e.shiftKey && !e.altKey && (e.ctrlKey || e.metaKey):
         e.preventDefault(); e.stopPropagation();
-        closeActiveTab();
+        if (activeUnifiedTabId.value) {
+          closeUnifiedTab(activeUnifiedTabId.value);
+        }
         break;
       case e.key === 'Tab' && e.ctrlKey && !e.shiftKey && !e.altKey:
         e.preventDefault(); e.stopPropagation();
@@ -216,16 +265,27 @@ async function bootstrap() {
     document.documentElement.style.setProperty('--server-pane-h', String(appState.layout['server-pane-height']));
   }
 
-  // Step 7: file-opened handler (PANEL-06)
+  // Step 7: file-opened handler -- opens editor tab as preview (EDIT-01)
   document.addEventListener('file-opened', async (e: Event) => {
     const { path, name } = (e as CustomEvent).detail;
     try {
-      const content = await invoke('read_file_content', { path });
-      document.dispatchEvent(new CustomEvent('show-file-viewer', {
-        detail: { path, name, content }
-      }));
+      const content = await invoke<string>('read_file_content', { path });
+      openEditorTab(path, name, content);
     } catch (err) {
       console.error('[efxmux] Failed to read file:', err);
+      showToast({ type: 'error', message: `Could not open file: ${name}` });
+    }
+  });
+
+  // Step 7b: file-opened-pinned handler -- opens editor tab as pinned (double-click)
+  document.addEventListener('file-opened-pinned', async (e: Event) => {
+    const { path, name } = (e as CustomEvent).detail;
+    try {
+      const content = await invoke<string>('read_file_content', { path });
+      openEditorTabPinned(path, name, content);
+    } catch (err) {
+      console.error('[efxmux] Failed to read file:', err);
+      showToast({ type: 'error', message: `Could not open file: ${name}` });
     }
   });
 
@@ -307,6 +367,12 @@ async function bootstrap() {
         terminal.focus();
       }
     }
+
+    // Restore editor tabs from persisted state
+    if (activeName) {
+      await restoreEditorTabs(activeName);
+    }
+    suppressEditorPersist(false);
 
     // Apply right-h-pct after DOM is ready
     if (appState?.layout?.['right-h-pct']) {
@@ -394,6 +460,9 @@ document.addEventListener('project-changed', async (e: Event) => {
         };
         await initFirstTab(themeOptions, newMainSession, project.path, agentBinary ?? undefined);
       }
+
+      // Restore editor tabs for the new project
+      await restoreEditorTabs(newProjectName);
 
       // Switch right panel bash terminal (silent via Rust)
       const newRightSession = projectSessionName(newProjectName, 'right');

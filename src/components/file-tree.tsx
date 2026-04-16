@@ -32,6 +32,37 @@ const selectedIndex = signal(0);
 const currentPath = signal('');
 const loaded = signal(false);
 
+// ── Click timer for single-click vs double-click distinction ─────
+let fileClickTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingClickEntry: { path: string; name: string } | null = null;
+
+function handleFileClick(path: string, name: string): void {
+  // If a timer is already pending for the SAME file, this is a double-click
+  if (fileClickTimer && pendingClickEntry?.path === path) {
+    clearTimeout(fileClickTimer);
+    fileClickTimer = null;
+    pendingClickEntry = null;
+    document.dispatchEvent(new CustomEvent('file-opened-pinned', {
+      detail: { path, name }
+    }));
+    return;
+  }
+
+  // Clear any pending timer for a different file
+  if (fileClickTimer) {
+    clearTimeout(fileClickTimer);
+  }
+
+  pendingClickEntry = { path, name };
+  fileClickTimer = setTimeout(() => {
+    fileClickTimer = null;
+    pendingClickEntry = null;
+    document.dispatchEvent(new CustomEvent('file-opened', {
+      detail: { path, name }
+    }));
+  }, 250); // 250ms window for double-click detection
+}
+
 // ── Tree mode state ──────────────────────────────────────────────
 
 interface TreeNode {
@@ -42,6 +73,7 @@ interface TreeNode {
 }
 
 const treeNodes = signal<TreeNode[]>([]);
+const pendingRevealPath = signal<string>('');
 
 /**
  * Flatten expanded tree nodes into a render list.
@@ -112,6 +144,13 @@ async function initTree(): Promise<void> {
       depth: 0,
     }));
     selectedIndex.value = 0;
+
+    // Execute any pending reveal that was deferred because tree wasn't loaded
+    if (pendingRevealPath.value) {
+      const pathToReveal = pendingRevealPath.value;
+      pendingRevealPath.value = '';
+      await revealFileInTree(pathToReveal);
+    }
   } catch (err) {
     console.error('[efxmux] tree init failed:', err);
     treeNodes.value = [];
@@ -279,6 +318,67 @@ function openEntry(entry: FileEntry): void {
 }
 
 /**
+ * Reveal a file in the tree by expanding folders along its path and selecting it.
+ * Used by editor tab click to show where a file lives in the tree.
+ */
+export async function revealFileInTree(filePath: string): Promise<void> {
+  const project = getActiveProject();
+  if (!project?.path) return;
+
+  const rootPath = project.path;
+  // Compute relative path from project root
+  if (!filePath.startsWith(rootPath)) return;
+  const relative = filePath.slice(rootPath.length).replace(/^\//, '');
+  const segments = relative.split('/');
+
+  if (viewMode.value === 'tree') {
+    // If tree not loaded yet, defer the reveal until initTree completes
+    if (treeNodes.value.length === 0) {
+      pendingRevealPath.value = filePath;
+      return;
+    }
+    // Walk tree from root, expanding each folder segment
+    let currentNodes = treeNodes.value;
+    for (let i = 0; i < segments.length - 1; i++) {
+      const folderName = segments[i];
+      const folderNode = currentNodes.find(n => n.entry.is_dir && n.entry.name === folderName);
+      if (!folderNode) return; // folder not found in tree
+      if (!folderNode.expanded) {
+        await toggleTreeNode(folderNode);
+      } else if (folderNode.children === null) {
+        await loadTreeChildren(folderNode);
+      }
+      currentNodes = folderNode.children ?? [];
+    }
+
+    // Find the target file in the flattened list and select it
+    const flat = flattenedTree.value;
+    const targetName = segments[segments.length - 1];
+    const targetIdx = flat.findIndex(n => n.entry.name === targetName && n.entry.path === filePath);
+    if (targetIdx >= 0) {
+      selectedIndex.value = targetIdx;
+      // Scroll into view after a tick to allow DOM to update
+      requestAnimationFrame(() => {
+        document.dispatchEvent(new CustomEvent('file-tree-scroll-to-selected'));
+      });
+    }
+  } else {
+    // Flat mode: navigate to file's parent directory
+    const parentPath = filePath.split('/').slice(0, -1).join('/');
+    await loadDir(parentPath);
+    // Find file in entries
+    const targetName = segments[segments.length - 1];
+    const idx = entries.value.findIndex(e => e.name === targetName && e.path === filePath);
+    if (idx >= 0) {
+      selectedIndex.value = idx;
+      requestAnimationFrame(() => {
+        document.dispatchEvent(new CustomEvent('file-tree-scroll-to-selected'));
+      });
+    }
+  }
+}
+
+/**
  * FileTree component.
  * Renders a navigable file tree for the active project directory.
  * Supports flat mode (drill-down) and tree mode (collapsible hierarchy).
@@ -298,6 +398,16 @@ export function FileTree() {
     }
     document.addEventListener('project-changed', handleProjectChanged);
 
+    // Scroll-to-selected handler for revealFileInTree
+    function handleScrollToSelected() {
+      const idx = selectedIndex.value;
+      const el = document.querySelector(`[data-file-tree-index="${idx}"]`);
+      if (el) {
+        el.scrollIntoView({ block: 'nearest' });
+      }
+    }
+    document.addEventListener('file-tree-scroll-to-selected', handleScrollToSelected);
+
     // Initial load
     const project = getActiveProject();
     if (project && project.path) {
@@ -309,6 +419,7 @@ export function FileTree() {
 
     return () => {
       document.removeEventListener('project-changed', handleProjectChanged);
+      document.removeEventListener('file-tree-scroll-to-selected', handleScrollToSelected);
     };
   }, []);
 
@@ -478,8 +589,16 @@ export function FileTree() {
               return (
                 <div
                   key={entry.path}
+                  data-file-tree-index={i}
                   style={{ padding: `${fileTreeLineHeight.value}px 12px`, gap: 8, display: 'flex', alignItems: 'center', cursor: 'pointer', backgroundColor: isSelected ? colors.bgElevated : 'transparent' }}
-                  onClick={() => { selectedIndex.value = i; openEntry(entry); }}
+                  onClick={() => {
+                    selectedIndex.value = i;
+                    if (entry.is_dir) {
+                      loadDir(entry.path);
+                    } else {
+                      handleFileClick(entry.path, entry.name);
+                    }
+                  }}
                   onMouseEnter={() => { selectedIndex.value = i; }}
                 >
                   {entry.is_dir
@@ -512,6 +631,7 @@ export function FileTree() {
               return (
                 <div
                   key={node.entry.path + '-' + node.depth}
+                  data-file-tree-index={i}
                   style={{
                     padding: `${fileTreeLineHeight.value}px 12px`,
                     paddingLeft,
@@ -526,9 +646,7 @@ export function FileTree() {
                     if (node.entry.is_dir) {
                       toggleTreeNode(node);
                     } else {
-                      document.dispatchEvent(new CustomEvent('file-opened', {
-                        detail: { path: node.entry.path, name: node.entry.name }
-                      }));
+                      handleFileClick(node.entry.path, node.entry.name);
                     }
                   }}
                   onMouseEnter={() => { selectedIndex.value = i; }}

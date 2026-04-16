@@ -202,7 +202,7 @@ export function PreferencesPanel() {
               color: colors.textPrimary,
             }}
           >
-            Preferences
+            Settings
           </span>
           <button
             onClick={closePreferences}

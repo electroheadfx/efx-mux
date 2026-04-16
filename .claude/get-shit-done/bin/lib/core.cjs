@@ -259,7 +259,7 @@ const CONFIG_DEFAULTS = {
   text_mode: false, // when true, use plain-text numbered lists instead of AskUserQuestion menus
   sub_repos: [],
   resolve_model_ids: false, // false: return alias as-is | true: map to full Claude model ID | "omit": return '' (runtime uses its default)
-  context_window: 200000, // default 200k; set to 1000000 for Opus/Sonnet 4.6 1M models
+  context_window: 200000, // default 200k; set to 1000000 for Opus 4.7/Sonnet 4.6 1M models
   phase_naming: 'sequential', // 'sequential' (default, auto-increment) or 'custom' (arbitrary string IDs)
   project_code: null, // optional short prefix for phase dirs (e.g., 'CK' → 'CK-01-foundation')
   subagent_timeout: 300000, // 5 min default; increase for large codebases or slower models (ms)
@@ -1335,7 +1335,7 @@ function checkAgentsInstalled() {
  * Users can override with model_overrides in config.json for custom/latest models.
  */
 const MODEL_ALIAS_MAP = {
-  'opus': 'claude-opus-4-6',
+  'opus': 'claude-opus-4-7',
   'sonnet': 'claude-sonnet-4-6',
   'haiku': 'claude-haiku-4-5',
 };
