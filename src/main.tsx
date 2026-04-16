@@ -139,6 +139,11 @@ async function bootstrap() {
     });
   });
 
+  // File > Add Project (Cmd+N) menu action (quick-260416-hce)
+  listen('add-project-requested', () => {
+    openProjectModal();
+  });
+
   // Step 2: Sidebar collapsed signal effect (replaces Arrow.js watch())
   effect(() => {
     const collapsed = sidebarCollapsed.value;
