@@ -21,7 +21,9 @@ import {
 } from './terminal-tabs';
 import { writeFile, readFile } from '../services/file-service';
 import { getEditorCurrentContent, minimapVisible, toggleMinimap } from '../editor/setup';
-import { activeProjectName, updateSession, getCurrentState } from '../state-manager';
+import { activeProjectName, rightTopTab, updateSession, getCurrentState } from '../state-manager';
+import { leftSidebarActiveTab } from './sidebar';
+import { revealFileInTree } from './file-tree';
 
 // ── Tab Type System ─────────────────────────────────────────────────────────────
 
@@ -111,6 +113,10 @@ export const tabOrder = computed<string[]>(() => {
 export const gitChangesTab = signal<GitChangesTabData | null>(null);
 export const activeUnifiedTabId = signal<string>('');
 const renamingTabId = signal<string>('');
+
+// ── Tab label click timer (single-click reveal vs double-click rename) ────────
+let tabLabelClickTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingTabLabelClick: string | null = null;
 
 /** Combined tab list: terminals from terminalTabs + editors + git changes */
 export const allTabs = computed<UnifiedTab[]>(() => {
@@ -1018,10 +1024,43 @@ function renderTab(
             whiteSpace: 'nowrap',
             fontStyle: isUnpinnedEditor ? 'italic' : 'normal',
           }}
-          onDblClick={(e: MouseEvent) => {
+          onClick={(e: MouseEvent) => {
             e.stopPropagation();
-            e.preventDefault();
-            renamingTabId.value = tab.id;
+            // Always switch to this tab first
+            onClick(tab);
+
+            // Double-click detection: if timer pending for same tab, it's a double-click
+            if (tabLabelClickTimer && pendingTabLabelClick === tab.id) {
+              clearTimeout(tabLabelClickTimer);
+              tabLabelClickTimer = null;
+              pendingTabLabelClick = null;
+              renamingTabId.value = tab.id;
+              return;
+            }
+
+            // Clear any pending timer for a different tab
+            if (tabLabelClickTimer) {
+              clearTimeout(tabLabelClickTimer);
+            }
+
+            pendingTabLabelClick = tab.id;
+            tabLabelClickTimer = setTimeout(() => {
+              tabLabelClickTimer = null;
+              pendingTabLabelClick = null;
+
+              // Only reveal for editor tabs
+              if (tab.type !== 'editor') return;
+
+              const leftHasFiles = leftSidebarActiveTab.value === 'files';
+              const rightHasFiles = rightTopTab.value === 'File Tree';
+
+              if (!leftHasFiles && !rightHasFiles) {
+                // Neither has Files tab active -- open Files in left sidebar
+                leftSidebarActiveTab.value = 'files';
+              }
+              // Reveal in tree
+              revealFileInTree(tab.filePath);
+            }, 250);
           }}
         >
           {label}
