@@ -550,7 +550,9 @@ function onTabMouseDown(e: MouseEvent, tabId: string): void {
   if (e.button !== 0) return;
   const target = e.currentTarget as HTMLElement;
   // Don't start drag from the close button
-  if ((e.target as HTMLElement).closest('[title="Close tab"]')) return;
+  if ((e.target as HTMLElement).closest('[title="Close tab"]') ||
+      (e.target as HTMLElement).closest('[title="Pin tab"]') ||
+      (e.target as HTMLElement).closest('[title="Unpin tab"]')) return;
 
   // Prevent text selection during drag
   e.preventDefault();
@@ -809,21 +811,28 @@ function renderTab(
   } else if (tab.type === 'editor') {
     label = tab.fileName;
     tabTitle = tab.filePath;
-    if (tab.pinned) {
-      indicator = <Pin size={12} style={{ color: colors.accent, flexShrink: 0 }} />;
-    } else if (tab.dirty) {
-      indicator = (
-        <span
+    indicator = (
+      <span
+        class="flex items-center justify-center"
+        style={{
+          cursor: 'pointer',
+          flexShrink: 0,
+        }}
+        onClick={(e: MouseEvent) => {
+          e.stopPropagation();
+          togglePinEditorTab(tab.id);
+        }}
+        title={tab.pinned ? 'Unpin tab' : 'Pin tab'}
+      >
+        <Pin
+          size={12}
           style={{
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
-            backgroundColor: colors.statusYellow,
-            flexShrink: 0,
+            color: tab.pinned ? colors.accent : colors.textDim,
+            transition: 'color 0.15s ease',
           }}
         />
-      );
-    }
+      </span>
+    );
   } else {
     // git-changes
     label = 'Git Changes';
@@ -863,12 +872,6 @@ function renderTab(
           pinEditorTab(tab.id);
         }
       }}
-      onContextMenu={(e: MouseEvent) => {
-        if (tab.type === 'editor') {
-          e.preventDefault();
-          togglePinEditorTab(tab.id);
-        }
-      }}
       title={tabTitle}
       onMouseDown={e => onTabMouseDown(e, tab.id)}
     >
@@ -883,6 +886,17 @@ function renderTab(
       >
         {label}
       </span>
+      {tab.type === 'editor' && !tab.pinned && tab.dirty && (
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: '50%',
+            backgroundColor: colors.statusYellow,
+            flexShrink: 0,
+          }}
+        />
+      )}
       <span
         class="ml-1 flex items-center justify-center"
         style={{ color: colors.textDim, fontSize: 14 }}
