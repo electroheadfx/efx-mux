@@ -73,6 +73,7 @@ interface TreeNode {
 }
 
 const treeNodes = signal<TreeNode[]>([]);
+const pendingRevealPath = signal<string>('');
 
 /**
  * Flatten expanded tree nodes into a render list.
@@ -143,6 +144,13 @@ async function initTree(): Promise<void> {
       depth: 0,
     }));
     selectedIndex.value = 0;
+
+    // Execute any pending reveal that was deferred because tree wasn't loaded
+    if (pendingRevealPath.value) {
+      const pathToReveal = pendingRevealPath.value;
+      pendingRevealPath.value = '';
+      await revealFileInTree(pathToReveal);
+    }
   } catch (err) {
     console.error('[efxmux] tree init failed:', err);
     treeNodes.value = [];
@@ -324,6 +332,11 @@ export async function revealFileInTree(filePath: string): Promise<void> {
   const segments = relative.split('/');
 
   if (viewMode.value === 'tree') {
+    // If tree not loaded yet, defer the reveal until initTree completes
+    if (treeNodes.value.length === 0) {
+      pendingRevealPath.value = filePath;
+      return;
+    }
     // Walk tree from root, expanding each folder segment
     let currentNodes = treeNodes.value;
     for (let i = 0; i < segments.length - 1; i++) {
