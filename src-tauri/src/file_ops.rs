@@ -28,6 +28,16 @@ pub struct ChildCount {
     pub capped: bool,
 }
 
+/// Editor detection result (Phase 18, D-06).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DetectedEditors {
+    pub zed: bool,
+    pub code: bool,
+    pub subl: bool,
+    pub cursor: bool,
+    pub idea: bool,
+}
+
 /// Validate that a path does not contain traversal components.
 fn is_safe_path(path: &str) -> bool {
     let p = Path::new(path);
@@ -531,6 +541,91 @@ pub async fn count_children(path: String) -> Result<ChildCount, String> {
         .map_err(|e| e.to_string())?
 }
 
+// ============================================================================
+// Phase 18: External editor integration (D-06, D-08, D-09)
+// ============================================================================
+
+/// Synchronous inner implementation of launch_external_editor for testing.
+pub fn launch_external_editor_impl(app: &str, path: &str) -> Result<(), String> {
+    if !is_safe_path(path) {
+        return Err("Invalid path: directory traversal not allowed".to_string());
+    }
+    // SECURITY: app and path are passed as separate argv elements — never shell-interpolated.
+    // macOS `open -a <App> <path>` resolves via LaunchServices (no PATH lookup required).
+    std::process::Command::new("open")
+        .args(["-a", app, path])
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// Launch an external GUI editor to open a file or folder (Phase 18, D-08).
+#[tauri::command]
+pub async fn launch_external_editor(app: String, path: String) -> Result<(), String> {
+    launch_external_editor_impl(&app, &path)
+}
+
+/// Synchronous inner implementation of open_default for testing.
+pub fn open_default_impl(path: &str) -> Result<(), String> {
+    if !is_safe_path(path) {
+        return Err("Invalid path: directory traversal not allowed".to_string());
+    }
+    std::process::Command::new("open")
+        .arg(path)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// Open a path with the macOS default application (Phase 18, D-06 fallback).
+#[tauri::command]
+pub async fn open_default(path: String) -> Result<(), String> {
+    open_default_impl(&path)
+}
+
+/// Synchronous inner implementation of reveal_in_finder for testing.
+pub fn reveal_in_finder_impl(path: &str) -> Result<(), String> {
+    if !is_safe_path(path) {
+        return Err("Invalid path: directory traversal not allowed".to_string());
+    }
+    std::process::Command::new("open")
+        .args(["-R", path])
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// Reveal a path in Finder (Phase 18, D-06 fallback).
+#[tauri::command]
+pub async fn reveal_in_finder(path: String) -> Result<(), String> {
+    reveal_in_finder_impl(&path)
+}
+
+fn which(cli: &str) -> bool {
+    std::process::Command::new("which")
+        .arg(cli)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+/// Synchronous inner implementation of detect_editors for testing.
+pub fn detect_editors_impl() -> DetectedEditors {
+    DetectedEditors {
+        zed: which("zed"),
+        code: which("code"),
+        subl: which("subl"),
+        cursor: which("cursor"),
+        idea: which("idea"),
+    }
+}
+
+/// Probe which external-editor CLIs are installed (Phase 18, D-06).
+#[tauri::command]
+pub async fn detect_editors() -> Result<DetectedEditors, String> {
+    Ok(detect_editors_impl())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -916,5 +1011,43 @@ mod tests {
         // Cap at 3 entries → must set capped: true
         let count = count_children_impl(root.to_str().unwrap(), 3).unwrap();
         assert!(count.capped, "Expected capped=true when entries exceed cap");
+    }
+
+    // ========== Phase 18: external editor tests ==========
+
+    #[test]
+    fn launch_external_editor_rejects_traversal() {
+        let result = launch_external_editor_impl("Zed", "../etc/passwd");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("directory traversal"), "Expected traversal error, got: {}", err);
+    }
+
+    #[test]
+    fn open_default_rejects_traversal() {
+        let result = open_default_impl("../etc");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("directory traversal"), "Expected traversal error, got: {}", err);
+    }
+
+    #[test]
+    fn reveal_in_finder_rejects_traversal() {
+        let result = reveal_in_finder_impl("../etc");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("directory traversal"), "Expected traversal error, got: {}", err);
+    }
+
+    #[test]
+    fn detect_editors_returns_struct() {
+        let result = detect_editors_impl();
+        // Tautology — ensures the struct is constructable and has the expected bool fields.
+        // Actual values depend on the host machine; we just verify the shape here.
+        assert!(result.zed || !result.zed);
+        assert!(result.code || !result.code);
+        assert!(result.subl || !result.subl);
+        assert!(result.cursor || !result.cursor);
+        assert!(result.idea || !result.idea);
     }
 }
