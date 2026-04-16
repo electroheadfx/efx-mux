@@ -261,11 +261,14 @@ Message formatting (frontend): `Delete 'src/components' (12 items)?` or capped: 
 6. **External editor launch (TREE-03):** `Command::new("open").args(["-a", ...]).spawn()` returns `Ok`; exit code 0 within 2s (non-blocking — don't `.wait()`). On failure, toast shows app name.
 7. **Conflict abort (D-20):** Attempting `copy_path` where target exists → returns `Err` without touching filesystem; toast displayed; no partial target left behind.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Submenu keyboard nav priority** — ArrowRight/ArrowLeft for submenu entry/exit adds ~30 lines of state. Worth it for v1, or defer? Claude's discretion per CONTEXT.md — recommend: defer if schedule-critical, include if budget allows.
-2. **Which `file-tree-refresh` pattern** — CustomEvent on document vs. reuse existing `git-status-changed` Tauri event. The latter is simpler but conflates meanings. Not blocking; planner can decide.
-3. **Count-children cap value (10k)** — is that too aggressive for monorepos? 50k would cover most, but `.git` alone can have 30k loose objects. Counter-arg: 10k is already past the point where "N items" stops being useful; "10000+" conveys the same "a lot" signal.
+1. **Submenu keyboard nav priority** — ArrowRight/ArrowLeft for submenu entry/exit adds ~30 lines of state. Worth it for v1, or defer?
+   **RESOLVED:** Included in v1. Plan 18-02 Task 1 Step 7 implements ArrowRight (enter submenu, focus first child) and ArrowLeft (exit back to parent item).
+2. **Which `file-tree-refresh` pattern** — CustomEvent on document vs. reuse existing `git-status-changed` Tauri event.
+   **RESOLVED:** Reuse `git-status-changed`. Plan 18-03 Task 1 Step 8 wires the existing Tauri event listener into file-tree.tsx; all new Rust FS commands (`create_folder`, `copy_path`, etc.) emit the same event post-success, matching `file-service.ts:34` pattern.
+3. **Count-children cap value (10k)** — is that too aggressive for monorepos? 50k would cover most, but `.git` alone can have 30k loose objects.
+   **RESOLVED:** 10k cap kept. Plan 18-01 Task 1 hardcodes `cap = 10_000` and returns `{capped: true}` when hit; UI displays "10000+ items" for capped cases — preserves the "a lot" signal without hanging on `node_modules` / `.git`.
 
 ---
 
