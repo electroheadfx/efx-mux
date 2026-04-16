@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 Phase: 17 (main-panel-file-tabs) — EXECUTING
 Plan: 1 of 5
 Status: Executing Phase 17
-Last activity: 2026-04-16 - Completed quick task 260416-l12: lock minimap drag to vertical only
+Last activity: 2026-04-16 - Completed quick task 260416-lgy: Fix right sidebar terminal tab not selected by default + add separator
 
 **Code review fixes pending (non-blocking):**
 
@@ -100,6 +100,7 @@ None.
 | 260416-jvl | Minimap UX: disable text selection, add hide/show toggle icon to tab bar | 2026-04-16 |
 | 260416-k7j | Sticky right tab actions, minimap overlay colors, full selection disable | 2026-04-16 |
 | 260416-l12 | Lock minimap drag to vertical only — prevent horizontal drag | 2026-04-16 |
+| 260416-lgy | Fix right sidebar terminal tab not selected by default + add separator | 2026-04-16 |
 
 ## Session Continuity
 
