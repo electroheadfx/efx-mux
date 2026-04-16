@@ -268,7 +268,10 @@ function persistEditorTabs(): void {
   // fires with [] before restoreEditorTabs runs (activeProjectName set triggers
   // recompute on empty _editorTabsByProject Map)
   if (tabs.length === 0) return;
-  const data = JSON.stringify({ tabs, activeTabId: activeUnifiedTabId.value });
+  // Save active file path (not tab ID which gets regenerated on restore)
+  const activeTab = editorTabs.value.find(t => t.id === activeUnifiedTabId.value);
+  const activeFilePath = activeTab?.filePath ?? '';
+  const data = JSON.stringify({ tabs, activeTabId: activeUnifiedTabId.value, activeFilePath });
   const patch: Record<string, string> = { 'editor-tabs': data };
   if (activeName) {
     patch[`editor-tabs:${activeName}`] = data;
@@ -309,9 +312,13 @@ export async function restoreEditorTabs(projectName: string): Promise<boolean> {
     }
   }
 
-  // Restore active tab selection
-  if (parsed.activeTabId) {
-    activeUnifiedTabId.value = parsed.activeTabId;
+  // Restore active tab by file path (tab IDs are regenerated on restore)
+  const activePath = (parsed as any).activeFilePath;
+  if (activePath) {
+    const match = editorTabs.value.find(t => t.filePath === activePath);
+    if (match) {
+      activeUnifiedTabId.value = match.id;
+    }
   }
   return true;
 }
