@@ -1,13 +1,42 @@
 // editor/setup.ts -- CodeMirror 6 EditorState factory
 // Built per D-06
 
-import { EditorState, type Extension } from '@codemirror/state';
+import { EditorState, Compartment, type Extension } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { basicSetup } from 'codemirror';
 import { syntaxHighlighting } from '@codemirror/language';
 import { efxmuxTheme, efxmuxHighlightStyle } from './theme';
 import { getLanguageExtension } from './languages';
 import { showMinimap } from '@replit/codemirror-minimap';
+import { signal } from '@preact/signals';
+
+// ── Minimap Compartment ───────────────────────────────────────────────────────
+
+const minimapCompartment = new Compartment();
+
+/** Signal controlling minimap visibility across all editor views */
+export const minimapVisible = signal(true);
+
+/** Helper: returns the minimap extension configuration */
+function minimapExtension(): Extension {
+  return showMinimap.compute(['doc'], () => ({
+    create: () => ({ dom: document.createElement('div') }),
+    displayText: 'blocks',
+    showOverlay: 'always',
+  }));
+}
+
+/** Toggle minimap visibility on all open editor views */
+export function toggleMinimap(): void {
+  minimapVisible.value = !minimapVisible.value;
+  editorViewMap.forEach((view) => {
+    view.dispatch({
+      effects: minimapCompartment.reconfigure(
+        minimapVisible.value ? minimapExtension() : [],
+      ),
+    });
+  });
+}
 
 // ── Options Interface ─────────────────────────────────────────────────────────
 
@@ -101,11 +130,7 @@ export function createEditorState(
         options.onDirtyChange(update.state.doc.toString() !== savedContent);
       }
     }),
-    showMinimap.compute(['doc'], () => ({
-      create: () => ({ dom: document.createElement('div') }),
-      displayText: 'blocks',
-      showOverlay: 'always',
-    })),
+    minimapCompartment.of(minimapVisible.value ? minimapExtension() : []),
   ];
 
   const state = EditorState.create({ doc: content, extensions });

@@ -52,9 +52,14 @@ export const efxmuxTheme = EditorView.theme(
     '.cm-minimap': {
       width: '60px !important',
       minWidth: '60px !important',
+      userSelect: 'none',
+      WebkitUserSelect: 'none',
     },
     '.cm-minimap .cm-minimap-inner': {
       width: '60px !important',
+      userSelect: 'none',
+      WebkitUserSelect: 'none',
+      pointerEvents: 'none',
     },
   },
   { dark: true },
