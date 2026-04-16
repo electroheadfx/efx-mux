@@ -333,7 +333,7 @@ function CollapsibleSection({
   children: preact.ComponentChildren;
 }) {
   return (
-    <div>
+    <div style={{ userSelect: 'none', WebkitUserSelect: 'none' }}>
       <div
         onClick={onToggle}
         style={{
@@ -342,7 +342,6 @@ function CollapsibleSection({
           gap: spacing.xl,
           padding: `${spacing.md}px ${spacing.xl}px`,
           cursor: 'pointer',
-          userSelect: 'none',
         }}
       >
         {isOpen ? (
@@ -413,7 +412,7 @@ function GitFileRow({
         padding: `${spacing.sm}px ${spacing.xl}px`,
         cursor: 'pointer',
         backgroundColor: 'transparent',
-        userSelect: 'none',
+        userSelect: 'none', WebkitUserSelect: 'none',
       }}
     >
       {/* Checkbox for stage/unstage */}
@@ -543,7 +542,7 @@ function HistoryEntry({ entry }: { entry: GitCommitEntry }) {
         gap: spacing.xl,
         padding: `${spacing.sm}px ${spacing.xl}px`,
         backgroundColor: 'transparent',
-        userSelect: 'none',
+        userSelect: 'none', WebkitUserSelect: 'none',
       }}
       onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = colors.bgElevated; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
@@ -619,7 +618,7 @@ function GitLogPanel() {
           top: 0,
           backgroundColor: colors.bgSurface,
           zIndex: 1,
-          userSelect: 'none',
+          userSelect: 'none', WebkitUserSelect: 'none',
         }}
       >
         <span
@@ -742,7 +741,7 @@ export function GitControlTab() {
           borderBottom: `1px solid ${colors.bgBorder}`,
           gap: spacing.xl,
           flexShrink: 0,
-          userSelect: 'none',
+          userSelect: 'none', WebkitUserSelect: 'none',
         }}
       >
         {/* Left: change summary */}
@@ -895,21 +894,26 @@ export function GitControlTab() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: `${spacing.sm}px`,
           padding: `${spacing.md}px ${spacing.xl}px`,
           borderTop: `1px solid ${colors.bgBorder}`,
           flexShrink: 0,
-          userSelect: 'none',
+          userSelect: 'none', WebkitUserSelect: 'none',
         }}
       >
         {/* Left: branch info */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: spacing.md }}>
-          <GitBranch size={12} style={{ color: colors.textDim }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: spacing.md, minWidth: 0 }}>
+          <GitBranch size={12} style={{ color: colors.textDim, flexShrink: 0 }} />
           <span
             style={{
               fontFamily: fonts.mono,
               fontSize: fontSizes.base,
               fontWeight: 600,
               color: colors.textSecondary,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
             }}
           >
             {branchName.value || 'main'}
@@ -1002,7 +1006,7 @@ export function GitControlTab() {
           padding: `${spacing.sm}px ${spacing.xl}px`,
           borderTop: `1px solid ${colors.bgBorder}`,
           flexShrink: 0,
-          userSelect: 'none',
+          userSelect: 'none', WebkitUserSelect: 'none',
         }}
       >
         {/* Left: pencil icon */}
@@ -1064,7 +1068,7 @@ export function GitControlTab() {
           borderTop: `1px solid ${colors.bgBorder}`,
           backgroundColor: colors.bgDeep,
           flexShrink: 0,
-          userSelect: 'none',
+          userSelect: 'none', WebkitUserSelect: 'none',
         }}
       >
         {/* Left: last commit message */}
