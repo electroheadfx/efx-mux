@@ -113,8 +113,8 @@ Plans:
   6. User can create new file from folder context in file tree
 **Plans**: 5 plans
 Plans:
-  - [ ] 18-01-PLAN.md -- Rust file ops + external editor + file-service wrappers (Wave 1)
-  - [ ] 18-02-PLAN.md -- ContextMenu submenu extension + tauri.conf dragDropEnabled (Wave 1)
+  - [x] 18-01-PLAN.md -- Rust file ops + external editor + file-service wrappers (Wave 1)
+  - [x] 18-02-PLAN.md -- ContextMenu submenu extension + tauri.conf dragDropEnabled (Wave 1)
   - [ ] 18-03-PLAN.md -- File tree context menu, Delete flow, InlineCreateRow (Wave 2)
   - [ ] 18-04-PLAN.md -- Open In submenu + header [+] and Open In buttons (Wave 3)
   - [ ] 18-05-PLAN.md -- Intra-tree drag + Finder drop import (Wave 4)
@@ -180,7 +180,7 @@ Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21
 | 15. Foundation Primitives | v0.3.0 | 2/2 | Complete    | 2026-04-14 |
 | 16. Sidebar Evolution + Git Control | v0.3.0 | 4/4 | Complete   | 2026-04-15 |
 | 17. Main Panel File Tabs | v0.3.0 | 5/5 | Complete   | 2026-04-15 |
-| 18. File Tree Enhancements | v0.3.0 | 0/5 | Planning complete | - |
+| 18. File Tree Enhancements | v0.3.0 | 2/5 | In Progress|  |
 | 19. GSD Sub-Tabs | v0.3.0 | 0/? | Not started | - |
 | 20. Right Panel Multi-Terminal | v0.3.0 | 0/? | Not started | - |
 | 21. Bug Fix Sprint | v0.3.0 | 0/? | Not started | - |
