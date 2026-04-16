@@ -511,3 +511,114 @@ describe('finder drop', () => {
     expect(scrollContainer.style.outline).toBe('none');
   });
 });
+
+// ── Phase 18 quick-260416-uig: hover vs. click selection + userSelect ────────
+
+describe('hover vs. click selection', () => {
+  beforeEach(() => {
+    projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'claude' }];
+    detectedEditors.value = null;
+    activeProjectName.value = 'testproj';
+    fileTreeFontSize.value = 13;
+    fileTreeLineHeight.value = 2;
+
+    mockIPC((cmd, args) => {
+      if (cmd === 'list_directory') {
+        // Return empty for any subdirectory (e.g. /tmp/proj/src) so tree mode
+        // doesn't recurse further than the top-level MOCK_ENTRIES.
+        const path = (args as { path?: string })?.path;
+        if (path && path !== '/tmp/proj') return [];
+        return MOCK_ENTRIES;
+      }
+      if (cmd === 'detect_editors') return { zed: false, code: false, subl: false, cursor: false, idea: false };
+      return null;
+    });
+
+    vi.stubGlobal('listen', vi.fn().mockResolvedValue(vi.fn()));
+  });
+
+  async function switchToFlat(): Promise<void> {
+    const flatToggle = document.querySelector('span[title="Flat mode"]') as HTMLElement | null;
+    expect(flatToggle).not.toBeNull();
+    fireEvent.click(flatToggle!);
+    await new Promise(r => setTimeout(r, 20));
+  }
+
+  // Locate the filename span inside a given row. The row's structure is
+  //   <div data-file-tree-index=...><icon/><span style="...color...">name</span>[<span size>]</span>
+  // (tree mode prepends chevron/spacer spans; we want the `flex:1` filename span).
+  function nameSpan(row: HTMLElement): HTMLElement {
+    const spans = row.querySelectorAll('span');
+    for (const s of Array.from(spans)) {
+      if ((s as HTMLElement).style.color) return s as HTMLElement;
+    }
+    return spans[spans.length - 1] as HTMLElement;
+  }
+
+  it('flat mode: click-selected row keeps textPrimary color while hovering another row', async () => {
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+    await switchToFlat();
+    let rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(rows.length).toBeGreaterThan(2);
+    // rows[1] (README.md) and rows[2] (index.ts) are files — clicking a file
+    // does NOT navigate (unlike clicking a directory), so the row list stays stable.
+    fireEvent.click(rows[1]);
+    await new Promise(r => setTimeout(r, 20));
+    rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(nameSpan(rows[1]).style.color).toMatch(/rgb\(230, ?237, ?243\)|#E6EDF3/i);
+    // Hover row 2 -> row 1 filename MUST STILL be textPrimary (bug-3 regression)
+    fireEvent.mouseEnter(rows[2]);
+    await new Promise(r => setTimeout(r, 20));
+    rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(nameSpan(rows[1]).style.color).toMatch(/rgb\(230, ?237, ?243\)|#E6EDF3/i);
+    // Row 2 (hovered but not click-selected) should be textMuted
+    expect(nameSpan(rows[2]).style.color).toMatch(/rgb\(139, ?148, ?158\)|#8B949E/i);
+  });
+
+  it('flat mode: click-selected row retains bgElevated background after mouse leaves', async () => {
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+    await switchToFlat();
+    let rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(rows.length).toBeGreaterThan(2);
+    fireEvent.click(rows[1]);
+    await new Promise(r => setTimeout(r, 20));
+    rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(rows[1].style.backgroundColor).toMatch(/rgb\(25, ?36, ?58\)|#19243A/i);
+    // Hover then leave row 2; re-read row 1 after each signal-driven re-render
+    fireEvent.mouseEnter(rows[2]);
+    await new Promise(r => setTimeout(r, 20));
+    fireEvent.mouseLeave(rows[2]);
+    await new Promise(r => setTimeout(r, 20));
+    rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(rows[1].style.backgroundColor).toMatch(/rgb\(25, ?36, ?58\)|#19243A/i);
+  });
+
+  it('flat mode: row has userSelect:none to prevent text selection on right-click', async () => {
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+    await switchToFlat();
+    const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(rows.length).toBeGreaterThan(0);
+    // Preact normalises inline style camelCase keys; value must be 'none'
+    expect(rows[0].style.userSelect).toBe('none');
+  });
+
+  it('tree mode: click-selected row keeps textPrimary color while hovering another row', async () => {
+    render(<FileTree />);
+    // Tree mode is default. Allow slightly longer for initTree() to complete.
+    await new Promise(r => setTimeout(r, 80));
+    let rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(rows.length).toBeGreaterThan(2);
+    // Click rows[1] (README.md, file) — does not toggle a folder, tree stays stable.
+    fireEvent.click(rows[1]);
+    await new Promise(r => setTimeout(r, 20));
+    rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(nameSpan(rows[1]).style.color).toMatch(/rgb\(230, ?237, ?243\)|#E6EDF3/i);
+    fireEvent.mouseEnter(rows[2]);
+    await new Promise(r => setTimeout(r, 20));
+    rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(nameSpan(rows[1]).style.color).toMatch(/rgb\(230, ?237, ?243\)|#E6EDF3/i);
+  });
+});
