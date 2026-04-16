@@ -63,11 +63,13 @@ export const efxmuxTheme = EditorView.theme(
       width: '60px !important',
     },
     '.cm-minimap .cm-minimap-overlay': {
-      backgroundColor: `${colors.accent}99 !important`,
-      transition: 'background-color 0.15s ease',
+      background: `${colors.accent} !important`,
+      opacity: '0.35 !important',
+      transition: 'background 0.15s ease, opacity 0.15s ease',
     },
     '.cm-minimap .cm-minimap-overlay-container:hover .cm-minimap-overlay': {
-      backgroundColor: '#D29922CC !important',
+      background: '#D29922 !important',
+      opacity: '0.5 !important',
     },
   },
   { dark: true },
