@@ -461,6 +461,9 @@ document.addEventListener('project-changed', async (e: Event) => {
         await initFirstTab(themeOptions, newMainSession, project.path, agentBinary ?? undefined);
       }
 
+      // Restore editor tabs for the new project
+      await restoreEditorTabs(newProjectName);
+
       // Switch right panel bash terminal (silent via Rust)
       const newRightSession = projectSessionName(newProjectName, 'right');
       document.dispatchEvent(new CustomEvent('switch-bash-session', {

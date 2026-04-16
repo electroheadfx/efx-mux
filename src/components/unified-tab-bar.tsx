@@ -308,6 +308,11 @@ export async function restoreEditorTabs(projectName: string): Promise<boolean> {
       console.warn('[efxmux] Could not restore editor tab:', tab.filePath, err);
     }
   }
+
+  // Restore active tab selection
+  if (parsed.activeTabId) {
+    activeUnifiedTabId.value = parsed.activeTabId;
+  }
   return true;
 }
 
