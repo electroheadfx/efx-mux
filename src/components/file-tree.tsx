@@ -693,6 +693,9 @@ function InlineCreateRow({ parentDir, kind, depth, onDone }: InlineCreateRowProp
  * Supports flat mode (drill-down) and tree mode (collapsible hierarchy).
  */
 export function FileTree() {
+  // Phase 18 Plan 05: scroll container ref for Finder drop-zone outline + hit-testing
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     // Phase 18 Plan 04 (D-06): kick off editor detection once on mount (cached thereafter)
     void ensureEditorsDetected();
@@ -731,6 +734,94 @@ export function FileTree() {
       });
     })();
 
+    // Phase 18 Plan 05 (D-15..D-18): Finder drop event handlers. main.tsx dispatches
+    // tree-finder-* CustomEvents for OS drops whose paths are OUTSIDE the project root.
+    async function handleFinderDragover(e: Event) {
+      finderDropActive.value = true;
+      const { position } = (e as CustomEvent).detail as { paths: string[]; position: { x: number; y: number } };
+      // Highlight the row under the cursor, if any (same visual grammar as intra-tree drag)
+      const rowEls = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+      rowEls.forEach(el => { el.style.borderLeft = ''; el.style.backgroundColor = ''; });
+      for (const el of rowEls) {
+        const rect = el.getBoundingClientRect();
+        if (position.y >= rect.top && position.y <= rect.bottom) {
+          el.style.borderLeft = `2px solid ${colors.accent}`;
+          el.style.backgroundColor = `${colors.accent}20`;
+          break;
+        }
+      }
+    }
+
+    function handleFinderDragleave() {
+      finderDropActive.value = false;
+      document.querySelectorAll<HTMLElement>('[data-file-tree-index]').forEach(el => {
+        el.style.borderLeft = '';
+        el.style.backgroundColor = '';
+      });
+    }
+
+    async function handleFinderDrop(e: Event) {
+      finderDropActive.value = false;
+      document.querySelectorAll<HTMLElement>('[data-file-tree-index]').forEach(el => {
+        el.style.borderLeft = '';
+        el.style.backgroundColor = '';
+      });
+      const { paths, position } = (e as CustomEvent).detail as { paths: string[]; position: { x: number; y: number } };
+      if (!paths || paths.length === 0) return;
+      // Resolve target directory from cursor position (same logic as intra-drag)
+      let targetDir: string | null = null;
+      const rowEls = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+      for (const el of rowEls) {
+        const rect = el.getBoundingClientRect();
+        if (position.y >= rect.top && position.y <= rect.bottom) {
+          const idx = el.dataset.fileTreeIndex;
+          if (idx !== undefined) {
+            const entry = getEntryByIndex(parseInt(idx, 10));
+            if (entry) {
+              targetDir = entry.is_dir ? entry.path : entry.path.replace(/\/[^/]+$/, '');
+            }
+          }
+          break;
+        }
+      }
+      if (!targetDir) {
+        // Check if drop happened inside the scroll container's bounds
+        const containerRect = scrollContainerRef.current?.getBoundingClientRect();
+        if (containerRect
+            && position.x >= containerRect.left && position.x <= containerRect.right
+            && position.y >= containerRect.top && position.y <= containerRect.bottom) {
+          const project = getActiveProject();
+          targetDir = project?.path ?? null;
+        } else {
+          showToast({ type: 'error', message: 'Drop target outside file tree' });
+          return;
+        }
+      }
+      // Copy each source path into target (D-17, D-20)
+      for (const src of paths) {
+        const name = src.split('/').pop() || src;
+        const dst = `${targetDir}/${name}`;
+        try {
+          await copyPath(src, dst);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.toLowerCase().includes('exists')) {
+            showToast({ type: 'error', message: `File exists: ${name}` });
+          } else {
+            showToast({
+              type: 'error',
+              message: `Could not copy ${name}`,
+              hint: 'Check target folder permissions.',
+            });
+          }
+        }
+      }
+    }
+
+    document.addEventListener('tree-finder-dragover', handleFinderDragover);
+    document.addEventListener('tree-finder-dragleave', handleFinderDragleave);
+    document.addEventListener('tree-finder-drop', handleFinderDrop);
+
     // Initial load
     const project = getActiveProject();
     if (project && project.path) {
@@ -744,6 +835,9 @@ export function FileTree() {
       if (unlistenFs) unlistenFs();
       document.removeEventListener('project-changed', handleProjectChanged);
       document.removeEventListener('file-tree-scroll-to-selected', handleScrollToSelected);
+      document.removeEventListener('tree-finder-dragover', handleFinderDragover);
+      document.removeEventListener('tree-finder-dragleave', handleFinderDragleave);
+      document.removeEventListener('tree-finder-drop', handleFinderDrop);
     };
   }, []);
 
@@ -1178,7 +1272,16 @@ export function FileTree() {
       </div>
       {/* File list */}
       <div
-        style={{ flex: 1, overflow: 'auto', padding: '4px 0', outline: 'none' }}
+        ref={scrollContainerRef}
+        style={{
+          flex: 1,
+          overflow: 'auto',
+          padding: '4px 0',
+          outline: finderDropActive.value ? `1px solid ${colors.accent}` : 'none',
+          boxShadow: finderDropActive.value
+            ? `inset 0 0 0 1px ${colors.accent}, 0 0 12px 0 ${colors.accent}40`
+            : 'none',
+        }}
         tabIndex={0}
         onKeyDown={handleKeydown}
       >
