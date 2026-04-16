@@ -342,6 +342,7 @@ function CollapsibleSection({
           gap: spacing.xl,
           padding: `${spacing.md}px ${spacing.xl}px`,
           cursor: 'pointer',
+          userSelect: 'none',
         }}
       >
         {isOpen ? (
@@ -412,6 +413,7 @@ function GitFileRow({
         padding: `${spacing.sm}px ${spacing.xl}px`,
         cursor: 'pointer',
         backgroundColor: 'transparent',
+        userSelect: 'none',
       }}
     >
       {/* Checkbox for stage/unstage */}
@@ -541,6 +543,7 @@ function HistoryEntry({ entry }: { entry: GitCommitEntry }) {
         gap: spacing.xl,
         padding: `${spacing.sm}px ${spacing.xl}px`,
         backgroundColor: 'transparent',
+        userSelect: 'none',
       }}
       onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = colors.bgElevated; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
@@ -616,6 +619,7 @@ function GitLogPanel() {
           top: 0,
           backgroundColor: colors.bgSurface,
           zIndex: 1,
+          userSelect: 'none',
         }}
       >
         <span
@@ -738,6 +742,7 @@ export function GitControlTab() {
           borderBottom: `1px solid ${colors.bgBorder}`,
           gap: spacing.xl,
           flexShrink: 0,
+          userSelect: 'none',
         }}
       >
         {/* Left: change summary */}
@@ -893,6 +898,7 @@ export function GitControlTab() {
           padding: `${spacing.md}px ${spacing.xl}px`,
           borderTop: `1px solid ${colors.bgBorder}`,
           flexShrink: 0,
+          userSelect: 'none',
         }}
       >
         {/* Left: branch info */}
@@ -996,6 +1002,7 @@ export function GitControlTab() {
           padding: `${spacing.sm}px ${spacing.xl}px`,
           borderTop: `1px solid ${colors.bgBorder}`,
           flexShrink: 0,
+          userSelect: 'none',
         }}
       >
         {/* Left: pencil icon */}
@@ -1057,6 +1064,7 @@ export function GitControlTab() {
           borderTop: `1px solid ${colors.bgBorder}`,
           backgroundColor: colors.bgDeep,
           flexShrink: 0,
+          userSelect: 'none',
         }}
       >
         {/* Left: last commit message */}
