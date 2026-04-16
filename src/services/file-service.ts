@@ -20,6 +20,15 @@ export class FileError extends Error {
   }
 }
 
+/** Result of detect_editors — which external-editor CLIs are installed. */
+export interface DetectedEditors {
+  zed: boolean;
+  code: boolean;
+  subl: boolean;
+  cursor: boolean;
+  idea: boolean;
+}
+
 /**
  * Write content to a file atomically.
  * @param path Absolute path to the file
@@ -44,6 +53,7 @@ export async function writeFile(path: string, content: string): Promise<void> {
 export async function deleteFile(path: string): Promise<void> {
   try {
     await invoke('delete_file', { path });
+    await emit('git-status-changed');
   } catch (e) {
     throw new FileError('DeleteError', String(e));
   }
@@ -57,6 +67,7 @@ export async function deleteFile(path: string): Promise<void> {
 export async function renameFile(from: string, to: string): Promise<void> {
   try {
     await invoke('rename_file', { from, to });
+    await emit('git-status-changed');
   } catch (e) {
     throw new FileError('RenameError', String(e));
   }
@@ -69,6 +80,7 @@ export async function renameFile(from: string, to: string): Promise<void> {
 export async function createFile(path: string): Promise<void> {
   try {
     await invoke('create_file', { path });
+    await emit('git-status-changed');
   } catch (e) {
     throw new FileError('CreateError', String(e));
   }
@@ -84,5 +96,79 @@ export async function readFile(path: string): Promise<string> {
     return await invoke<string>('read_file_content', { path });
   } catch (e) {
     throw new FileError('ReadError', String(e));
+  }
+}
+
+/**
+ * Create a directory at the given path (Phase 18, D-25).
+ * Rejects paths that already exist.
+ * @param path Absolute path to the new directory
+ */
+export async function createFolder(path: string): Promise<void> {
+  try {
+    await invoke('create_folder', { path });
+    await emit('git-status-changed');
+  } catch (e) {
+    throw new FileError('CreateFolderError', String(e));
+  }
+}
+
+/**
+ * Copy a file or directory (recursive for directories). Aborts on conflict (D-20).
+ * @param from Source path
+ * @param to Destination path
+ */
+export async function copyPath(from: string, to: string): Promise<void> {
+  try {
+    await invoke('copy_path', { from, to });
+    await emit('git-status-changed');
+  } catch (e) {
+    throw new FileError('CopyError', String(e));
+  }
+}
+
+/**
+ * Launch an external GUI editor to open a file or folder (Phase 18, D-08).
+ * @param app Application name as LaunchServices sees it (e.g. "Zed", "Visual Studio Code")
+ * @param path Absolute path to the file or folder
+ */
+export async function launchExternalEditor(app: string, path: string): Promise<void> {
+  try {
+    await invoke('launch_external_editor', { app, path });
+  } catch (e) {
+    throw new FileError('LaunchError', String(e));
+  }
+}
+
+/**
+ * Open a path with the macOS default application (Phase 18, D-06 fallback).
+ */
+export async function openDefault(path: string): Promise<void> {
+  try {
+    await invoke('open_default', { path });
+  } catch (e) {
+    throw new FileError('OpenDefaultError', String(e));
+  }
+}
+
+/**
+ * Reveal a path in Finder (Phase 18, D-06 fallback).
+ */
+export async function revealInFinder(path: string): Promise<void> {
+  try {
+    await invoke('reveal_in_finder', { path });
+  } catch (e) {
+    throw new FileError('RevealError', String(e));
+  }
+}
+
+/**
+ * Probe which external-editor CLIs are installed on the host (Phase 18, D-06).
+ */
+export async function detectEditors(): Promise<DetectedEditors> {
+  try {
+    return await invoke<DetectedEditors>('detect_editors');
+  } catch (e) {
+    throw new FileError('DetectError', String(e));
   }
 }

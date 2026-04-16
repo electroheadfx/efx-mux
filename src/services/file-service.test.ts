@@ -1,7 +1,19 @@
-// file-service.test.ts -- Unit tests for file-service IPC wrappers (Phase 15)
+// file-service.test.ts -- Unit tests for file-service IPC wrappers (Phase 15 + 18)
 import { describe, it, expect } from 'vitest';
 import { mockIPC } from '@tauri-apps/api/mocks';
-import { writeFile, deleteFile, renameFile, createFile, FileError } from './file-service';
+import {
+  writeFile,
+  deleteFile,
+  renameFile,
+  createFile,
+  createFolder,
+  copyPath,
+  launchExternalEditor,
+  openDefault,
+  revealInFinder,
+  detectEditors,
+  FileError,
+} from './file-service';
 
 describe('file-service', () => {
   describe('writeFile', () => {
@@ -113,6 +125,154 @@ describe('file-service', () => {
       const error = new FileError('DeleteError');
       expect(error.message).toBe('DeleteError');
       expect(error.details).toBeUndefined();
+    });
+  });
+
+  // ========== Phase 18: File tree enhancements ==========
+
+  describe('createFolder', () => {
+    it('calls invoke with path', async () => {
+      let captured: Record<string, unknown> | undefined;
+      mockIPC((cmd, args) => {
+        if (cmd === 'create_folder') {
+          captured = args as Record<string, unknown>;
+          return;
+        }
+      });
+
+      await createFolder('/tmp/new');
+      expect(captured).toEqual({ path: '/tmp/new' });
+    });
+
+    it('throws FileError on failure', async () => {
+      mockIPC(() => {
+        throw new Error('mkdir failed');
+      });
+
+      await expect(createFolder('/x')).rejects.toThrow(FileError);
+      await expect(createFolder('/x')).rejects.toThrow('CreateFolderError');
+    });
+  });
+
+  describe('copyPath', () => {
+    it('calls invoke with from and to', async () => {
+      let captured: Record<string, unknown> | undefined;
+      mockIPC((cmd, args) => {
+        if (cmd === 'copy_path') {
+          captured = args as Record<string, unknown>;
+          return;
+        }
+      });
+
+      await copyPath('/src', '/dst');
+      expect(captured).toEqual({ from: '/src', to: '/dst' });
+    });
+
+    it('throws FileError on failure', async () => {
+      mockIPC(() => {
+        throw new Error('copy failed');
+      });
+
+      await expect(copyPath('/a', '/b')).rejects.toThrow(FileError);
+      await expect(copyPath('/a', '/b')).rejects.toThrow('CopyError');
+    });
+  });
+
+  describe('launchExternalEditor', () => {
+    it('calls invoke with app and path', async () => {
+      let captured: Record<string, unknown> | undefined;
+      mockIPC((cmd, args) => {
+        if (cmd === 'launch_external_editor') {
+          captured = args as Record<string, unknown>;
+          return;
+        }
+      });
+
+      await launchExternalEditor('Zed', '/p/f.txt');
+      expect(captured).toEqual({ app: 'Zed', path: '/p/f.txt' });
+    });
+
+    it('throws FileError on failure', async () => {
+      mockIPC(() => {
+        throw new Error('launch failed');
+      });
+
+      await expect(launchExternalEditor('Zed', '/x')).rejects.toThrow(FileError);
+      await expect(launchExternalEditor('Zed', '/x')).rejects.toThrow('LaunchError');
+    });
+  });
+
+  describe('openDefault', () => {
+    it('calls invoke with path', async () => {
+      let captured: Record<string, unknown> | undefined;
+      mockIPC((cmd, args) => {
+        if (cmd === 'open_default') {
+          captured = args as Record<string, unknown>;
+          return;
+        }
+      });
+
+      await openDefault('/x');
+      expect(captured).toEqual({ path: '/x' });
+    });
+
+    it('throws FileError on failure', async () => {
+      mockIPC(() => {
+        throw new Error('open failed');
+      });
+
+      await expect(openDefault('/x')).rejects.toThrow(FileError);
+      await expect(openDefault('/x')).rejects.toThrow('OpenDefaultError');
+    });
+  });
+
+  describe('revealInFinder', () => {
+    it('calls invoke with path', async () => {
+      let captured: Record<string, unknown> | undefined;
+      mockIPC((cmd, args) => {
+        if (cmd === 'reveal_in_finder') {
+          captured = args as Record<string, unknown>;
+          return;
+        }
+      });
+
+      await revealInFinder('/x');
+      expect(captured).toEqual({ path: '/x' });
+    });
+
+    it('throws FileError on failure', async () => {
+      mockIPC(() => {
+        throw new Error('reveal failed');
+      });
+
+      await expect(revealInFinder('/x')).rejects.toThrow(FileError);
+      await expect(revealInFinder('/x')).rejects.toThrow('RevealError');
+    });
+  });
+
+  describe('detectEditors', () => {
+    it('returns DetectedEditors object', async () => {
+      mockIPC((cmd) => {
+        if (cmd === 'detect_editors') {
+          return { zed: true, code: false, subl: false, cursor: false, idea: false };
+        }
+      });
+
+      const result = await detectEditors();
+      expect(result.zed).toBe(true);
+      expect(result.code).toBe(false);
+      expect(result.subl).toBe(false);
+      expect(result.cursor).toBe(false);
+      expect(result.idea).toBe(false);
+    });
+
+    it('throws FileError on failure', async () => {
+      mockIPC(() => {
+        throw new Error('detect failed');
+      });
+
+      await expect(detectEditors()).rejects.toThrow(FileError);
+      await expect(detectEditors()).rejects.toThrow('DetectError');
     });
   });
 });

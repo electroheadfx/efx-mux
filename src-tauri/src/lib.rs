@@ -158,6 +158,14 @@ pub fn run() {
             file_ops::delete_file,
             file_ops::rename_file,
             file_ops::create_file,
+            // Phase 18: File tree enhancements (D-17, D-25, D-02, D-06, D-08)
+            file_ops::create_folder,
+            file_ops::copy_path,
+            file_ops::count_children,
+            file_ops::launch_external_editor,
+            file_ops::open_default,
+            file_ops::reveal_in_finder,
+            file_ops::detect_editors,
 
             // Phase 6: File watcher (D-02)
             file_watcher::set_project_path,
