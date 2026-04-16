@@ -1315,7 +1315,9 @@ export function FileTree() {
                       // lights up the bg; filename color is driven solely by isSelected below.
                       backgroundColor: (hoveredIndex.value === i || isSelected) ? colors.bgElevated : 'transparent',
                       // Phase 18 quick-260416-uig (bug 2): prevent filename text selection on right-click.
+                      // WKWebView needs the -webkit- prefix; Preact's `userSelect` alone does not emit it.
                       userSelect: 'none',
+                      WebkitUserSelect: 'none',
                     }}
                     onClick={() => {
                       selectedIndex.value = i;
@@ -1382,7 +1384,9 @@ export function FileTree() {
                       // Phase 18 quick-260416-uig (bug 3): mirror of flat-mode row bg logic.
                       backgroundColor: (hoveredIndex.value === i || isSelected) ? colors.bgElevated : 'transparent',
                       // Phase 18 quick-260416-uig (bug 2): no filename selection on right-click.
+                      // WKWebView needs the -webkit- prefix; Preact's `userSelect` alone does not emit it.
                       userSelect: 'none',
+                      WebkitUserSelect: 'none',
                     }}
                     onClick={() => {
                       selectedIndex.value = i;
