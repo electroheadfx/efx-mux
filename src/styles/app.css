@@ -276,22 +276,21 @@ html, body {
 *::-webkit-scrollbar-thumb { background: var(--color-border-interactive); border-radius: 4px; }
 *::-webkit-scrollbar-thumb:hover { background: var(--color-text); }
 
-/* ─── Minimap overrides (global CSS — canvas needs filter, not opacity) ─── */
-.cm-minimap .cm-minimap-inner > canvas {
-  filter: saturate(0) brightness(0.6) !important;
-  transition: filter 0.15s ease !important;
+/* ─── Minimap overrides (global CSS — plugin uses .cm-minimap-gutter, NOT .cm-minimap) ─── */
+.cm-minimap-inner > canvas {
+  filter: saturate(0) brightness(0.5) !important;
 }
 
-.cm-minimap .cm-minimap-overlay {
+.cm-minimap-overlay {
   background: transparent !important;
   opacity: 1 !important;
-  backdrop-filter: saturate(2) brightness(1.8) !important;
-  -webkit-backdrop-filter: saturate(2) brightness(1.8) !important;
+  -webkit-backdrop-filter: saturate(3) brightness(2) !important;
+  backdrop-filter: saturate(3) brightness(2) !important;
   border: 1px solid rgba(37, 138, 209, 0.4) !important;
   border-radius: 2px !important;
 }
 
-.cm-minimap .cm-minimap-overlay-container:hover .cm-minimap-overlay {
+.cm-minimap-overlay-container:hover .cm-minimap-overlay {
   border-color: var(--color-warning) !important;
 }
 

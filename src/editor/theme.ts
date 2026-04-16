@@ -49,17 +49,17 @@ export const efxmuxTheme = EditorView.theme(
     '.cm-searchMatch.cm-searchMatch-selected': {
       backgroundColor: `${colors.statusYellow}50`,
     },
-    '.cm-minimap': {
+    '& .cm-minimap-gutter': {
       width: '60px !important',
       minWidth: '60px !important',
       userSelect: 'none',
       WebkitUserSelect: 'none',
     },
-    '.cm-minimap *': {
+    '& .cm-minimap-gutter *': {
       userSelect: 'none',
       WebkitUserSelect: 'none',
     },
-    '.cm-minimap .cm-minimap-inner': {
+    '& .cm-minimap-inner': {
       width: '60px !important',
     },
   },
