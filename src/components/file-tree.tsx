@@ -32,6 +32,37 @@ const selectedIndex = signal(0);
 const currentPath = signal('');
 const loaded = signal(false);
 
+// ── Click timer for single-click vs double-click distinction ─────
+let fileClickTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingClickEntry: { path: string; name: string } | null = null;
+
+function handleFileClick(path: string, name: string): void {
+  // If a timer is already pending for the SAME file, this is a double-click
+  if (fileClickTimer && pendingClickEntry?.path === path) {
+    clearTimeout(fileClickTimer);
+    fileClickTimer = null;
+    pendingClickEntry = null;
+    document.dispatchEvent(new CustomEvent('file-opened-pinned', {
+      detail: { path, name }
+    }));
+    return;
+  }
+
+  // Clear any pending timer for a different file
+  if (fileClickTimer) {
+    clearTimeout(fileClickTimer);
+  }
+
+  pendingClickEntry = { path, name };
+  fileClickTimer = setTimeout(() => {
+    fileClickTimer = null;
+    pendingClickEntry = null;
+    document.dispatchEvent(new CustomEvent('file-opened', {
+      detail: { path, name }
+    }));
+  }, 250); // 250ms window for double-click detection
+}
+
 // ── Tree mode state ──────────────────────────────────────────────
 
 interface TreeNode {
@@ -479,7 +510,14 @@ export function FileTree() {
                 <div
                   key={entry.path}
                   style={{ padding: `${fileTreeLineHeight.value}px 12px`, gap: 8, display: 'flex', alignItems: 'center', cursor: 'pointer', backgroundColor: isSelected ? colors.bgElevated : 'transparent' }}
-                  onClick={() => { selectedIndex.value = i; openEntry(entry); }}
+                  onClick={() => {
+                    selectedIndex.value = i;
+                    if (entry.is_dir) {
+                      loadDir(entry.path);
+                    } else {
+                      handleFileClick(entry.path, entry.name);
+                    }
+                  }}
                   onMouseEnter={() => { selectedIndex.value = i; }}
                 >
                   {entry.is_dir
@@ -526,9 +564,7 @@ export function FileTree() {
                     if (node.entry.is_dir) {
                       toggleTreeNode(node);
                     } else {
-                      document.dispatchEvent(new CustomEvent('file-opened', {
-                        detail: { path: node.entry.path, name: node.entry.name }
-                      }));
+                      handleFileClick(node.entry.path, node.entry.name);
                     }
                   }}
                   onMouseEnter={() => { selectedIndex.value = i; }}

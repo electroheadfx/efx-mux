@@ -31,7 +31,7 @@ import {
   getProjects, getActiveProject, projects, activeProjectName
 } from './state-manager';
 import { openProjectModal } from './components/project-modal';
-import { openEditorTab, restoreEditorTabs, activeUnifiedTabId, closeUnifiedTab } from './components/unified-tab-bar';
+import { openEditorTab, openEditorTabPinned, restoreEditorTabs, activeUnifiedTabId, closeUnifiedTab } from './components/unified-tab-bar';
 import { serverPaneState, saveCurrentProjectState, restoreProjectState } from './components/server-pane';
 import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from './components/file-tree';
 import { detectAgent } from './server/server-bridge';
@@ -254,12 +254,24 @@ async function bootstrap() {
     document.documentElement.style.setProperty('--server-pane-h', String(appState.layout['server-pane-height']));
   }
 
-  // Step 7: file-opened handler -- opens editor tab (EDIT-01)
+  // Step 7: file-opened handler -- opens editor tab as preview (EDIT-01)
   document.addEventListener('file-opened', async (e: Event) => {
     const { path, name } = (e as CustomEvent).detail;
     try {
       const content = await invoke<string>('read_file_content', { path });
       openEditorTab(path, name, content);
+    } catch (err) {
+      console.error('[efxmux] Failed to read file:', err);
+      showToast({ type: 'error', message: `Could not open file: ${name}` });
+    }
+  });
+
+  // Step 7b: file-opened-pinned handler -- opens editor tab as pinned (double-click)
+  document.addEventListener('file-opened-pinned', async (e: Event) => {
+    const { path, name } = (e as CustomEvent).detail;
+    try {
+      const content = await invoke<string>('read_file_content', { path });
+      openEditorTabPinned(path, name, content);
     } catch (err) {
       console.error('[efxmux] Failed to read file:', err);
       showToast({ type: 'error', message: `Could not open file: ${name}` });
