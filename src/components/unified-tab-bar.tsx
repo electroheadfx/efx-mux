@@ -381,9 +381,10 @@ function switchToAdjacentTab(currentId: string): void {
 
   if (nextTab) {
     activeUnifiedTabId.value = nextTab.id;
-    // If it's a terminal tab, also sync activeTabId
+    // If it's a terminal tab, also sync activeTabId and switch container visibility
     if (nextTab.type === 'terminal') {
       activeTabId.value = nextTab.id;
+      switchToTab(nextTab.id);
     }
   }
 }
