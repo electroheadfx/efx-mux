@@ -5,7 +5,7 @@ milestone_name: Workspace Evolution
 status: executing
 stopped_at: Phase 17 complete — all 9 issues fixed + verified. Code review fixes pending.
 last_updated: "2026-04-15T16:45:16.511Z"
-last_activity: 2026-04-16 -- Completed quick task 260416-jjb: Add clickable pin icon on all editor tabs
+last_activity: 2026-04-16 -- Completed quick task 260416-jvl: Minimap UX: disable text selection, add hide/show toggle icon to tab bar
 progress:
   total_phases: 7
   completed_phases: 2
@@ -97,6 +97,7 @@ None.
 | 260416-imb | Fix tab bar selection not updating on tab close | 2026-04-16 |
 | 260416-j71 | File tab pinning: single replaceable pane by default, pinned tabs stay independent, double-click to pin | 2026-04-16 |
 | 260416-jjb | Add clickable pin icon on all editor tabs with toggle behavior | 2026-04-16 |
+| 260416-jvl | Minimap UX: disable text selection, add hide/show toggle icon to tab bar | 2026-04-16 |
 
 ## Session Continuity
 
