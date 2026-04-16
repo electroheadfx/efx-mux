@@ -24,13 +24,13 @@ import { ToastContainer, showToast } from './components/toast';
 import { ConfirmModal } from './components/confirm-modal';
 import { initDragManager } from './drag-manager';
 import { initTheme, registerTerminal, toggleThemeMode } from './theme/theme-manager';
-import { createNewTab, closeActiveTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs, saveProjectTabs, hasProjectTabs, restoreProjectTabs } from './components/terminal-tabs';
+import { createNewTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs, saveProjectTabs, hasProjectTabs, restoreProjectTabs } from './components/terminal-tabs';
 import {
   loadAppState, initBeforeUnload, sidebarCollapsed, updateLayout, updateSession,
   getProjects, getActiveProject, projects, activeProjectName
 } from './state-manager';
 import { openProjectModal } from './components/project-modal';
-import { openEditorTab, restoreEditorTabs, activeUnifiedTabId } from './components/unified-tab-bar';
+import { openEditorTab, restoreEditorTabs, activeUnifiedTabId, closeUnifiedTab } from './components/unified-tab-bar';
 import { serverPaneState, saveCurrentProjectState, restoreProjectState } from './components/server-pane';
 import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from './components/file-tree';
 import { detectAgent } from './server/server-bridge';
@@ -174,7 +174,9 @@ async function bootstrap() {
         break;
       case key === 'w' && !e.shiftKey && !e.altKey && (e.ctrlKey || e.metaKey):
         e.preventDefault(); e.stopPropagation();
-        closeActiveTab();
+        if (activeUnifiedTabId.value) {
+          closeUnifiedTab(activeUnifiedTabId.value);
+        }
         break;
       case e.key === 'Tab' && e.ctrlKey && !e.shiftKey && !e.altKey:
         e.preventDefault(); e.stopPropagation();
