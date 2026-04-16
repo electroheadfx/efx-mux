@@ -5,7 +5,7 @@ milestone_name: Workspace Evolution
 status: executing
 stopped_at: Phase 17 complete — all 9 issues fixed + verified. Code review fixes pending.
 last_updated: "2026-04-15T16:45:16.511Z"
-last_activity: 2026-04-16 -- Completed quick task 260416-n7h: Add tab rename functionality
+last_activity: 2026-04-16 -- Completed quick task 260416-nmw: Click editor tab label reveals file in file tree
 progress:
   total_phases: 7
   completed_phases: 2
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 Phase: 17 (main-panel-file-tabs) — EXECUTING
 Plan: 1 of 5
 Status: Executing Phase 17
-Last activity: 2026-04-16 - Completed quick task 260416-n7h: Add tab rename functionality
+Last activity: 2026-04-16 - Completed quick task 260416-nmw: Click editor tab label reveals file in file tree
 
 **Code review fixes pending (non-blocking):**
 
@@ -103,6 +103,7 @@ None.
 | 260416-lgy | Fix right sidebar terminal tab not selected by default + add separator | 2026-04-16 |
 | 260416-m38 | Persist pinned files in Files tab across app restarts per project | 2026-04-16 |
 | 260416-n7h | Add tab rename functionality | 2026-04-16 |
+| 260416-nmw | Click editor tab label reveals file in file tree with smart sidebar routing | 2026-04-16 |
 
 ## Session Continuity
 
