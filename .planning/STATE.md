@@ -105,6 +105,7 @@ None.
 | 260416-n7h | Add tab rename functionality | 2026-04-16 |
 | 260416-nmw | Click editor tab label reveals file in file tree with smart sidebar routing | 2026-04-16 |
 | 260416-o1k | Fix revealFileInTree timing when tree not loaded + terminal tab rename focus theft | 2026-04-16 |
+| 260416-uig | Fix 3 file-tree polish bugs: dropdown hover state, disable text selection on right-click, decouple hover from click-selected | 2026-04-16 |
 
 ## Session Continuity
 
