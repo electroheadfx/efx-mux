@@ -1026,14 +1026,15 @@ function renderTab(
           }}
           onClick={(e: MouseEvent) => {
             e.stopPropagation();
-            // Always switch to this tab first
-            onClick(tab);
 
             // Double-click detection: if timer pending for same tab, it's a double-click
             if (tabLabelClickTimer && pendingTabLabelClick === tab.id) {
               clearTimeout(tabLabelClickTimer);
               tabLabelClickTimer = null;
               pendingTabLabelClick = null;
+              // Do NOT call onClick(tab) here -- tab is already active from first click.
+              // Calling it would trigger switchToTab -> terminal.focus() which steals
+              // focus from the rename input that's about to render.
               renamingTabId.value = tab.id;
               return;
             }
@@ -1042,6 +1043,9 @@ function renderTab(
             if (tabLabelClickTimer) {
               clearTimeout(tabLabelClickTimer);
             }
+
+            // First click: always switch to this tab
+            onClick(tab);
 
             pendingTabLabelClick = tab.id;
             tabLabelClickTimer = setTimeout(() => {
