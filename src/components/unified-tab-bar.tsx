@@ -139,7 +139,7 @@ activeTabId.subscribe(id => {
   const currentTab = allTabs.value.find(t => t.id === current);
   // Only sync if no unified tab is active, or the active tab is already a terminal
   // NEVER hijack focus from editor or git-changes tabs
-  if (!current || currentTab?.type === 'terminal') {
+  if (!current || !currentTab || currentTab.type === 'terminal') {
     activeUnifiedTabId.value = id;
   }
 });
@@ -264,11 +264,13 @@ export function closeUnifiedTab(tabId: string): void {
         confirmLabel: 'Quit Terminal',
         onConfirm: () => {
           // Red button: destroy PTY session and remove tab (existing behavior)
-          closeTab(tabId);
-          setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
-          if (terminalTabs.value.length === 0) {
+          // Update unified selection BEFORE closeTab removes the tab from allTabs.
+          // switchToAdjacentTab reads getOrderedTabs() which needs the tab still present.
+          if (tabId === activeUnifiedTabId.value) {
             switchToAdjacentTab(tabId);
           }
+          setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
+          closeTab(tabId);
         },
         onCancel: () => {
           // Cancel: do nothing, keep tab as-is
@@ -282,12 +284,14 @@ export function closeUnifiedTab(tabId: string): void {
       return;
     }
 
-    // Non-agent terminal: close immediately (existing behavior, unchanged)
-    closeTab(tabId);
-    setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
-    if (terminalTabs.value.length === 0) {
+    // Non-agent terminal: close immediately
+    // Update unified selection BEFORE closeTab removes the tab from allTabs.
+    // switchToAdjacentTab reads getOrderedTabs() which needs the tab still present.
+    if (tabId === activeUnifiedTabId.value) {
       switchToAdjacentTab(tabId);
     }
+    setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
+    closeTab(tabId);
     return;
   }
 
