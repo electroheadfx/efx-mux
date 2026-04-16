@@ -31,6 +31,11 @@ export function RightPanel() {
     rightTopTab.value = 'File Tree';
   }
 
+  // Guard: if persisted rightBottomTab is not in RIGHT_BOTTOM_TABS, fall back to default
+  if (!RIGHT_BOTTOM_TABS.includes(rightBottomTab.value)) {
+    rightBottomTab.value = RIGHT_BOTTOM_TABS[0];
+  }
+
   // Lazy-connect bash terminal on mount
   useEffect(() => {
     async function connectBashTerminal() {
@@ -121,7 +126,7 @@ export function RightPanel() {
       />
 
       {/* Bottom panel: Bash */}
-      <div class="right-bottom flex flex-col min-h-0">
+      <div class="right-bottom flex flex-col min-h-0" style={{ borderTop: `1px solid ${colors.bgBorder}` }}>
         <TabBar
           tabs={RIGHT_BOTTOM_TABS}
           activeTab={rightBottomTab}
