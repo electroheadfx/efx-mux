@@ -8,7 +8,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { colors, fonts, spacing } from '../tokens';
 import { Dropdown, type DropdownItem } from './dropdown-menu';
 import { showConfirmModal } from './confirm-modal';
-import { Terminal, Bot, FileDiff, Pin } from 'lucide-preact';
+import { Terminal, Bot, FileDiff, Pin, PanelRightClose, PanelRight } from 'lucide-preact';
 import type { TerminalTab } from './terminal-tabs';
 import {
   terminalTabs,
@@ -18,7 +18,7 @@ import {
   switchToTab,
 } from './terminal-tabs';
 import { writeFile, readFile } from '../services/file-service';
-import { getEditorCurrentContent } from '../editor/setup';
+import { getEditorCurrentContent, minimapVisible, toggleMinimap } from '../editor/setup';
 import { activeProjectName, updateSession, getCurrentState } from '../state-manager';
 
 // ── Tab Type System ─────────────────────────────────────────────────────────────
@@ -748,6 +748,34 @@ export function UnifiedTabBar() {
         const isActive = tab.id === currentId;
         return renderTab(tab, isActive, handleTabClick, handleClose);
       })}
+
+      {editorTabs.value.length > 0 && (
+        <button
+          class="w-7 h-7 rounded flex items-center justify-center cursor-pointer shrink-0"
+          style={{
+            color: minimapVisible.value ? colors.textDim : colors.textMuted,
+            backgroundColor: 'transparent',
+            border: 'none',
+          }}
+          aria-label={minimapVisible.value ? 'Hide minimap' : 'Show minimap'}
+          title={minimapVisible.value ? 'Hide minimap' : 'Show minimap'}
+          onClick={() => toggleMinimap()}
+          onMouseEnter={(e: MouseEvent) => {
+            const t = e.currentTarget as HTMLElement;
+            t.style.color = colors.textPrimary;
+            t.style.backgroundColor = colors.bgElevated;
+          }}
+          onMouseLeave={(e: MouseEvent) => {
+            const t = e.currentTarget as HTMLElement;
+            t.style.color = minimapVisible.value ? colors.textDim : colors.textMuted;
+            t.style.backgroundColor = 'transparent';
+          }}
+        >
+          {minimapVisible.value
+            ? <PanelRightClose size={14} />
+            : <PanelRight size={14} />}
+        </button>
+      )}
 
       <Dropdown
         items={dropdownItems}
