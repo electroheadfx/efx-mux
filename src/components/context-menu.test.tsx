@@ -162,3 +162,52 @@ describe('submenu', () => {
     expect(parentRow?.getAttribute('aria-haspopup')).toBe('menu');
   });
 });
+
+// ── Phase 18 quick-260416-uig: per-item hover background tint ────────────────
+
+describe('hover background', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('applies hover background on mouseEnter and clears it on mouseLeave', () => {
+    const items: ContextMenuItem[] = [
+      { label: 'Copy', action: vi.fn() },
+      { label: 'Paste', action: vi.fn() },
+    ];
+    render(<ContextMenu items={items} x={100} y={100} onClose={vi.fn()} />);
+    const row = screen.getByText('Copy').closest('[role="menuitem"]') as HTMLElement;
+    expect(row).not.toBeNull();
+    // Before hover -- transparent (inline style returns empty string for 'transparent')
+    const before = row.style.backgroundColor;
+    expect(before === '' || before === 'transparent').toBe(true);
+    // Hover -- bgSurface #324568 -> rgb(50, 69, 104)
+    fireEvent.mouseEnter(row);
+    expect(row.style.backgroundColor).toMatch(/rgb\(50, ?69, ?104\)|#324568/i);
+    // Leave -- reverts
+    fireEvent.mouseLeave(row);
+    const after = row.style.backgroundColor;
+    expect(after === '' || after === 'transparent').toBe(true);
+  });
+
+  it('applies hover background on submenu items', async () => {
+    const parentItems: ContextMenuItem[] = [
+      {
+        label: 'Open In',
+        children: [
+          { label: 'Child A', action: vi.fn() },
+          { label: 'Child B', action: vi.fn() },
+        ],
+      },
+    ];
+    render(<ContextMenu items={parentItems} x={10} y={10} onClose={vi.fn()} />);
+    const parentRow = screen.getByText('Open In').closest('[role="menuitem"]') as HTMLElement;
+    fireEvent.mouseEnter(parentRow);
+    // Wait past the 150ms hover delay that opens the submenu
+    await new Promise((r) => setTimeout(r, 200));
+    const childRow = screen.getByText('Child B').closest('[role="menuitem"]') as HTMLElement;
+    expect(childRow).not.toBeNull();
+    fireEvent.mouseEnter(childRow);
+    expect(childRow.style.backgroundColor).toMatch(/rgb\(50, ?69, ?104\)|#324568/i);
+  });
+});
