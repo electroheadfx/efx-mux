@@ -55,11 +55,19 @@ export const efxmuxTheme = EditorView.theme(
       userSelect: 'none',
       WebkitUserSelect: 'none',
     },
-    '.cm-minimap .cm-minimap-inner': {
-      width: '60px !important',
+    '.cm-minimap *': {
       userSelect: 'none',
       WebkitUserSelect: 'none',
-      pointerEvents: 'none',
+    },
+    '.cm-minimap .cm-minimap-inner': {
+      width: '60px !important',
+    },
+    '.cm-minimap .cm-minimap-overlay': {
+      backgroundColor: `${colors.accent}99 !important`,
+      transition: 'background-color 0.15s ease',
+    },
+    '.cm-minimap .cm-minimap-overlay-container:hover .cm-minimap-overlay': {
+      backgroundColor: '#D29922CC !important',
     },
   },
   { dark: true },

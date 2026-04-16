@@ -730,81 +730,98 @@ export function UnifiedTabBar() {
 
   return (
     <div
-      class="flex px-2 py-2 shrink-0 items-center border-b"
+      class="flex shrink-0 items-center border-b"
       role="tablist"
       style={{
         backgroundColor: colors.bgBase,
         borderColor: colors.bgBorder,
-        overflowX: 'auto',
-        scrollbarWidth: 'none',
       }}
-      onWheel={handleWheel}
     >
       <style>{`
-        .unified-tab-bar::-webkit-scrollbar { display: none; }
+        .unified-tab-scroll::-webkit-scrollbar { display: none; }
       `}</style>
 
-      {ordered.map(tab => {
-        const isActive = tab.id === currentId;
-        return renderTab(tab, isActive, handleTabClick, handleClose);
-      })}
+      {/* Scrollable tabs area */}
+      <div
+        class="unified-tab-scroll flex items-center px-2 py-2"
+        style={{
+          flex: 1,
+          minWidth: 0,
+          overflowX: 'auto',
+          scrollbarWidth: 'none',
+        }}
+        onWheel={handleWheel}
+      >
+        {ordered.map(tab => {
+          const isActive = tab.id === currentId;
+          return renderTab(tab, isActive, handleTabClick, handleClose);
+        })}
+      </div>
 
-      {editorTabs.value.length > 0 && (
-        <button
-          class="w-7 h-7 rounded flex items-center justify-center cursor-pointer shrink-0"
-          style={{
-            color: minimapVisible.value ? colors.textDim : colors.textMuted,
-            backgroundColor: 'transparent',
-            border: 'none',
-          }}
-          aria-label={minimapVisible.value ? 'Hide minimap' : 'Show minimap'}
-          title={minimapVisible.value ? 'Hide minimap' : 'Show minimap'}
-          onClick={() => toggleMinimap()}
-          onMouseEnter={(e: MouseEvent) => {
-            const t = e.currentTarget as HTMLElement;
-            t.style.color = colors.textPrimary;
-            t.style.backgroundColor = colors.bgElevated;
-          }}
-          onMouseLeave={(e: MouseEvent) => {
-            const t = e.currentTarget as HTMLElement;
-            t.style.color = minimapVisible.value ? colors.textDim : colors.textMuted;
-            t.style.backgroundColor = 'transparent';
-          }}
-        >
-          {minimapVisible.value
-            ? <PanelRightClose size={14} />
-            : <PanelRight size={14} />}
-        </button>
-      )}
-
-      <Dropdown
-        items={dropdownItems}
-        trigger={({ onClick, 'aria-haspopup': ariaHasPopup, 'aria-expanded': ariaExpanded }) => (
+      {/* Sticky right actions */}
+      <div
+        class="flex items-center gap-1 px-2 py-2 shrink-0"
+        style={{
+          borderLeft: `1px solid ${colors.bgBorder}`,
+        }}
+      >
+        {editorTabs.value.length > 0 && (
           <button
-            class="w-7 h-7 rounded flex items-center justify-center text-base cursor-pointer shrink-0"
+            class="w-7 h-7 rounded flex items-center justify-center cursor-pointer shrink-0"
             style={{
-              color: colors.textDim,
-              fontFamily: fonts.sans,
+              color: minimapVisible.value ? colors.textDim : colors.textMuted,
               backgroundColor: 'transparent',
               border: 'none',
             }}
-            aria-label="Add new tab"
-            aria-haspopup={ariaHasPopup}
-            aria-expanded={ariaExpanded}
-            onClick={onClick}
-            onMouseEnter={e => {
-              const t = e.target as HTMLElement;
+            aria-label={minimapVisible.value ? 'Hide minimap' : 'Show minimap'}
+            title={minimapVisible.value ? 'Hide minimap' : 'Show minimap'}
+            onClick={() => toggleMinimap()}
+            onMouseEnter={(e: MouseEvent) => {
+              const t = e.currentTarget as HTMLElement;
               t.style.color = colors.textPrimary;
               t.style.backgroundColor = colors.bgElevated;
             }}
-            onMouseLeave={e => {
-              const t = e.target as HTMLElement;
-              t.style.color = colors.textDim;
+            onMouseLeave={(e: MouseEvent) => {
+              const t = e.currentTarget as HTMLElement;
+              t.style.color = minimapVisible.value ? colors.textDim : colors.textMuted;
               t.style.backgroundColor = 'transparent';
             }}
-          >+</button>
+          >
+            {minimapVisible.value
+              ? <PanelRightClose size={14} />
+              : <PanelRight size={14} />}
+          </button>
         )}
-      />
+
+        <Dropdown
+          items={dropdownItems}
+          trigger={({ onClick, 'aria-haspopup': ariaHasPopup, 'aria-expanded': ariaExpanded }) => (
+            <button
+              class="w-7 h-7 rounded flex items-center justify-center text-base cursor-pointer shrink-0"
+              style={{
+                color: colors.textDim,
+                fontFamily: fonts.sans,
+                backgroundColor: 'transparent',
+                border: 'none',
+              }}
+              aria-label="Add new tab"
+              aria-haspopup={ariaHasPopup}
+              aria-expanded={ariaExpanded}
+              onClick={onClick}
+              onMouseEnter={e => {
+                const t = e.target as HTMLElement;
+                t.style.color = colors.textPrimary;
+                t.style.backgroundColor = colors.bgElevated;
+              }}
+              onMouseLeave={e => {
+                const t = e.target as HTMLElement;
+                t.style.color = colors.textDim;
+                t.style.backgroundColor = 'transparent';
+              }}
+            >+</button>
+          )}
+        />
+      </div>
     </div>
   );
 }
