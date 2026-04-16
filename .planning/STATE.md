@@ -5,7 +5,7 @@ milestone_name: Workspace Evolution
 status: executing
 stopped_at: Phase 17 complete — all 9 issues fixed + verified. Code review fixes pending.
 last_updated: "2026-04-15T16:45:16.511Z"
-last_activity: 2026-04-16 -- Completed quick task 260416-dgx: wire Cmd+W for editor tabs
+last_activity: 2026-04-16 -- Completed quick task 260416-fiw: Add agent name to agent tabs
 progress:
   total_phases: 7
   completed_phases: 2
@@ -84,6 +84,7 @@ None.
 | 260415-he6 | Add per-file revert button and replace ellipsis with Revert All in Git tab | 2026-04-15 |
 | 260415-i4n | Move sidebar header title to OS title bar | 2026-04-15 |
 | 260416-dgx | Fix EDIT-04: wire Cmd+W for editor tabs | 2026-04-16 |
+| 260416-fiw | Add agent name to agent tabs - show 'Agent {name}' format | 2026-04-16 |
 
 ## Session Continuity
 
