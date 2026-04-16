@@ -276,6 +276,23 @@ html, body {
 *::-webkit-scrollbar-thumb { background: var(--color-border-interactive); border-radius: 4px; }
 *::-webkit-scrollbar-thumb:hover { background: var(--color-text); }
 
+/* ─── Minimap overrides (global CSS beats CM6 scoped theme) ─── */
+.cm-minimap .cm-minimap-inner {
+  opacity: 0.6 !important;
+}
+
+.cm-minimap .cm-minimap-overlay {
+  background: var(--color-accent) !important;
+  opacity: 0.35 !important;
+  transition: background 0.15s ease, opacity 0.15s ease !important;
+}
+
+.cm-minimap .cm-minimap-overlay-container:hover .cm-minimap-overlay,
+.cm-minimap .cm-minimap-overlay-active .cm-minimap-overlay {
+  background: var(--color-warning) !important;
+  opacity: 0.5 !important;
+}
+
 /* ─── Drag state overlay (applied by drag-manager) ─── */
 .app-dragging .sidebar,
 .app-dragging .main-panel,
