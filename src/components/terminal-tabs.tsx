@@ -103,9 +103,7 @@ async function resolveAgentBinary(agent?: string): Promise<string | undefined> {
  * Derive a human-readable label for an agent binary name.
  */
 function agentLabel(agent?: string): string {
-  if (agent === 'claude') return 'Claude';
-  if (agent === 'opencode') return 'OpenCode';
-  return agent ?? 'Agent';
+  return agent ? `Agent ${agent}` : 'Agent';
 }
 
 // ---------------------------------------------------------------------------
@@ -329,7 +327,7 @@ export async function initFirstTab(
   const activeProject = activeName ? projects.value.find(p => p.name === activeName) : null;
   let label: string;
   if (activeProject?.agent && activeProject.agent !== 'bash') {
-    label = activeProject.agent === 'claude' ? 'Claude' : activeProject.agent === 'opencode' ? 'OpenCode' : 'Terminal 1';
+    label = agentLabel(activeProject.agent);
   } else {
     label = 'Terminal 1';
   }
