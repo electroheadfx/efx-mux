@@ -5,7 +5,7 @@
 import { signal, computed } from '@preact/signals';
 import type { VNode } from 'preact';
 import { invoke } from '@tauri-apps/api/core';
-import { colors, fonts } from '../tokens';
+import { colors, fonts, spacing } from '../tokens';
 import { Dropdown, type DropdownItem } from './dropdown-menu';
 import { showConfirmModal } from './confirm-modal';
 import { Terminal, Bot, FileDiff } from 'lucide-preact';
@@ -626,7 +626,7 @@ export function UnifiedTabBar() {
 
   return (
     <div
-      class="flex gap-1 px-2 py-2 shrink-0 items-center border-b"
+      class="flex px-2 py-2 shrink-0 items-center border-b"
       role="tablist"
       style={{
         backgroundColor: colors.bgBase,
@@ -736,14 +736,15 @@ function renderTab(
       data-tab-id={tab.id}
       class="flex items-center gap-2 cursor-pointer shrink-0"
       style={{
-        backgroundColor: isActive ? colors.bgElevated : 'transparent',
-        border: isActive ? `1px solid ${colors.bgSurface}` : '1px solid transparent',
-        borderRadius: 6,
-        padding: '9px 16px',
+        backgroundColor: 'transparent',
+        border: 'none',
+        borderBottom: isActive ? `2px solid ${colors.accent}` : '2px solid transparent',
+        marginBottom: -1,
+        padding: `${spacing.xl}px ${spacing['3xl']}px`,
         fontFamily: fonts.sans,
-        fontSize: 13,
-        fontWeight: isActive ? 500 : 400,
-        color: isActive ? colors.textPrimary : colors.textDim,
+        fontSize: 11,
+        fontWeight: isActive ? 600 : 400,
+        color: isActive ? colors.textPrimary : colors.textMuted,
         maxWidth: 200,
         whiteSpace: 'nowrap',
         overflow: 'hidden',
