@@ -5,7 +5,7 @@ milestone_name: Workspace Evolution
 status: executing
 stopped_at: Phase 17 complete — all 9 issues fixed + verified. Code review fixes pending.
 last_updated: "2026-04-15T16:45:16.511Z"
-last_activity: 2026-04-16 -- Completed quick task 260416-hk9: Add Preferences menu entry with Ctrl+, shortcut
+last_activity: 2026-04-16 -- Completed quick task 260416-hsi: Make file minimap viewer in file tab a bit more smaller
 progress:
   total_phases: 7
   completed_phases: 2
@@ -92,6 +92,7 @@ None.
 | 260416-h3i | Add agent quit modal when closing agent tabs | 2026-04-16 |
 | 260416-hce | Add "Add Project" to OS menu with Cmd+N shortcut | 2026-04-16 |
 | 260416-hk9 | Add Preferences menu entry after About Efxmux with Ctrl+, shortcut | 2026-04-16 |
+| 260416-hsi | Make file minimap viewer in file tab a bit more smaller | 2026-04-16 |
 
 ## Session Continuity
 
