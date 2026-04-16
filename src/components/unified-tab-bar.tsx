@@ -8,7 +8,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { colors, fonts, spacing } from '../tokens';
 import { Dropdown, type DropdownItem } from './dropdown-menu';
 import { showConfirmModal } from './confirm-modal';
-import { Terminal, Bot, FileDiff } from 'lucide-preact';
+import { Terminal, Bot, FileDiff, Pin } from 'lucide-preact';
 import type { TerminalTab } from './terminal-tabs';
 import {
   terminalTabs,
@@ -34,6 +34,7 @@ interface EditorTabData extends BaseTab {
   fileName: string;
   content: string;
   dirty: boolean;
+  pinned: boolean;
 }
 
 interface GitChangesTabData extends BaseTab {
@@ -147,17 +148,33 @@ activeTabId.subscribe(id => {
 // ── Tab Actions ─────────────────────────────────────────────────────────────────
 
 /**
- * Open a file in an editor tab (D-03: one-tab-per-file policy).
- * If the file is already open, focus its existing tab instead of creating a duplicate.
+ * Open a file in an editor tab as a preview (single-click behavior).
+ * D-03: one-tab-per-file policy. If already open, focus it.
+ * Otherwise, replace the existing unpinned (preview) tab, or create a new one.
  */
 export function openEditorTab(filePath: string, fileName: string, content: string): void {
-  // D-03: one-tab-per-file enforcement
+  // D-03: one-tab-per-file enforcement -- if already open, just focus it
   const existing = editorTabs.value.find(t => t.filePath === filePath);
   if (existing) {
     activeUnifiedTabId.value = existing.id;
     return;
   }
 
+  // Find existing unpinned (preview) tab to replace
+  const unpinned = editorTabs.value.find(t => !t.pinned);
+  if (unpinned) {
+    // Replace the unpinned tab's content (keep same ID so tab position is preserved)
+    const updatedTabs = editorTabs.value.map(t =>
+      t.id === unpinned.id
+        ? { ...t, filePath, fileName, content, dirty: false, pinned: false }
+        : t
+    );
+    setProjectEditorTabs(updatedTabs);
+    activeUnifiedTabId.value = unpinned.id;
+    return;
+  }
+
+  // No unpinned tab exists -- create a new unpinned tab
   const newTab: EditorTabData = {
     id: 'editor-' + Date.now(),
     type: 'editor',
@@ -165,11 +182,73 @@ export function openEditorTab(filePath: string, fileName: string, content: strin
     fileName,
     content,
     dirty: false,
+    pinned: false,
   };
 
   setProjectEditorTabs([...editorTabs.value, newTab]);
   setProjectTabOrder([...tabOrder.value, newTab.id]);
   activeUnifiedTabId.value = newTab.id;
+}
+
+/**
+ * Open a file directly as a pinned editor tab (double-click behavior).
+ * If already open, pin it and focus. Otherwise create a new pinned tab.
+ */
+export function openEditorTabPinned(filePath: string, fileName: string, content: string): void {
+  // One-tab-per-file: if already open, pin it and focus
+  const existing = editorTabs.value.find(t => t.filePath === filePath);
+  if (existing) {
+    if (!existing.pinned) {
+      pinEditorTab(existing.id);
+    }
+    activeUnifiedTabId.value = existing.id;
+    return;
+  }
+
+  // Create a new pinned tab
+  const newTab: EditorTabData = {
+    id: 'editor-' + Date.now(),
+    type: 'editor',
+    filePath,
+    fileName,
+    content,
+    dirty: false,
+    pinned: true,
+  };
+
+  setProjectEditorTabs([...editorTabs.value, newTab]);
+  setProjectTabOrder([...tabOrder.value, newTab.id]);
+  activeUnifiedTabId.value = newTab.id;
+}
+
+/**
+ * Pin an editor tab (prevents it from being replaced by single-click opens).
+ */
+export function pinEditorTab(tabId: string): void {
+  const tabs = editorTabs.value.map(t =>
+    t.id === tabId ? { ...t, pinned: true } : t
+  );
+  setProjectEditorTabs(tabs);
+}
+
+/**
+ * Unpin an editor tab (makes it replaceable by single-click opens).
+ */
+export function unpinEditorTab(tabId: string): void {
+  const tabs = editorTabs.value.map(t =>
+    t.id === tabId ? { ...t, pinned: false } : t
+  );
+  setProjectEditorTabs(tabs);
+}
+
+/**
+ * Toggle pin state of an editor tab.
+ */
+export function togglePinEditorTab(tabId: string): void {
+  const tab = editorTabs.value.find(t => t.id === tabId);
+  if (!tab) return;
+  if (tab.pinned) unpinEditorTab(tabId);
+  else pinEditorTab(tabId);
 }
 
 // ── Editor Tab Persistence ─────────────────────────────────────────────────────
@@ -183,6 +262,7 @@ function persistEditorTabs(): void {
   const tabs = editorTabs.value.map(t => ({
     filePath: t.filePath,
     fileName: t.fileName,
+    pinned: t.pinned,
   }));
   const data = JSON.stringify({ tabs, activeTabId: activeUnifiedTabId.value });
   const patch: Record<string, string> = { 'editor-tabs': data };
@@ -203,7 +283,7 @@ export async function restoreEditorTabs(projectName: string): Promise<boolean> {
   const raw = state?.session?.[key] ?? state?.session?.['editor-tabs'];
   if (!raw) return false;
 
-  let parsed: { tabs: Array<{ filePath: string; fileName: string }>; activeTabId: string } | null = null;
+  let parsed: { tabs: Array<{ filePath: string; fileName: string; pinned?: boolean }>; activeTabId: string } | null = null;
   try {
     parsed = JSON.parse(raw);
   } catch { return false; }
@@ -213,7 +293,13 @@ export async function restoreEditorTabs(projectName: string): Promise<boolean> {
   for (const tab of parsed.tabs) {
     try {
       const content = await readFile(tab.filePath);
-      openEditorTab(tab.filePath, tab.fileName, content);
+      // Backward compat: if pinned is undefined (old persisted data), default to true
+      // (assume previously-open tabs should persist as pinned)
+      if (tab.pinned === false) {
+        openEditorTab(tab.filePath, tab.fileName, content);
+      } else {
+        openEditorTabPinned(tab.filePath, tab.fileName, content);
+      }
     } catch (err) {
       console.warn('[efxmux] Could not restore editor tab:', tab.filePath, err);
     }
@@ -723,7 +809,9 @@ function renderTab(
   } else if (tab.type === 'editor') {
     label = tab.fileName;
     tabTitle = tab.filePath;
-    if (tab.dirty) {
+    if (tab.pinned) {
+      indicator = <Pin size={12} style={{ color: colors.accent, flexShrink: 0 }} />;
+    } else if (tab.dirty) {
       indicator = (
         <span
           style={{
@@ -742,6 +830,8 @@ function renderTab(
     tabTitle = 'Git Changes';
     indicator = <FileDiff size={14} style={{ color: colors.accent, flexShrink: 0 }} />;
   }
+
+  const isUnpinnedEditor = tab.type === 'editor' && !tab.pinned;
 
   return (
     <div
@@ -768,6 +858,17 @@ function renderTab(
         userSelect: 'none',
       }}
       onClick={() => onClick(tab)}
+      onDblClick={() => {
+        if (tab.type === 'editor' && !tab.pinned) {
+          pinEditorTab(tab.id);
+        }
+      }}
+      onContextMenu={(e: MouseEvent) => {
+        if (tab.type === 'editor') {
+          e.preventDefault();
+          togglePinEditorTab(tab.id);
+        }
+      }}
       title={tabTitle}
       onMouseDown={e => onTabMouseDown(e, tab.id)}
     >
@@ -777,6 +878,7 @@ function renderTab(
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
+          fontStyle: isUnpinnedEditor ? 'italic' : 'normal',
         }}
       >
         {label}
