@@ -42,7 +42,7 @@
 - [x] **Phase 15: Foundation Primitives** (2 plans) -- Shared UI components and Rust write commands (completed 2026-04-14)
 - [x] **Phase 16: Sidebar Evolution + Git Control** (3 plans) -- 3-tab sidebar with git staging/commit/push (completed 2026-04-15)
 - [x] **Phase 17: Main Panel File Tabs** (5 plans) -- CodeMirror editor tabs with dropdown menu (completed 2026-04-15)
-- [ ] **Phase 18: File Tree Enhancements** -- Delete, drag/drop, external editor integration
+- [x] **Phase 18: File Tree Enhancements** -- Delete, drag/drop, external editor integration (completed 2026-04-16)
 - [ ] **Phase 19: GSD Sub-Tabs** -- 5 sub-tabs for Milestones, Phases, Progress, History, State
 - [ ] **Phase 20: Right Panel Multi-Terminal** -- Plus menu for Terminal/Agent sub-TUI
 - [ ] **Phase 21: Bug Fix Sprint** -- File watcher, phantom chars, scrollbar, padding fixes
@@ -117,7 +117,7 @@ Plans:
   - [x] 18-02-PLAN.md -- ContextMenu submenu extension + tauri.conf dragDropEnabled (Wave 1)
   - [x] 18-03-PLAN.md -- File tree context menu, Delete flow, InlineCreateRow (Wave 2)
   - [x] 18-04-PLAN.md -- Open In submenu + header [+] and Open In buttons (Wave 3)
-  - [ ] 18-05-PLAN.md -- Intra-tree drag + Finder drop import (Wave 4)
+  - [x] 18-05-PLAN.md -- Intra-tree drag + Finder drop import (Wave 4)
 **UI hint**: yes
 
 ### Phase 19: GSD Sub-Tabs
@@ -180,7 +180,7 @@ Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21
 | 15. Foundation Primitives | v0.3.0 | 2/2 | Complete    | 2026-04-14 |
 | 16. Sidebar Evolution + Git Control | v0.3.0 | 4/4 | Complete   | 2026-04-15 |
 | 17. Main Panel File Tabs | v0.3.0 | 5/5 | Complete   | 2026-04-15 |
-| 18. File Tree Enhancements | v0.3.0 | 4/5 | In Progress|  |
+| 18. File Tree Enhancements | v0.3.0 | 5/5 | Complete   | 2026-04-16 |
 | 19. GSD Sub-Tabs | v0.3.0 | 0/? | Not started | - |
 | 20. Right Panel Multi-Terminal | v0.3.0 | 0/? | Not started | - |
 | 21. Bug Fix Sprint | v0.3.0 | 0/? | Not started | - |
