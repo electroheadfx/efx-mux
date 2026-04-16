@@ -123,7 +123,7 @@ export function RightPanel() {
         role="separator"
         aria-orientation="horizontal"
         aria-label="Resize right panels"
-        style={{ borderBottom: `1px solid ${colors.bgBorder}` }}
+        style={{ boxShadow: `0 1px 0 0 ${colors.bgBorder}` }}
       />
 
       {/* Bottom panel: Bash */}
