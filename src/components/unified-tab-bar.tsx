@@ -371,6 +371,9 @@ export function persistEditorTabs(): void {
     filePath: t.filePath,
     fileName: t.fileName,
     pinned: t.pinned,
+    // Plan 20-05-D: persist ownerScope so cross-scope drag survives restart.
+    // Legacy tabs without the field default to 'main' on restore.
+    ownerScope: t.ownerScope ?? 'main',
     ...(t.displayName ? { displayName: t.displayName } : {}),
   }));
   // Never overwrite saved tabs with empty — prevents init race where computed
@@ -416,7 +419,7 @@ export async function restoreEditorTabs(projectName: string): Promise<boolean> {
   const raw = state?.session?.[key] ?? state?.session?.['editor-tabs'];
   if (!raw) return false;
 
-  let parsed: { tabs: Array<{ filePath: string; fileName: string; pinned?: boolean; displayName?: string }>; activeTabId: string } | null = null;
+  let parsed: { tabs: Array<{ filePath: string; fileName: string; pinned?: boolean; displayName?: string; ownerScope?: TerminalScope }>; activeTabId: string } | null = null;
   try {
     parsed = JSON.parse(raw);
   } catch { return false; }
@@ -438,6 +441,27 @@ export async function restoreEditorTabs(projectName: string): Promise<boolean> {
         const opened = editorTabs.value.find(t => t.filePath === tab.filePath);
         if (opened) {
           renameEditorTab(opened.id, tab.displayName);
+        }
+      }
+      // Plan 20-05-D: honor persisted ownerScope. openEditorTab* default to
+      // 'main', so flip to 'right' AFTER the tab exists. Also re-route the
+      // scoped tab order: openEditorTab* seeded it in 'main' by default.
+      const restoredScope = tab.ownerScope ?? 'main';
+      if (restoredScope === 'right') {
+        const opened = editorTabs.value.find(t => t.filePath === tab.filePath);
+        if (opened) {
+          const updated = editorTabs.value.map(t =>
+            t.id === opened.id ? { ...t, ownerScope: 'right' as const } : t,
+          );
+          setProjectEditorTabs(updated);
+          setScopedTabOrder(
+            'main',
+            getScopedTabOrder('main').filter(id => id !== opened.id),
+          );
+          setScopedTabOrder(
+            'right',
+            [...getScopedTabOrder('right').filter(id => id !== opened.id), opened.id],
+          );
         }
       }
     } catch (err) {
