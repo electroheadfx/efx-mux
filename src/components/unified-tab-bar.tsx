@@ -828,6 +828,24 @@ function getOrderedTabsForScope(scope: TerminalScope): UnifiedTab[] {
   return [...sticky, ...dynamic];
 }
 
+/**
+ * Returns true iff the currently-active tab within the given scope's tab list
+ * is a file (editor) tab. Used to gate the minimap toggle icon so it appears
+ * ONLY when the user is looking at a file in that scope — NOT for terminal,
+ * agent, git-changes, file-tree, or gsd tabs (Plan 20-05-C).
+ *
+ * @param ordered  Scope-filtered tab list (output of getOrderedTabsForScope).
+ * @param activeId The scope's active tab id (may be '' when nothing active).
+ */
+export function isEditorTabActiveInScope(
+  ordered: UnifiedTab[],
+  activeId: string,
+): boolean {
+  if (!activeId) return false;
+  const active = ordered.find(t => t.id === activeId);
+  return active?.type === 'editor';
+}
+
 // ── Tab Reorder (mouse-based) ───────────────────────────────────────────────────
 // HTML5 Drag and Drop API does NOT work in Tauri/WKWebView on macOS.
 // WKWebView's native drag system hijacks dragstart and fires dragend immediately
@@ -1119,7 +1137,13 @@ export function UnifiedTabBar({ scope }: UnifiedTabBarProps) {
           borderLeft: `1px solid ${colors.bgBorder}`,
         }}
       >
-        {editorTabs.value.length > 0 && (
+        {/*
+          Minimap toggle: visible ONLY when the active tab in THIS scope is an
+          editor (file) tab. Each scope maintains its own activeTabId, so the
+          main and right tab bars independently show/hide this icon based on
+          what the user is looking at in that scope (Plan 20-05-C).
+        */}
+        {isEditorTabActiveInScope(ordered, currentId) && (
           <button
             class="w-7 h-7 rounded flex items-center justify-center cursor-pointer shrink-0"
             style={{
