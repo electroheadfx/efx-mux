@@ -845,22 +845,26 @@ mod tests {
     fn revert_file_deletes_untracked() {
         // UAT Test 18 fix: per-file revert on an untracked file MUST delete it
         // (git checkout is meaningless for untracked content; current impl errors).
+        // Plan 18-10: also asserts RevertOutcome::Mutated so the Tauri command layer
+        // can decide whether to emit git-status-changed.
         let (dir, path) = setup_git_repo();
         let file_path = dir.path().join("untracked.txt");
         std::fs::write(&file_path, "untracked content").unwrap();
         assert!(file_path.exists(), "Untracked file must exist before revert");
 
-        let result = revert_file_impl(&path, "untracked.txt");
-        assert!(result.is_ok(), "revert_file on untracked file must succeed: {:?}", result);
+        let outcome = revert_file_impl(&path, "untracked.txt")
+            .expect("revert_file on untracked file must succeed");
         assert!(
             !file_path.exists(),
             "Untracked file MUST be deleted from disk after revert"
         );
+        assert_eq!(outcome, RevertOutcome::Mutated);
     }
 
     #[test]
     fn revert_file_no_op_on_clean() {
         // UAT Test 18 fix: revert on a clean (CURRENT) tracked file must be a silent no-op.
+        // Plan 18-10: also asserts RevertOutcome::NoOp (no working-tree mutation → no emit).
         let (dir, path) = setup_git_repo();
         let file_path = dir.path().join("tracked.txt");
 
@@ -870,9 +874,46 @@ mod tests {
         run_git(dir.path(), &["commit", "-m", "add tracked.txt"]);
 
         // Revert without modifying — should be a no-op
-        let result = revert_file_impl(&path, "tracked.txt");
-        assert!(result.is_ok(), "revert_file on clean tracked file must succeed: {:?}", result);
+        let outcome = revert_file_impl(&path, "tracked.txt")
+            .expect("revert_file on clean tracked file must succeed");
         let content = std::fs::read_to_string(&file_path).unwrap();
         assert_eq!(content, "committed content", "Clean file content must be unchanged");
+        assert_eq!(outcome, RevertOutcome::NoOp);
+    }
+
+    // ─── Phase 18 Plan 10 (Gap G-01 primary fix) ──────────────────────────
+    // These tests pin the RevertOutcome contract so the Tauri command layer
+    // can decide whether to emit git-status-changed. Mutation branches
+    // (WT_NEW delete, checkout) return Mutated; clean/index-only branches
+    // return NoOp.
+
+    #[test]
+    fn revert_file_impl_returns_mutated_for_untracked_delete() {
+        // Pinned contract: plan 18-10 relies on this so the Tauri command layer
+        // knows when to emit git-status-changed.
+        let (_dir, path) = setup_git_repo();
+        let untracked = format!("{}/newfile.txt", path);
+        std::fs::write(&untracked, "foo").unwrap();
+        let outcome = revert_file_impl(&path, "newfile.txt").unwrap();
+        assert_eq!(outcome, RevertOutcome::Mutated);
+        assert!(!Path::new(&untracked).exists());
+    }
+
+    #[test]
+    fn revert_file_impl_returns_mutated_for_checkout() {
+        // WT_MODIFIED on a tracked file → checkout branch → Mutated.
+        let (_dir, path) = setup_git_repo();
+        // Create a tracked file, commit it, then modify it.
+        let tracked = format!("{}/tracked.txt", path);
+        std::fs::write(&tracked, "original").unwrap();
+        run_git(std::path::Path::new(&path), &["add", "tracked.txt"]);
+        run_git(std::path::Path::new(&path), &["commit", "-m", "add tracked"]);
+        std::fs::write(&tracked, "modified").unwrap();
+        assert_eq!(std::fs::read_to_string(&tracked).unwrap(), "modified");
+
+        let outcome = revert_file_impl(&path, "tracked.txt").unwrap();
+        assert_eq!(outcome, RevertOutcome::Mutated);
+        // After revert the content should be back to "original".
+        assert_eq!(std::fs::read_to_string(&tracked).unwrap(), "original");
     }
 }
