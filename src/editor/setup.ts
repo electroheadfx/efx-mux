@@ -82,7 +82,7 @@ export function getEditorCurrentContent(tabId: string): string | null {
   return view.state.doc.toString();
 }
 
-/** Module-level registry: tabId -> save callback, so editor-save event can trigger save */
+/** Module-level registry: tabId -> save callback, so triggerEditorSave can invoke it */
 const saveCallbackMap = new Map<string, (content: string) => Promise<void>>();
 
 export function registerSaveCallback(tabId: string, cb: (content: string) => Promise<void>): void {

@@ -220,10 +220,6 @@ async function bootstrap() {
         sidebarCollapsed.value = !sidebarCollapsed.value;
         break;
       case key === 's' && e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey:
-        // Cmd+S: prevent browser Save Page dialog, save only the active editor tab's file.
-        // quick-260417-i0z: direct call to triggerEditorSave(activeUnifiedTabId) replaces
-        // the prior CustomEvent broadcast, which fired in every mounted EditorTab's
-        // listener (all tabs stay mounted via display:none) and saved every open file.
         e.preventDefault();
         if (activeUnifiedTabId.value.startsWith('editor-')) {
           triggerEditorSave(activeUnifiedTabId.value);
