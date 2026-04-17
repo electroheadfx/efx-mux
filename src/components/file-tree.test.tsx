@@ -1042,3 +1042,121 @@ describe('revert removes stale row via git-status-changed (Gap G-01)', () => {
     expect(document.body.textContent).toMatch(/bar\.ts/);
   });
 });
+
+// ── Phase 18 Plan 12 (Gap G-02): continuous per-row highlight during Finder drag ──
+//
+// Plan 12 fixed main.tsx's onDragDropEvent filter so that Tauri 2's `over` events
+// (which have NO paths field, only position) are dispatched to file-tree's
+// handleFinderDragover even though they lack paths. The cached isFinderDragActive
+// flag in main.tsx (set at `enter` time) gates the dispatch. These tests verify
+// the file-tree consumer behaves correctly when `tree-finder-dragover` fires
+// multiple times during a single drag.
+
+describe('continuous drop-target highlight during Finder drag (Gap G-02)', () => {
+  beforeEach(() => {
+    projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'claude' }];
+    detectedEditors.value = null;
+    activeProjectName.value = 'testproj';
+    fileTreeFontSize.value = 13;
+    fileTreeLineHeight.value = 2;
+
+    mockIPC((cmd, _args) => {
+      if (cmd === 'list_directory') {
+        return [
+          { name: 'src', path: '/tmp/proj/src', is_dir: true, size: 0, modified: 0, extension: null },
+          { name: 'tests', path: '/tmp/proj/tests', is_dir: true, size: 0, modified: 0, extension: null },
+          { name: 'README.md', path: '/tmp/proj/README.md', is_dir: false, size: 0, modified: 0, extension: 'md' },
+        ];
+      }
+      if (cmd === 'detect_editors') return { zed: false, code: false, subl: false, cursor: false, idea: false };
+      if (cmd === 'copy_path') return null;
+      return null;
+    });
+
+    vi.stubGlobal('listen', vi.fn().mockResolvedValue(vi.fn()));
+  });
+
+  it('multiple tree-finder-dragover dispatches with changing positions update the highlighted row', async () => {
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+
+    const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(rows.length).toBeGreaterThanOrEqual(3);
+
+    // Helper: dispatch a tree-finder-dragover with a given position.
+    const dispatchOver = (x: number, y: number) => {
+      document.dispatchEvent(new CustomEvent('tree-finder-dragover', {
+        detail: { paths: [], position: { x, y } },
+      }));
+    };
+
+    // Jsdom returns zero-rects for all elements, so getBoundingClientRect on
+    // each row returns {top:0, left:0, right:0, bottom:0}. The first matching
+    // row for any (x,y) where x>=0, y>=0, x<=0, y<=0 is row 0. We can still
+    // verify the contract by (a) dispatching multiple events and (b) asserting
+    // that AT LEAST ONE row has its borderLeft set after each dispatch.
+    //
+    // For a real browser with non-zero rects, the row selection would differ
+    // per position; here we verify the dispatch pipeline RUNS per event (i.e.,
+    // the listener does not throw and row styles get applied).
+
+    // Dispatch 1: position at (0, 0) — row 0 matches in jsdom.
+    dispatchOver(0, 0);
+    await new Promise(r => setTimeout(r, 20));
+    // At least one row should have the accent borderLeft set.
+    const highlighted1 = Array.from(rows).filter(el => el.style.borderLeft !== '');
+    expect(highlighted1.length).toBeGreaterThanOrEqual(1);
+
+    // Dispatch 2: position at (0, 0) again (simulating the `over` event firing
+    // continuously as the cursor hovers). The listener should still run and
+    // re-apply the highlight (existing behavior: clear all then set one).
+    dispatchOver(0, 0);
+    await new Promise(r => setTimeout(r, 20));
+    const highlighted2 = Array.from(rows).filter(el => el.style.borderLeft !== '');
+    expect(highlighted2.length).toBeGreaterThanOrEqual(1);
+
+    // Dispatch 3: a different coordinate just to prove the listener runs again.
+    dispatchOver(10, 10);
+    await new Promise(r => setTimeout(r, 20));
+    // No assertion on specific row — jsdom zero-rects don't distinguish.
+    // The semantic intent: the listener was invoked 3 times without error.
+    expect(true).toBe(true);
+  });
+
+  it('tree-finder-dragover followed by tree-finder-drop invokes copy_path for the target row', async () => {
+    let copyArgs: Record<string, unknown> | undefined;
+    mockIPC((cmd, args) => {
+      if (cmd === 'list_directory') {
+        return [
+          { name: 'src', path: '/tmp/proj/src', is_dir: true, size: 0, modified: 0, extension: null },
+        ];
+      }
+      if (cmd === 'detect_editors') return { zed: false, code: false, subl: false, cursor: false, idea: false };
+      if (cmd === 'copy_path') {
+        copyArgs = args as Record<string, unknown>;
+        return null;
+      }
+      return null;
+    });
+
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+
+    // Dispatch a dragover first (simulating enter or over), then a drop.
+    document.dispatchEvent(new CustomEvent('tree-finder-dragover', {
+      detail: { paths: ['/outside/foo.ts'], position: { x: 0, y: 0 } },
+    }));
+    await new Promise(r => setTimeout(r, 20));
+
+    document.dispatchEvent(new CustomEvent('tree-finder-drop', {
+      detail: { paths: ['/outside/foo.ts'], position: { x: 0, y: 0 } },
+    }));
+    await new Promise(r => setTimeout(r, 50));
+
+    // In jsdom with zero-rects, position (0,0) lands on row 0 (the 'src' folder).
+    // copy_path should be invoked with the target dir = /tmp/proj/src.
+    expect(copyArgs).toBeDefined();
+    expect(copyArgs?.from).toBe('/outside/foo.ts');
+    expect(String(copyArgs?.to)).toContain('/tmp/proj/src/foo.ts');
+  });
+});

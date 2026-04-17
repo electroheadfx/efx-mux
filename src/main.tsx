@@ -54,6 +54,16 @@ let rightCurrentSession = '';
 // Upstream bug: Tauri GitHub Issue #10744 (still open as of late 2025).
 const MACOS_TITLE_BAR_OFFSET = 28;
 
+// Plan 18-12 (Gap G-02 fix): Tauri 2 `over` events fire continuously during a
+// drag but their payload has NO paths — only position. The inside-project filter
+// therefore can't run on `over` events. We cache the decision at `enter` time and
+// apply it to subsequent `over` events, enabling per-row drop-target highlight
+// updates as the cursor moves.
+//
+// Set to true on enter when at least one path is outside the active project;
+// reset on leave, drop, or an enter that resolves to an intra-project drag.
+let isFinderDragActive = false;
+
 function App() {
   return (
     <div id="app-root" class="flex flex-col w-screen h-screen overflow-hidden bg-bg text-text-bright font-mono text-sm font-light antialiased">
@@ -271,38 +281,57 @@ async function bootstrap() {
       await getCurrentWebviewWindow().onDragDropEvent((event) => {
         const payload = event.payload as
           | { type: 'enter'; paths: string[]; position: { x: number; y: number } }
-          | { type: 'over'; paths: string[]; position: { x: number; y: number } }
+          | { type: 'over'; position: { x: number; y: number } }      // Plan 18-12: `over` has NO paths
           | { type: 'drop'; paths: string[]; position: { x: number; y: number } }
           | { type: 'leave' };
+
+        // Handle leave immediately — no position, no paths, just reset state.
         if (payload.type === 'leave') {
+          isFinderDragActive = false;
           document.dispatchEvent(new CustomEvent('tree-finder-dragleave'));
           return;
         }
-        // Derive project path from module signals (getActiveProject() returns Promise — avoid awaiting here)
-        const projectName = activeProjectName.value;
-        const project = projectName ? projects.value.find(p => p.name === projectName) : undefined;
-        const projectPath = project?.path ?? '';
-        const paths = 'paths' in payload ? payload.paths : [];
-        // Filter: if ANY path is outside the project root, treat as Finder import.
-        // If ALL paths are inside the project, the intra-tree mouse pipeline owns this drag — ignore.
-        const anyOutside = paths.length > 0 && paths.some(p => !projectPath || !p.startsWith(projectPath));
-        if (!anyOutside) return;
-        // Convert physical-pixel position to CSS pixels (per RESEARCH.md §1).
-        // Then subtract the macOS overlay title-bar offset so y aligns with
-        // viewport-relative getBoundingClientRect() coordinates used by file-tree hit-tests.
-        // (UAT Test 16 fix — Tauri Issue #10744)
+
+        // For enter, compute the inside-project decision and cache it.
+        if (payload.type === 'enter') {
+          const projectName = activeProjectName.value;
+          const project = projectName ? projects.value.find(p => p.name === projectName) : undefined;
+          const projectPath = project?.path ?? '';
+          const paths = payload.paths ?? [];
+          const anyOutside = paths.length > 0
+            && paths.some(p => !projectPath || !p.startsWith(projectPath));
+          isFinderDragActive = anyOutside;
+          if (!anyOutside) return;  // intra-tree drag — mouse pipeline owns it
+        }
+
+        // For over + drop: respect the cached decision from enter.
+        // (over has NO paths; drop has paths.)
+        if ((payload.type === 'over' || payload.type === 'drop') && !isFinderDragActive) {
+          return;
+        }
+
+        // Convert physical-pixel position to CSS pixels, then subtract the
+        // macOS overlay title-bar offset so y aligns with viewport-relative
+        // getBoundingClientRect() coordinates used by file-tree hit-tests.
+        // (UAT Test 16 fix — Tauri Issue #10744; preserved from Plan 18-07.)
         const dpr = window.devicePixelRatio || 1;
-        const detail = {
-          paths,
-          position: {
-            x: payload.position.x / dpr,
-            y: payload.position.y / dpr - MACOS_TITLE_BAR_OFFSET,
-          },
+        const position = {
+          x: payload.position.x / dpr,
+          y: payload.position.y / dpr - MACOS_TITLE_BAR_OFFSET,
         };
+
         if (payload.type === 'enter' || payload.type === 'over') {
-          document.dispatchEvent(new CustomEvent('tree-finder-dragover', { detail }));
+          // over has no paths; enter does, but file-tree's dragover handler only
+          // uses position — paths are irrelevant for the hover highlight.
+          const paths = 'paths' in payload ? payload.paths : [];
+          document.dispatchEvent(new CustomEvent('tree-finder-dragover', {
+            detail: { paths, position },
+          }));
         } else if (payload.type === 'drop') {
-          document.dispatchEvent(new CustomEvent('tree-finder-drop', { detail }));
+          document.dispatchEvent(new CustomEvent('tree-finder-drop', {
+            detail: { paths: payload.paths, position },
+          }));
+          isFinderDragActive = false;  // reset after drop closes the drag
         }
       });
     } catch (err) {
