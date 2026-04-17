@@ -973,6 +973,20 @@ export function FileTree() {
     document.addEventListener('tree-finder-dragleave', handleFinderDragleave);
     document.addEventListener('tree-finder-drop', handleFinderDrop);
 
+    // quick-260417-f6e: track active editor tab across its full lifecycle.
+    // restoreEditorTabs in main.tsx is async; if FileTree mounts before editorTabs
+    // hydrate, the one-shot seed in initTree() bails. Subscribe so we re-reveal
+    // whenever the active tab becomes (or is already) an editor tab.
+    let lastRevealedPath = '';
+    const unsubActiveTab = activeUnifiedTabId.subscribe((id) => {
+      if (!id) return;
+      const match = editorTabs.value.find(t => t.id === id);
+      if (!match) return;
+      if (match.filePath === lastRevealedPath) return;
+      lastRevealedPath = match.filePath;
+      void revealFileInTree(match.filePath);
+    });
+
     // Initial load
     const project = getActiveProject();
     if (project && project.path) {
@@ -985,6 +999,7 @@ export function FileTree() {
     return () => {
       if (unlistenFs) unlistenFs();
       if (unlistenDelete) unlistenDelete();
+      unsubActiveTab();
       document.removeEventListener('project-changed', handleProjectChanged);
       document.removeEventListener('file-tree-scroll-to-selected', handleScrollToSelected);
       document.removeEventListener('tree-finder-dragover', handleFinderDragover);
