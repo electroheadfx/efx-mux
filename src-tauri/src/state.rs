@@ -174,6 +174,10 @@ pub struct PanelsState {
 
     #[serde(default = "default_right_bottom_tab", rename = "right-bottom-tab")]
     pub right_bottom_tab: String,
+
+    // Phase 19 (D-03): persisted GSD sub-tab selection
+    #[serde(default = "default_gsd_sub_tab", rename = "gsd-sub-tab")]
+    pub gsd_sub_tab: String,
 }
 
 impl Default for PanelsState {
@@ -181,6 +185,7 @@ impl Default for PanelsState {
         Self {
             right_top_tab: default_right_top_tab(),
             right_bottom_tab: default_right_bottom_tab(),
+            gsd_sub_tab: default_gsd_sub_tab(),
         }
     }
 }
@@ -209,6 +214,9 @@ fn default_right_top_tab() -> String {
 }
 fn default_right_bottom_tab() -> String {
     "git".into()
+}
+fn default_gsd_sub_tab() -> String {
+    "State".into()
 }
 fn default_server_pane_height() -> String {
     "200px".into()
@@ -479,10 +487,25 @@ mod tests {
         let panels = PanelsState {
             right_top_tab: "GSD".into(),
             right_bottom_tab: "Files".into(),
+            gsd_sub_tab: "Phases".into(),
         };
         let json = serde_json::to_string(&panels).unwrap();
         let restored: PanelsState = serde_json::from_str(&json).unwrap();
         assert_eq!(panels.right_top_tab, restored.right_top_tab);
+        assert_eq!(panels.gsd_sub_tab, restored.gsd_sub_tab);
+    }
+
+    #[test]
+    fn panels_state_default_has_state() {
+        let panels = PanelsState::default();
+        assert_eq!(panels.gsd_sub_tab, "State");
+    }
+
+    #[test]
+    fn panels_state_missing_key_defaults_to_state() {
+        let json = r#"{"right-top-tab":"GSD","right-bottom-tab":"Bash"}"#;
+        let panels: PanelsState = serde_json::from_str(json).unwrap();
+        assert_eq!(panels.gsd_sub_tab, "State");
     }
 
     #[test]

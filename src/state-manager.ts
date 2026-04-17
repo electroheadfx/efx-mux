@@ -44,6 +44,7 @@ export const activeProjectName = signal<string | null>(null);
 export const sidebarCollapsed = signal(false);
 export const rightTopTab = signal('File Tree');
 export const rightBottomTab = signal('Bash');
+export const gsdSubTab = signal('State'); // Phase 19 D-02: default sub-tab is State
 
 // ---------------------------------------------------------------------------
 // Internal state (raw Rust state blob, not UI-reactive)
@@ -74,7 +75,7 @@ export async function loadAppState(): Promise<AppState> {
       theme: { mode: 'dark' },
       session: { 'main-tmux-session': 'efx-mux', 'right-tmux-session': 'efx-mux-right' },
       project: { active: null, projects: [] },
-      panels: { 'right-top-tab': 'File Tree', 'right-bottom-tab': 'Bash' },
+      panels: { 'right-top-tab': 'File Tree', 'right-bottom-tab': 'Bash', 'gsd-sub-tab': 'State' },
     };
   }
 
@@ -82,6 +83,7 @@ export async function loadAppState(): Promise<AppState> {
   sidebarCollapsed.value = currentState?.layout?.['sidebar-collapsed'] === true || currentState?.layout?.['sidebar-collapsed'] === 'true';
   if (currentState?.panels?.['right-top-tab'] && currentState.panels['right-top-tab'] !== 'gsd') rightTopTab.value = currentState.panels['right-top-tab'];
   if (currentState?.panels?.['right-bottom-tab']) rightBottomTab.value = currentState.panels['right-bottom-tab'];
+  if (currentState?.panels?.['gsd-sub-tab']) gsdSubTab.value = currentState.panels['gsd-sub-tab'];
 
   // Restore projects and active project from persisted state (T-08-07-02)
   if (currentState?.project?.projects?.length) {
