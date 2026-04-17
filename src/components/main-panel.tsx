@@ -20,7 +20,7 @@ export function MainPanel() {
 
   return (
     <main class="main-panel relative" aria-label="Main panel">
-      <UnifiedTabBar />
+      <UnifiedTabBar scope="main" />
 
       {/* Terminal area -- always mounted, display toggled */}
       <div

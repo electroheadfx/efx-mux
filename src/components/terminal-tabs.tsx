@@ -4,6 +4,7 @@
 // display:none/block preserves xterm.js scrollback + WebGL context.
 
 import { signal } from '@preact/signals';
+import type { Signal } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Terminal } from '@xterm/xterm';
@@ -21,6 +22,14 @@ import { CrashOverlay } from './crash-overlay';
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+/**
+ * Scope identifier for terminal-tab lifecycle isolation (Phase 20, Plan 01).
+ * This plan (20-02) depends on Plan 01's richer implementation. A minimal stub
+ * is provided below so that UnifiedTabBar(scope='right') can compile and test
+ * in isolation. Merge precedence: Plan 01's full registry replaces this stub.
+ */
+export type TerminalScope = 'main' | 'right';
 
 export interface TerminalTab {
   id: string;
@@ -755,4 +764,56 @@ export function ActiveTabCrashOverlay() {
       onRestart={() => restartTabSession(tab.id)}
     />
   );
+}
+
+// ---------------------------------------------------------------------------
+// Scope registry stub (Phase 20, Plan 01 seam)
+// ---------------------------------------------------------------------------
+//
+// Plan 01 (terminal-tabs scope parametrization) supplies the canonical
+// implementation. This minimal stub lets Plan 02 (unified-tab-bar scope prop)
+// compile and test in parallel. When Plan 01's branch is merged, the richer
+// registry supersedes this stub. Keep the public shape identical to Plan 01
+// so merges resolve cleanly:
+//   - getTerminalScope('main') resolves back to the existing module-level
+//     signals/functions (zero behavior change at main call sites).
+//   - getTerminalScope('right') returns an independent tabs signal and
+//     stubbed lifecycle functions. Right-scope tab creation is wired only
+//     in Plan 01; calling createNewTab here is a no-op that returns null.
+
+const _rightScopeTabs = signal<TerminalTab[]>([]);
+const _rightScopeActiveTabId = signal<string>('');
+
+export interface TerminalScopeHandle {
+  tabs: Signal<TerminalTab[]>;
+  activeTabId: Signal<string>;
+  createNewTab: (opts?: CreateTabOptions) => Promise<TerminalTab | null>;
+  closeTab: (id: string) => Promise<void>;
+  switchToTab: (id: string) => void;
+  renameTerminalTab: (id: string, label: string) => void;
+  ActiveTabCrashOverlay: () => any;
+}
+
+export function getTerminalScope(scope: TerminalScope): TerminalScopeHandle {
+  if (scope === 'main') {
+    return {
+      tabs: terminalTabs,
+      activeTabId,
+      createNewTab,
+      closeTab,
+      switchToTab,
+      renameTerminalTab,
+      ActiveTabCrashOverlay,
+    };
+  }
+  // Right scope — stub; Plan 01 supplies real implementation.
+  return {
+    tabs: _rightScopeTabs,
+    activeTabId: _rightScopeActiveTabId,
+    createNewTab: async (_opts?: CreateTabOptions) => null,
+    closeTab: async (_id: string) => {},
+    switchToTab: (id: string) => { _rightScopeActiveTabId.value = id; },
+    renameTerminalTab: (_id: string, _label: string) => {},
+    ActiveTabCrashOverlay: () => null,
+  };
 }
