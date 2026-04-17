@@ -574,29 +574,44 @@ export function openOrMoveGitChangesToRight(): void {
 
 /**
  * Close a tab by ID, handling dirty state for editor tabs (D-11).
+ *
+ * Fix #1 (20-05-E): terminal close must be scope-aware. Previously the
+ * terminal branch unconditionally called `closeTab(tabId)` — a backward-compat
+ * wrapper that routes through the MAIN scope only — so right-scope terminal
+ * tabs' × button appeared to do nothing (the tab entry was never removed from
+ * `getTerminalScope('right').tabs`). We resolve the tab's owning scope first
+ * by searching both scope registries and dispatch close to the correct one.
  */
 export function closeUnifiedTab(tabId: string): void {
   const tab = allTabs.value.find(t => t.id === tabId);
-  if (!tab) return;
 
-  if (tab.type === 'terminal') {
-    // Check if this is an agent tab -- offer graceful quit option
-    const termTab = terminalTabs.value.find(t => t.id === tabId);
+  // Terminal tabs are not surfaced by `allTabs` (which is main-only); resolve
+  // them through the scope registry. Check both scopes so right-panel terminal
+  // tabs close correctly too.
+  const mainTermTab = terminalTabs.value.find(t => t.id === tabId);
+  const rightTermTab = getTerminalScope('right').tabs.value.find(t => t.id === tabId);
+  const termTab = mainTermTab ?? rightTermTab;
+  const termScope: TerminalScope | null = mainTermTab ? 'main' : rightTermTab ? 'right' : null;
 
-    if (termTab?.isAgent) {
+  if (termTab && termScope) {
+    const scopeHandle = getTerminalScope(termScope);
+    const isMain = termScope === 'main';
+
+    if (termTab.isAgent) {
       showConfirmModal({
         title: 'Quit Agent',
         message: 'Do you want to quit just the agent or close the terminal session entirely?',
         confirmLabel: 'Quit Terminal',
         onConfirm: () => {
           // Red button: destroy PTY session and remove tab (existing behavior)
-          // Update unified selection BEFORE closeTab removes the tab from allTabs.
-          // switchToAdjacentTab reads getOrderedTabs() which needs the tab still present.
-          if (tabId === activeUnifiedTabId.value) {
+          // Update unified selection BEFORE close removes the tab.
+          if (isMain && tabId === activeUnifiedTabId.value) {
             switchToAdjacentTab(tabId);
           }
-          setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
-          closeTab(tabId);
+          if (isMain) {
+            setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
+          }
+          scopeHandle.closeTab(tabId);
         },
         onCancel: () => {
           // Cancel: do nothing, keep tab as-is
@@ -610,16 +625,18 @@ export function closeUnifiedTab(tabId: string): void {
       return;
     }
 
-    // Non-agent terminal: close immediately
-    // Update unified selection BEFORE closeTab removes the tab from allTabs.
-    // switchToAdjacentTab reads getOrderedTabs() which needs the tab still present.
-    if (tabId === activeUnifiedTabId.value) {
+    // Non-agent terminal: close immediately on the owning scope.
+    if (isMain && tabId === activeUnifiedTabId.value) {
       switchToAdjacentTab(tabId);
     }
-    setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
-    closeTab(tabId);
+    if (isMain) {
+      setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
+    }
+    scopeHandle.closeTab(tabId);
     return;
   }
+
+  if (!tab) return;
 
   if (tab.type === 'editor') {
     if (tab.dirty) {

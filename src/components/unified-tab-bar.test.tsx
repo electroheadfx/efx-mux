@@ -534,6 +534,60 @@ describe('UnifiedTabBar scope prop (Phase 20, Plan 02)', () => {
     });
   });
 
+  // ─── Fix #1 (20-05-E): terminal × close is scope-aware ───────────────────
+
+  describe('Fix #1 (20-05-E) closeUnifiedTab is scope-aware for terminal tabs', () => {
+    it('closing a RIGHT-scope terminal tab removes it from the right scope (not main)', async () => {
+      // Seed a main-scope tab and a right-scope tab. Closing the right one
+      // must not require the main scope's signal to change.
+      const main = getTerminalScope('main');
+      const right = getTerminalScope('right');
+
+      const mainTab = {
+        id: 'tab-main-close-1', sessionName: 'sess-main-1', label: 'Terminal 1',
+        terminal: { dispose() {} } as any, fitAddon: null as any,
+        container: { remove() {} } as any,
+        ptyConnected: false, isAgent: false, ownerScope: 'main' as const,
+      };
+      const rightTab = {
+        id: 'tab-right-close-1', sessionName: 'sess-right-1', label: 'Terminal 1',
+        terminal: { dispose() {} } as any, fitAddon: null as any,
+        container: { remove() {} } as any,
+        ptyConnected: false, isAgent: false, ownerScope: 'right' as const,
+      };
+      main.tabs.value = [mainTab as any];
+      right.tabs.value = [rightTab as any];
+      right.activeTabId.value = rightTab.id;
+
+      closeUnifiedTab(rightTab.id);
+      // closeTabScoped is async (awaits destroy_pty_session invoke); flush
+      // pending microtasks so the tab removal is observable.
+      await new Promise(r => setTimeout(r, 0));
+
+      // Right-scope tab is gone; main-scope is untouched.
+      expect(right.tabs.value.find(t => t.id === rightTab.id)).toBeUndefined();
+      expect(main.tabs.value.find(t => t.id === mainTab.id)).toBeDefined();
+    });
+
+    it('closing a MAIN-scope terminal tab still removes it from main (no regression)', async () => {
+      const main = getTerminalScope('main');
+      const right = getTerminalScope('right');
+      const mainTab = {
+        id: 'tab-main-close-2', sessionName: 'sess-main-2', label: 'Terminal 2',
+        terminal: { dispose() {} } as any, fitAddon: null as any,
+        container: { remove() {} } as any,
+        ptyConnected: false, isAgent: false, ownerScope: 'main' as const,
+      };
+      main.tabs.value = [mainTab as any];
+      right.tabs.value = [];
+
+      closeUnifiedTab(mainTab.id);
+      await new Promise(r => setTimeout(r, 0));
+
+      expect(main.tabs.value.find(t => t.id === mainTab.id)).toBeUndefined();
+    });
+  });
+
   // ─── D-03 drag rejects sticky position ────────────────────────────────────
 
   describe('D-03 drag rejects sticky tab position', () => {
