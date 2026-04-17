@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 Phase: 19
 Plan: Not started
 Status: Ready to execute
-Last activity: 2026-04-17 - Completed quick task 260417-f6e: FileTree tab respects active tab context on app startup
+Last activity: 2026-04-17 - Completed quick task 260417-hgw: Auto-open new file in tab + expand parent folder on create
 
 **Code review fixes pending (non-blocking):**
 
@@ -107,6 +107,7 @@ None.
 | 260416-o1k | Fix revealFileInTree timing when tree not loaded + terminal tab rename focus theft | 2026-04-16 |
 | 260416-uig | Fix 3 file-tree polish bugs: dropdown hover state, disable text selection on right-click, decouple hover from click-selected | 2026-04-16 |
 | 260417-f6e | FileTree tab respects active tab context on app startup (no auto-select when terminal/git active, reveals editor file when editor active) | 2026-04-17 |
+| 260417-hgw | Auto-open new file in tab + expand parent folder on create | 2026-04-17 |
 
 ## Session Continuity
 
