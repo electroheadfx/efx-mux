@@ -46,6 +46,13 @@ interface EditorTabData extends BaseTab {
   dirty: boolean;
   pinned: boolean;
   displayName?: string;  // Custom user-set name; falls back to fileName
+  /**
+   * Plan 20-05-D: which panel renders this editor tab.
+   * Defaults to 'main' for both newly-opened tabs and for tabs restored from
+   * persisted state that predate the `ownerScope` field. Cross-scope drag
+   * flips this via handleCrossScopeDrop.
+   */
+  ownerScope: TerminalScope;
 }
 
 interface GitChangesTabData extends BaseTab {
@@ -270,10 +277,12 @@ export function openEditorTab(filePath: string, fileName: string, content: strin
     content,
     dirty: false,
     pinned: false,
+    ownerScope: 'main', // Plan 20-05-D: new tabs open in main; drag flips to right.
   };
 
   setProjectEditorTabs([...editorTabs.value, newTab]);
   setProjectTabOrder([...tabOrder.value, newTab.id]);
+  setScopedTabOrder('main', [...getScopedTabOrder('main'), newTab.id]);
   activeUnifiedTabId.value = newTab.id;
 }
 
@@ -301,10 +310,12 @@ export function openEditorTabPinned(filePath: string, fileName: string, content:
     content,
     dirty: false,
     pinned: true,
+    ownerScope: 'main', // Plan 20-05-D: new tabs open in main; drag flips to right.
   };
 
   setProjectEditorTabs([...editorTabs.value, newTab]);
   setProjectTabOrder([...tabOrder.value, newTab.id]);
+  setScopedTabOrder('main', [...getScopedTabOrder('main'), newTab.id]);
   activeUnifiedTabId.value = newTab.id;
 }
 
@@ -798,7 +809,11 @@ function computeDynamicTabsForScope(scope: TerminalScope): UnifiedTab[] {
     terminalTabId: t.id,
     scope,
   }));
-  const editors: UnifiedTab[] = scope === 'main' ? editorTabs.value : [];
+  // Plan 20-05-D: editor tabs are scoped via `ownerScope`. Legacy tabs without
+  // the field default to 'main' (treated as main-owned for backward compat).
+  const editors: UnifiedTab[] = editorTabs.value.filter(
+    t => (t.ownerScope ?? 'main') === scope,
+  );
   const git: UnifiedTab[] = (gitChangesTab.value && gitChangesTab.value.owningScope === scope)
     ? [gitChangesTab.value]
     : [];

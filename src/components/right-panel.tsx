@@ -11,10 +11,11 @@
 //            wrapper. All others are display:none.
 
 import { colors } from '../tokens';
-import { UnifiedTabBar, gitChangesTab } from './unified-tab-bar';
+import { UnifiedTabBar, gitChangesTab, editorTabs } from './unified-tab-bar';
 import { GSDPane } from './gsd-pane';
 import { FileTree } from './file-tree';
 import { GitChangesTab } from './git-changes-tab';
+import { EditorTab } from './editor-tab';
 import { getTerminalScope } from './terminal-tabs';
 
 /**
@@ -31,8 +32,14 @@ export function RightPanel() {
   const gcOwnedHere = gc?.owningScope === 'right';
   const gcActive = !!gcOwnedHere && !!gc && activeId === gc.id;
   const stickyActive = activeId === 'file-tree' || activeId === 'gsd';
-  // Dynamic active = active tab is a terminal/agent id (not sticky, not gc).
-  const isDynamic = !stickyActive && !gcActive;
+  // Plan 20-05-D: right-scope editor tabs (dragged in from main).
+  const rightEditors = editorTabs.value.filter(
+    t => (t.ownerScope ?? 'main') === 'right',
+  );
+  const isEditorActive = rightEditors.some(t => t.id === activeId);
+  // Dynamic (terminal) active = active id matches a right-scope terminal tab,
+  // i.e. not sticky, not gc, and not a right-owned editor.
+  const isDynamic = !stickyActive && !gcActive && !isEditorActive;
 
   return (
     <aside
@@ -74,6 +81,20 @@ export function RightPanel() {
             <GitChangesTab />
           </div>
         )}
+        {/* Plan 20-05-D: editor tabs owned by the right scope. Each EditorTab
+            component mounts its own CodeMirror EditorView and toggles display
+            via its `isActive` prop. registerEditorView keys on tabId so the
+            save + dirty pipeline works identically to main-scope editors. */}
+        {rightEditors.map(tab => (
+          <EditorTab
+            key={tab.id}
+            tabId={tab.id}
+            filePath={tab.filePath}
+            fileName={tab.fileName}
+            content={tab.content}
+            isActive={tab.id === activeId}
+          />
+        ))}
         {/* Terminal container wrapper — PTY mount point for scope='right'.
             Positioned absolute so it overlays the content area; visibility is
             controlled by display toggle so xterm retains measurable layout. */}
