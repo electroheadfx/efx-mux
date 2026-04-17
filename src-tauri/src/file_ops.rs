@@ -858,6 +858,31 @@ mod tests {
         assert!(err.contains("directory traversal"), "Expected traversal error, got: {}", err);
     }
 
+    #[test]
+    fn create_file_rejects_existing() {
+        // UAT Test 8 fix: create_file_impl must NOT silently truncate an existing file.
+        // Diagnosed root cause: std::fs::write(path, "") replaces contents without checking existence.
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("existing.txt");
+        std::fs::write(&file, "original content").unwrap();
+        let path = file.to_str().unwrap();
+
+        let result = create_file_impl(path);
+        assert!(result.is_err(), "create_file on existing path must error");
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("already exists"),
+            "Expected 'already exists' error, got: {}",
+            err
+        );
+        // Defense-in-depth: prove the file was NOT truncated.
+        let content = std::fs::read_to_string(&file).unwrap();
+        assert_eq!(
+            content, "original content",
+            "Existing file MUST remain intact after rejected create_file"
+        );
+    }
+
     // ========== Phase 18: create_folder tests ==========
 
     #[test]
