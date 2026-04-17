@@ -357,6 +357,12 @@ pub fn create_file_impl(path: &str) -> Result<(), String> {
     if !is_safe_path(path) {
         return Err("Invalid path: directory traversal not allowed".to_string());
     }
+    // UAT Test 8 fix: refuse to overwrite an existing path.
+    // The error string MUST contain "already exists" so the frontend matcher
+    // (file-tree.tsx:626-634) renders the inline conflict error.
+    if Path::new(path).exists() {
+        return Err(format!("File already exists: {}", path));
+    }
     // Create parent directories if needed
     if let Some(parent) = Path::new(path).parent() {
         if !parent.as_os_str().is_empty() {
