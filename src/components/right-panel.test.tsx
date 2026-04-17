@@ -31,7 +31,7 @@ import { RightPanel } from './right-panel';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-function getBodies(container: HTMLElement): {
+function getBodies(container: Element): {
   fileTree: HTMLElement;
   gsd: HTMLElement;
   terminalWrapper: HTMLElement;

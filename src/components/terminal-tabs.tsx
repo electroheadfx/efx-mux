@@ -78,7 +78,10 @@ function createScopeState(scope: TerminalScope): ScopeState {
   return {
     scope,
     tabs: signal<TerminalTab[]>([]),
-    activeTabId: signal<string>(''),
+    // D-17 new-project default: right scope seeds to the 'file-tree' sticky id so
+    // the first render of the right panel shows the File Tree body, not an empty
+    // state. Main scope keeps '' (no tabs yet) — first tab init takes over.
+    activeTabId: signal<string>(scope === 'right' ? 'file-tree' : ''),
     counter: { n: 0 },
     containerSelector: scope === 'main'
       ? '.terminal-containers'
