@@ -1,9 +1,24 @@
-// terminal-tabs.tsx -- Multi-tab terminal management for main panel (UX-02, D-04/D-05/D-06/D-07)
-// Each tab is its own tmux session backed by a separate PTY.
-// Tab state persists to state.json via updateSession (Pitfall 6).
-// display:none/block preserves xterm.js scrollback + WebGL context.
+// terminal-tabs.tsx -- Multi-tab terminal management, scope-parametrized (Phase 20 Plan 01).
+//
+// Prior life: single-instance module backing the main panel's terminal tabs (Phase 17).
+// This refactor converts it to a scope registry keyed on `TerminalScope = 'main' | 'right'`
+// so both panels share the same infrastructure. Every existing top-level export remains
+// and resolves to scope `'main'` (D-11 backward compatibility). Right-panel call sites use
+// the new `getTerminalScope('right')` accessor.
+//
+// Scope differences:
+//   - containerSelector: '.terminal-containers' (main) vs '.terminal-containers[data-scope="right"]' (right)
+//   - persistence keys:  'terminal-tabs' + 'terminal-tabs:<project>'  (main, backward compat)
+//                        'right-terminal-tabs:<project>'              (right, D-15)
+//   - session-name suffix:
+//                        main   → bare <project> for 1st tab, <project>-<N> for Nth (N >= 2)
+//                        right  → <project>-r<N> for Nth tab (N >= 1)
+//                        crash restart → <project>-rr<N> (Pitfall 1: avoid collision with right-scope -r<N>)
+//
+// Shared pipeline (scope-agnostic per D-12): createTerminal, connectPty, attachResizeHandler,
+// registerTerminal (theme), projectSessionName.
 
-import { signal } from '@preact/signals';
+import { signal, type Signal } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Terminal } from '@xterm/xterm';
@@ -14,13 +29,14 @@ import { attachResizeHandler } from '../terminal/resize-handler';
 import { registerTerminal, getTheme } from '../theme/theme-manager';
 import { updateSession, activeProjectName, projects, getCurrentState } from '../state-manager';
 import { detectAgent } from '../server/server-bridge';
-import { colors, fonts } from '../tokens';
 import { projectSessionName } from '../utils/session-name';
 import { CrashOverlay } from './crash-overlay';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+export type TerminalScope = 'main' | 'right';
 
 export interface TerminalTab {
   id: string;
@@ -34,34 +50,64 @@ export interface TerminalTab {
   detachResize?: () => void;
   exitCode?: number | null;  // undefined = running, number = exited
   isAgent: boolean;  // true if this tab runs an agent (claude/opencode)
+  ownerScope: TerminalScope;  // Phase 20 D-10: scope this tab belongs to
 }
 
 export interface CreateTabOptions {
   /** When true, resolve and launch the project's configured agent binary */
   isAgent?: boolean;
+  /** Phase 20 D-11: top-level createNewTab() wrapper forwards this to createNewTabScoped. Default 'main'. */
+  scope?: TerminalScope;
 }
 
 // ---------------------------------------------------------------------------
-// Signals
+// Scope registry (D-10)
 // ---------------------------------------------------------------------------
 
-export const terminalTabs = signal<TerminalTab[]>([]);
-export const activeTabId = signal<string>('');
-let tabCounter = 0;
+interface ScopeState {
+  scope: TerminalScope;
+  tabs: Signal<TerminalTab[]>;
+  activeTabId: Signal<string>;
+  counter: { n: number };
+  containerSelector: string;
+  persistenceKey: (projectName: string) => string;
+  projectTabCache: Map<string, Array<{ sessionName: string; label: string; isAgent: boolean }>>;
+}
 
-/**
- * In-memory cache of tab metadata per project name.
- * Used to restore tabs when switching back to a previously visited project.
- * Key: project name, Value: array of { sessionName, label } for each tab.
- */
-const projectTabCache = new Map<string, Array<{ sessionName: string; label: string; isAgent: boolean }>>();
+function createScopeState(scope: TerminalScope): ScopeState {
+  return {
+    scope,
+    tabs: signal<TerminalTab[]>([]),
+    activeTabId: signal<string>(''),
+    counter: { n: 0 },
+    containerSelector: scope === 'main'
+      ? '.terminal-containers'
+      : '.terminal-containers[data-scope="right"]',
+    persistenceKey: (projectName: string) =>
+      scope === 'main'
+        ? `terminal-tabs:${projectName}`
+        : `right-terminal-tabs:${projectName}`,
+    projectTabCache: new Map(),
+  };
+}
+
+const scopes = new Map<TerminalScope, ScopeState>([
+  ['main', createScopeState('main')],
+  ['right', createScopeState('right')],
+]);
+
+function getScope(scope: TerminalScope): ScopeState {
+  const s = scopes.get(scope);
+  if (!s) throw new Error(`[efxmux] unknown terminal scope: ${scope}`);
+  return s;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function getTerminalContainersEl(): HTMLElement | null {
-  return document.querySelector('.terminal-containers');
+function getTerminalContainersElForScope(scope: TerminalScope): HTMLElement | null {
+  return document.querySelector(getScope(scope).containerSelector);
 }
 
 /**
@@ -107,29 +153,37 @@ function agentLabel(agent?: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Tab management functions (exported for keyboard handler)
+// Scoped lifecycle functions
 // ---------------------------------------------------------------------------
 
 /**
- * Create a new terminal tab with its own tmux session.
- * @param options.isAgent - When true, resolve the project's configured agent
- *   binary and launch it instead of a plain shell.
+ * Create a new terminal tab in the given scope with its own tmux session.
  */
-export async function createNewTab(options?: CreateTabOptions): Promise<TerminalTab | null> {
-  const wrapper = getTerminalContainersEl();
+async function createNewTabScoped(
+  scope: TerminalScope,
+  options?: CreateTabOptions,
+): Promise<TerminalTab | null> {
+  const s = getScope(scope);
+  const wrapper = getTerminalContainersElForScope(scope);
   if (!wrapper) {
-    console.error('[efxmux] .terminal-containers not found');
+    console.error(`[efxmux] ${s.containerSelector} not found`);
     return null;
   }
 
   const wantAgent = options?.isAgent ?? false;
 
-  tabCounter++;
-  const id = `tab-${Date.now()}-${tabCounter}`;
+  s.counter.n++;
+  const id = `tab-${Date.now()}-${s.counter.n}`;
 
-  // Derive session name
+  // D-14: session-name suffix differs per scope.
   const activeName = activeProjectName.value;
-  const sessionSuffix = tabCounter > 1 ? String(tabCounter) : undefined;
+  let sessionSuffix: string | undefined;
+  if (scope === 'main') {
+    sessionSuffix = s.counter.n > 1 ? String(s.counter.n) : undefined;
+  } else {
+    // right scope: every tab gets -r<N>, even the first.
+    sessionSuffix = `r${s.counter.n}`;
+  }
   const sessionName = projectSessionName(activeName, sessionSuffix);
 
   // Resolve project info (needed for working directory and agent config)
@@ -150,13 +204,13 @@ export async function createNewTab(options?: CreateTabOptions): Promise<Terminal
     // User requested agent but binary not found — label makes failure visible
     label = `${agentLabel(projectInfo?.agent)} (no binary)`;
   } else {
-    label = `Terminal ${tabCounter}`;
+    label = `Terminal ${s.counter.n}`;
   }
 
   // Create container
   const container = document.createElement('div');
   container.className = 'absolute inset-0';
-  container.style.display = 'none'; // Will be shown by switchToTab
+  container.style.display = 'none'; // Will be shown by switchToTabScoped
   wrapper.appendChild(container);
 
   // Create terminal
@@ -164,7 +218,7 @@ export async function createNewTab(options?: CreateTabOptions): Promise<Terminal
   const { terminal, fitAddon } = createTerminal(container, { ...themeOpts, sessionName });
   registerTerminal(terminal, fitAddon);
 
-  // Show the tab and register it before connecting PTY so switchToTab makes
+  // Show the tab and register it before connecting PTY so switchToTabScoped makes
   // the container visible and the browser can lay it out before we measure.
   const partialTab: TerminalTab = {
     id,
@@ -178,14 +232,13 @@ export async function createNewTab(options?: CreateTabOptions): Promise<Terminal
     detachResize: undefined,
     exitCode: undefined,
     isAgent,
+    ownerScope: scope,
   };
-  terminalTabs.value = [...terminalTabs.value, partialTab];
-  activeTabId.value = id;
-  switchToTab(id);
+  s.tabs.value = [...s.tabs.value, partialTab];
+  s.activeTabId.value = id;
+  switchToTabScoped(scope, id);
 
   // Wait for browser layout so fitAddon.fit() reads the real container dimensions.
-  // Without this, terminal.cols is the xterm.js default (80) and the PTY opens at
-  // 80 cols — causing paste text to wrap at col 80 regardless of the visible width.
   await nextFrame();
   fitAddon.fit();
 
@@ -215,56 +268,48 @@ export async function createNewTab(options?: CreateTabOptions): Promise<Terminal
   partialTab.disconnectPty = disconnectPty;
   partialTab.detachResize = resizeHandle.detach;
   // Trigger reactivity
-  terminalTabs.value = [...terminalTabs.value];
+  s.tabs.value = [...s.tabs.value];
 
-  persistTabState();
+  persistTabStateScoped(scope);
 
   return partialTab;
 }
 
-/**
- * Close the active terminal tab. If last tab, auto-creates a fresh one (D-07).
- */
-export async function closeActiveTab(): Promise<void> {
-  const tabs = terminalTabs.value;
-  const currentId = activeTabId.value;
+async function closeActiveTabScoped(scope: TerminalScope): Promise<void> {
+  const s = getScope(scope);
+  const tabs = s.tabs.value;
+  const currentId = s.activeTabId.value;
   const idx = tabs.findIndex(t => t.id === currentId);
   if (idx === -1) return;
 
   const tab = tabs[idx];
-  // Destroy PTY session in Rust before disposing JS-side resources
   try { await invoke('destroy_pty_session', { sessionName: tab.sessionName }); } catch (err) {
     console.warn('[efxmux] Failed to destroy PTY session:', err);
   }
   disposeTab(tab);
 
   const remaining = tabs.filter(t => t.id !== currentId);
-  terminalTabs.value = remaining;
+  s.tabs.value = remaining;
 
   if (remaining.length === 0) {
-    // Last terminal tab closed — don't auto-create if other unified tabs exist
-    activeTabId.value = '';
+    s.activeTabId.value = '';
   } else {
-    // Switch to previous tab (or first)
     const newIdx = Math.min(idx, remaining.length - 1);
-    activeTabId.value = remaining[newIdx].id;
-    switchToTab(remaining[newIdx].id);
+    s.activeTabId.value = remaining[newIdx].id;
+    switchToTabScoped(scope, remaining[newIdx].id);
   }
 
-  persistTabState();
+  persistTabStateScoped(scope);
 }
 
-/**
- * Close a specific tab by ID.
- */
-export async function closeTab(tabId: string): Promise<void> {
-  const tabs = terminalTabs.value;
+async function closeTabScoped(scope: TerminalScope, tabId: string): Promise<void> {
+  const s = getScope(scope);
+  const tabs = s.tabs.value;
   const idx = tabs.findIndex(t => t.id === tabId);
   if (idx === -1) return;
 
-  // If this is the active tab, use closeActiveTab logic
-  if (tabId === activeTabId.value) {
-    await closeActiveTab();
+  if (tabId === s.activeTabId.value) {
+    await closeActiveTabScoped(scope);
     return;
   }
 
@@ -273,150 +318,41 @@ export async function closeTab(tabId: string): Promise<void> {
     console.warn('[efxmux] Failed to destroy PTY session:', err);
   }
   disposeTab(tab);
-  terminalTabs.value = tabs.filter(t => t.id !== tabId);
-  persistTabState();
+  s.tabs.value = tabs.filter(t => t.id !== tabId);
+  persistTabStateScoped(scope);
 }
 
-/**
- * Cycle to the next tab (wraps around).
- */
-export function cycleToNextTab(): void {
-  const tabs = terminalTabs.value;
+function cycleToNextTabScoped(scope: TerminalScope): void {
+  const s = getScope(scope);
+  const tabs = s.tabs.value;
   if (tabs.length <= 1) return;
 
-  const idx = tabs.findIndex(t => t.id === activeTabId.value);
+  const idx = tabs.findIndex(t => t.id === s.activeTabId.value);
   const nextIdx = (idx + 1) % tabs.length;
-  activeTabId.value = tabs[nextIdx].id;
-  switchToTab(tabs[nextIdx].id);
+  s.activeTabId.value = tabs[nextIdx].id;
+  switchToTabScoped(scope, tabs[nextIdx].id);
 }
 
-/**
- * Rename a terminal tab's label and persist the change.
- */
-export function renameTerminalTab(tabId: string, newLabel: string): void {
-  const tabs = terminalTabs.value;
+function renameTerminalTabScoped(scope: TerminalScope, tabId: string, newLabel: string): void {
+  const s = getScope(scope);
+  const tabs = s.tabs.value;
   const tab = tabs.find(t => t.id === tabId);
   if (!tab) return;
   tab.label = newLabel;
-  terminalTabs.value = [...tabs]; // trigger reactivity
-  persistTabState();
+  s.tabs.value = [...tabs]; // trigger reactivity
+  persistTabStateScoped(scope);
 }
 
-/**
- * Get the default label for a terminal tab (used when resetting a rename).
- */
-export function getDefaultTerminalLabel(tab: TerminalTab): string {
-  if (tab.isAgent) {
-    const activeName = activeProjectName.value;
-    const activeProject = activeName ? projects.value.find(p => p.name === activeName) : null;
-    return activeProject?.agent ? `Agent ${activeProject.agent}` : 'Agent';
-  }
-  return 'Terminal';
-}
-
-/**
- * Get the active terminal + fitAddon, or null if no tabs.
- */
-export function getActiveTerminal(): { terminal: Terminal; fitAddon: FitAddon } | null {
-  const tab = terminalTabs.value.find(t => t.id === activeTabId.value);
+function getActiveTerminalScoped(scope: TerminalScope): { terminal: Terminal; fitAddon: FitAddon } | null {
+  const s = getScope(scope);
+  const tab = s.tabs.value.find(t => t.id === s.activeTabId.value);
   if (!tab) return null;
   return { terminal: tab.terminal, fitAddon: tab.fitAddon };
 }
 
-// ---------------------------------------------------------------------------
-// Init first tab (called from main.tsx bootstrap)
-// ---------------------------------------------------------------------------
-
-/**
- * Initialize the first terminal tab during app bootstrap.
- * Replaces inline createTerminal + connectPty in main.tsx.
- */
-export async function initFirstTab(
-  themeOptions: TerminalOptions,
-  sessionName: string,
-  projectPath?: string,
-  agentBinary?: string,
-): Promise<{ terminal: Terminal; fitAddon: FitAddon } | null> {
-  const wrapper = getTerminalContainersEl();
-  if (!wrapper) {
-    console.error('[efxmux] .terminal-containers not found');
-    return null;
-  }
-
-  tabCounter++;
-  const id = `tab-${Date.now()}-${tabCounter}`;
-
-  // Label: use agent name if configured
-  const activeName = activeProjectName.value;
-  const activeProject = activeName ? projects.value.find(p => p.name === activeName) : null;
-  let label: string;
-  if (activeProject?.agent && activeProject.agent !== 'bash') {
-    label = agentLabel(activeProject.agent);
-  } else {
-    label = 'Terminal 1';
-  }
-
-  // Create container
-  const container = document.createElement('div');
-  container.className = 'absolute inset-0';
-  wrapper.appendChild(container);
-
-  // Create terminal
-  const { terminal, fitAddon } = createTerminal(container, { ...themeOptions, sessionName });
-
-  // Wait for browser layout before measuring. createTerminal calls fitAddon.fit()
-  // synchronously, but the container was just appended — no layout has occurred yet.
-  // Without this frame, terminal.cols stays at the xterm.js default (80) and the PTY
-  // opens at 80 cols, causing paste text to wrap at col 80 regardless of visible width.
-  await nextFrame();
-  fitAddon.fit();
-
-  // Connect PTY
-  let disconnectPty: (() => void) | undefined;
-  let ptyConnected = false;
-
-  try {
-    const conn = await connectPty(terminal, sessionName, projectPath, agentBinary);
-    disconnectPty = conn.disconnect;
-    ptyConnected = true;
-  } catch (err) {
-    console.error('[efxmux] Failed to connect PTY:', err);
-    terminal.writeln('\x1b[33mWarning: Could not attach to tmux session "' + sessionName + '":\x1b[0m ' + err);
-    terminal.writeln('\x1b[33mIf tmux is not installed, run: brew install tmux\x1b[0m');
-  }
-
-  // Attach resize handler
-  const resizeHandle = attachResizeHandler(container, terminal, fitAddon, sessionName);
-
-  const tab: TerminalTab = {
-    id,
-    sessionName,
-    label,
-    terminal,
-    fitAddon,
-    container,
-    ptyConnected,
-    disconnectPty,
-    detachResize: resizeHandle.detach,
-    exitCode: undefined,
-    isAgent: !!agentBinary,
-  };
-
-  terminalTabs.value = [tab];
-  activeTabId.value = id;
-  // Container is already visible (no display:none needed for first tab)
-
-  persistTabState();
-
-  return { terminal, fitAddon };
-}
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-export function switchToTab(tabId: string): void {
-  const tabs = terminalTabs.value;
+function switchToTabScoped(scope: TerminalScope, tabId: string): void {
+  const s = getScope(scope);
+  const tabs = s.tabs.value;
   for (const tab of tabs) {
     if (tab.id === tabId) {
       tab.container.style.display = 'block';
@@ -442,33 +378,50 @@ function disposeTab(tab: TerminalTab): void {
 }
 
 // ---------------------------------------------------------------------------
-// Tab persistence (Pitfall 6)
+// Scoped persistence (D-15)
 // ---------------------------------------------------------------------------
 
-function persistTabState(): void {
+function persistTabStateScoped(scope: TerminalScope): void {
+  const s = getScope(scope);
   const activeName = activeProjectName.value;
-  const tabs = terminalTabs.value.map(t => ({
+  const tabs = s.tabs.value.map(t => ({
     sessionName: t.sessionName,
     label: t.label,
     isAgent: t.isAgent ?? false,
   }));
-  const data = JSON.stringify({ tabs, activeTabId: activeTabId.value });
-  // Save under per-project key (and legacy flat key for backward compat)
-  const patch: Record<string, string> = { 'terminal-tabs': data };
-  if (activeName) {
-    patch[`terminal-tabs:${activeName}`] = data;
+  const data = JSON.stringify({ tabs, activeTabId: s.activeTabId.value });
+  const patch: Record<string, string> = {};
+  if (scope === 'main') {
+    // D-11 / backward compat: keep the flat 'terminal-tabs' key written too.
+    patch['terminal-tabs'] = data;
   }
-  updateSession(patch);
+  if (activeName) {
+    patch[s.persistenceKey(activeName)] = data;
+  }
+  if (Object.keys(patch).length > 0) {
+    updateSession(patch);
+  }
 }
 
 // ---------------------------------------------------------------------------
-// Restart a tab's PTY session (for crash overlay)
+// Restart (Pitfall 1: use -rr<N> suffix to avoid collision with right-scope -r<N>)
 // ---------------------------------------------------------------------------
 
 export async function restartTabSession(tabId: string): Promise<void> {
-  const tabs = terminalTabs.value;
-  const tab = tabs.find(t => t.id === tabId);
-  if (!tab) return;
+  // Find the tab across all scopes.
+  let owningScope: TerminalScope | null = null;
+  let tab: TerminalTab | undefined;
+  for (const [scopeName, state] of scopes) {
+    const found = state.tabs.value.find(t => t.id === tabId);
+    if (found) {
+      owningScope = scopeName;
+      tab = found;
+      break;
+    }
+  }
+  if (!tab || !owningScope) return;
+
+  const s = getScope(owningScope);
 
   // Disconnect old PTY
   tab.disconnectPty?.();
@@ -478,11 +431,12 @@ export async function restartTabSession(tabId: string): Promise<void> {
   // Clear exit code
   tab.exitCode = undefined;
 
-  // New session name (increment suffix) — must be computed before createTerminal
+  // New session name (increment owning-scope counter) — must be computed before createTerminal
   // so the key handler's sessionName closure captures the correct value.
+  // Pitfall 1: 'rr' prefix avoids collision with right-scope -r<N>.
   const projectInfo = await getActiveProjectInfo();
-  tabCounter++;
-  const newSessionSuffix = `r${tabCounter}`;
+  s.counter.n++;
+  const newSessionSuffix = `rr${s.counter.n}`;
   const newSessionName = projectSessionName(activeProjectName.value, newSessionSuffix);
 
   // Create new terminal in same container
@@ -491,12 +445,9 @@ export async function restartTabSession(tabId: string): Promise<void> {
   const { terminal, fitAddon } = createTerminal(tab.container, { ...themeOpts, sessionName: newSessionName });
   registerTerminal(terminal, fitAddon);
 
-  // Wait for browser layout before measuring, then fit — ensures the PTY opens
-  // at the real container width instead of the 80-col xterm.js default.
   await nextFrame();
   fitAddon.fit();
 
-  // Connect PTY -- only resolve agent binary if this tab was originally an agent tab
   const restartAgentBinary = tab.isAgent ? await resolveAgentBinary(projectInfo?.agent) : undefined;
   try {
     const conn = await connectPty(terminal, newSessionName, projectInfo?.path, restartAgentBinary, true);
@@ -508,7 +459,6 @@ export async function restartTabSession(tabId: string): Promise<void> {
     tab.ptyConnected = false;
   }
 
-  // Attach resize handler
   const resizeHandle = attachResizeHandler(tab.container, terminal, fitAddon, newSessionName);
   tab.detachResize = resizeHandle.detach;
 
@@ -516,46 +466,40 @@ export async function restartTabSession(tabId: string): Promise<void> {
   tab.fitAddon = fitAddon;
   tab.sessionName = newSessionName;
 
-  // Trigger re-render
-  terminalTabs.value = [...tabs];
+  // Trigger re-render on the owning scope
+  s.tabs.value = [...s.tabs.value];
   terminal.focus();
   fitAddon.fit();
-  persistTabState();
+  persistTabStateScoped(owningScope);
 }
 
 // ---------------------------------------------------------------------------
-// Clear all tabs (for project switch)
+// Per-project cache + restore (scoped)
 // ---------------------------------------------------------------------------
 
-/**
- * Save current tabs to the per-project cache before clearing.
- * Call this with the OLD project name before switching away.
- */
-export function saveProjectTabs(projectName: string): void {
-  const tabs = terminalTabs.value;
+function saveProjectTabsScoped(projectName: string, scope: TerminalScope): void {
+  const s = getScope(scope);
+  const tabs = s.tabs.value;
   if (tabs.length > 0) {
     const tabMeta = tabs.map(t => ({
       sessionName: t.sessionName,
       label: t.label,
       isAgent: t.isAgent ?? false,
     }));
-    projectTabCache.set(projectName, tabMeta);
+    s.projectTabCache.set(projectName, tabMeta);
     // Persist to disk so tabs survive app restart
     updateSession({
-      [`terminal-tabs:${projectName}`]: JSON.stringify({ tabs: tabMeta, activeTabId: activeTabId.value }),
+      [s.persistenceKey(projectName)]: JSON.stringify({ tabs: tabMeta, activeTabId: s.activeTabId.value }),
     });
   }
 }
 
-/**
- * Check if cached tabs exist for a project (in-memory or persisted on disk).
- */
-export function hasProjectTabs(projectName: string): boolean {
-  const cached = projectTabCache.get(projectName);
+function hasProjectTabsScoped(projectName: string, scope: TerminalScope): boolean {
+  const s = getScope(scope);
+  const cached = s.projectTabCache.get(projectName);
   if (cached && cached.length > 0) return true;
-  // Also check persisted state on disk
   const state = getCurrentState();
-  const persisted = state?.session?.[`terminal-tabs:${projectName}`];
+  const persisted = state?.session?.[s.persistenceKey(projectName)];
   if (persisted) {
     try {
       const parsed = JSON.parse(persisted);
@@ -565,61 +509,62 @@ export function hasProjectTabs(projectName: string): boolean {
   return false;
 }
 
-/**
- * Restore tabs from the per-project cache (in-memory first, then disk).
- * Re-attaches to existing tmux sessions (whose history was cleared by
- * spawn_terminal in pty.rs to prevent stale content dump).
- * Returns true if tabs were restored, false if no cache exists.
- */
-export async function restoreProjectTabs(
+async function restoreProjectTabsScoped(
   projectName: string,
-  projectPath?: string,
-  agentBinary?: string,
+  projectPath: string | undefined,
+  agentBinary: string | undefined,
+  scope: TerminalScope,
 ): Promise<boolean> {
-  let tabData: Array<{ sessionName: string; label: string }> | null = null;
+  const s = getScope(scope);
+  let tabData: Array<{ sessionName: string; label: string; isAgent?: boolean }> | null = null;
 
-  // Try in-memory cache first (from same-session project switch)
-  const cached = projectTabCache.get(projectName);
+  // Try in-memory cache first
+  const cached = s.projectTabCache.get(projectName);
   if (cached && cached.length > 0) {
     tabData = cached;
   }
 
-  // Fall back to persisted state on disk (survives app restart)
+  // Fall back to persisted state on disk
   if (!tabData) {
     const state = getCurrentState();
-    const persisted = state?.session?.[`terminal-tabs:${projectName}`];
+    const persisted = state?.session?.[s.persistenceKey(projectName)];
     if (persisted) {
       try {
         const parsed = JSON.parse(persisted);
         if (parsed?.tabs?.length > 0) {
-          tabData = parsed.tabs;
+          // T-20-01 mitigation: reject entries missing required fields.
+          tabData = (parsed.tabs as Array<any>).filter(t =>
+            t && typeof t.sessionName === 'string'
+              && typeof t.label === 'string'
+              && (typeof t.isAgent === 'boolean' || typeof t.isAgent === 'undefined'),
+          );
         }
-      } catch { /* ignore parse errors */ }
+      } catch (err) {
+        console.warn('[efxmux] Failed to restore right-scope tabs:', err);
+      }
     }
   }
 
   if (!tabData || tabData.length === 0) return false;
 
-  const restored = await restoreTabs(
+  const restored = await restoreTabsScoped(
     { tabs: tabData, activeTabId: '' },
     projectPath,
     agentBinary,
+    scope,
   );
 
   if (restored) {
-    // Clear the in-memory cache entry since tabs are now live again
-    projectTabCache.delete(projectName);
+    s.projectTabCache.delete(projectName);
   }
 
   return restored;
 }
 
-export async function clearAllTabs(): Promise<void> {
+async function clearAllTabsScoped(scope: TerminalScope): Promise<void> {
+  const s = getScope(scope);
   // Destroy PTY sessions in Rust so old PTY clients disconnect.
-  // The tmux sessions are kept alive (not killed) so tabs can be restored
-  // when switching back to this project. Stale screen content is cleared
-  // by spawn_terminal before re-attaching.
-  for (const tab of terminalTabs.value) {
+  for (const tab of s.tabs.value) {
     try {
       await invoke('destroy_pty_session', { sessionName: tab.sessionName });
     } catch {
@@ -627,60 +572,47 @@ export async function clearAllTabs(): Promise<void> {
     }
     disposeTab(tab);
   }
-  terminalTabs.value = [];
-  activeTabId.value = '';
-  tabCounter = 0;
+  s.tabs.value = [];
+  s.activeTabId.value = '';
+  s.counter.n = 0;
 }
 
 // ---------------------------------------------------------------------------
-// Tab restoration (called from main.tsx bootstrap for session persistence)
+// Tab restoration (scoped)
 // ---------------------------------------------------------------------------
 
-/**
- * Restore tabs from persisted state.json data on app startup.
- * Returns true if at least 1 tab was restored, false otherwise.
- */
-export async function restoreTabs(
+async function restoreTabsScoped(
   savedData: { tabs: Array<{ sessionName: string; label: string; isAgent?: boolean }>; activeTabId: string },
-  projectPath?: string,
-  agentBinary?: string,
+  projectPath: string | undefined,
+  agentBinary: string | undefined,
+  scope: TerminalScope,
 ): Promise<boolean> {
   if (!savedData?.tabs?.length) return false;
 
-  const wrapper = getTerminalContainersEl();
+  const s = getScope(scope);
+  const wrapper = getTerminalContainersElForScope(scope);
   if (!wrapper) return false;
 
   const restoredTabs: TerminalTab[] = [];
 
   for (let i = 0; i < savedData.tabs.length; i++) {
     const saved = savedData.tabs[i];
-    tabCounter++;
-    const id = `tab-${Date.now()}-${tabCounter}`;
+    s.counter.n++;
+    const id = `tab-${Date.now()}-${s.counter.n}`;
 
-    // Create container — make it visible so the browser can lay it out and
-    // fitAddon.fit() reads real dimensions. switchToTab will hide non-active tabs.
     const container = document.createElement('div');
     container.className = 'absolute inset-0';
-    // Intentionally NOT setting display:none here — container must be visible for
-    // fitAddon to measure the real column count before PTY spawn.
     wrapper.appendChild(container);
 
-    // Create terminal — pass sessionName so the Shift+Enter key handler can invoke
-    // send_literal_sequence with the correct tmux target.
     const themeOpts = getThemeOptions();
     const { terminal, fitAddon } = createTerminal(container, { ...themeOpts, sessionName: saved.sessionName });
     registerTerminal(terminal, fitAddon);
 
-    // Wait for browser layout so fitAddon.fit() reads the real container width.
-    // Without this, terminal.cols is 80 (xterm.js default) and the PTY opens at
-    // 80 cols — causing paste text to wrap at col 80 regardless of visible width.
     await nextFrame();
     fitAddon.fit();
 
-    // Hide after measuring — switchToTab will reveal the active tab.
     container.style.display = 'none';
 
-    // Connect PTY -- use persisted isAgent flag (backward compat: old data without isAgent falls back to index heuristic)
     const isAgentTab = saved.isAgent ?? (i === 0 && !!agentBinary);
     const shellCmd = (isAgentTab && agentBinary) ? agentBinary : undefined;
     let disconnectPty: (() => void) | undefined;
@@ -695,7 +627,6 @@ export async function restoreTabs(
       terminal.writeln(`\x1b[33mFailed to restore session "${saved.sessionName}": ${err}\x1b[0m`);
     }
 
-    // Attach resize handler
     const resizeHandle = attachResizeHandler(container, terminal, fitAddon, saved.sessionName);
 
     restoredTabs.push({
@@ -710,43 +641,27 @@ export async function restoreTabs(
       detachResize: resizeHandle.detach,
       exitCode: undefined,
       isAgent: isAgentTab,
+      ownerScope: scope,
     });
   }
 
   if (restoredTabs.length === 0) return false;
 
-  terminalTabs.value = restoredTabs;
+  s.tabs.value = restoredTabs;
+  s.activeTabId.value = restoredTabs[0].id;
+  switchToTabScoped(scope, restoredTabs[0].id);
 
-  // Activate the saved active tab (or first if saved ID no longer maps)
-  // Since we generate new IDs, activate by index -- savedData.activeTabId won't match
-  // Default to first tab
-  activeTabId.value = restoredTabs[0].id;
-  switchToTab(restoredTabs[0].id);
-
-  persistTabState();
+  persistTabStateScoped(scope);
   return true;
 }
 
 // ---------------------------------------------------------------------------
-// PTY exit event listener
+// Crash overlay (scoped)
 // ---------------------------------------------------------------------------
 
-listen<{ session: string; code: number }>('pty-exited', (event) => {
-  const { session, code } = event.payload;
-  const tabs = terminalTabs.value;
-  const tab = tabs.find(t => t.sessionName === session);
-  if (tab) {
-    tab.exitCode = code;
-    terminalTabs.value = [...tabs]; // trigger re-render
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Active tab crash overlay rendering (used in main-panel.tsx)
-// ---------------------------------------------------------------------------
-
-export function ActiveTabCrashOverlay() {
-  const tab = terminalTabs.value.find(t => t.id === activeTabId.value);
+function ActiveTabCrashOverlayScoped(scope: TerminalScope) {
+  const s = getScope(scope);
+  const tab = s.tabs.value.find(t => t.id === s.activeTabId.value);
   if (!tab || tab.exitCode === undefined || tab.exitCode === null) return null;
 
   return (
@@ -756,3 +671,207 @@ export function ActiveTabCrashOverlay() {
     />
   );
 }
+
+// ---------------------------------------------------------------------------
+// initFirstTab (main-only semantics; preserved)
+// ---------------------------------------------------------------------------
+
+/**
+ * Initialize the first terminal tab during app bootstrap.
+ * Main-panel semantics. Preserved signature for main.tsx bootstrap.
+ */
+export async function initFirstTab(
+  themeOptions: TerminalOptions,
+  sessionName: string,
+  projectPath?: string,
+  agentBinary?: string,
+): Promise<{ terminal: Terminal; fitAddon: FitAddon } | null> {
+  const s = getScope('main');
+  const wrapper = getTerminalContainersElForScope('main');
+  if (!wrapper) {
+    console.error('[efxmux] .terminal-containers not found');
+    return null;
+  }
+
+  s.counter.n++;
+  const id = `tab-${Date.now()}-${s.counter.n}`;
+
+  const activeName = activeProjectName.value;
+  const activeProject = activeName ? projects.value.find(p => p.name === activeName) : null;
+  let label: string;
+  if (activeProject?.agent && activeProject.agent !== 'bash') {
+    label = agentLabel(activeProject.agent);
+  } else {
+    label = 'Terminal 1';
+  }
+
+  const container = document.createElement('div');
+  container.className = 'absolute inset-0';
+  wrapper.appendChild(container);
+
+  const { terminal, fitAddon } = createTerminal(container, { ...themeOptions, sessionName });
+
+  await nextFrame();
+  fitAddon.fit();
+
+  let disconnectPty: (() => void) | undefined;
+  let ptyConnected = false;
+
+  try {
+    const conn = await connectPty(terminal, sessionName, projectPath, agentBinary);
+    disconnectPty = conn.disconnect;
+    ptyConnected = true;
+  } catch (err) {
+    console.error('[efxmux] Failed to connect PTY:', err);
+    terminal.writeln('\x1b[33mWarning: Could not attach to tmux session "' + sessionName + '":\x1b[0m ' + err);
+    terminal.writeln('\x1b[33mIf tmux is not installed, run: brew install tmux\x1b[0m');
+  }
+
+  const resizeHandle = attachResizeHandler(container, terminal, fitAddon, sessionName);
+
+  const tab: TerminalTab = {
+    id,
+    sessionName,
+    label,
+    terminal,
+    fitAddon,
+    container,
+    ptyConnected,
+    disconnectPty,
+    detachResize: resizeHandle.detach,
+    exitCode: undefined,
+    isAgent: !!agentBinary,
+    ownerScope: 'main',
+  };
+
+  s.tabs.value = [tab];
+  s.activeTabId.value = id;
+
+  persistTabStateScoped('main');
+
+  return { terminal, fitAddon };
+}
+
+// ---------------------------------------------------------------------------
+// Backward-compat top-level exports (D-11)
+// Every export below MUST still resolve to scope 'main' with identical signatures.
+// ---------------------------------------------------------------------------
+
+/** D-11 backward-compat: same Signal reference as getTerminalScope('main').tabs */
+export const terminalTabs = scopes.get('main')!.tabs;
+/** D-11 backward-compat: same Signal reference as getTerminalScope('main').activeTabId */
+export const activeTabId = scopes.get('main')!.activeTabId;
+
+export function createNewTab(options?: CreateTabOptions): Promise<TerminalTab | null> {
+  return createNewTabScoped(options?.scope ?? 'main', options);
+}
+export function closeTab(tabId: string): Promise<void> { return closeTabScoped('main', tabId); }
+export function closeActiveTab(): Promise<void> { return closeActiveTabScoped('main'); }
+export function cycleToNextTab(): void { cycleToNextTabScoped('main'); }
+export function switchToTab(tabId: string): void { switchToTabScoped('main', tabId); }
+export function renameTerminalTab(tabId: string, newLabel: string): void {
+  renameTerminalTabScoped('main', tabId, newLabel);
+}
+export function getActiveTerminal(): { terminal: Terminal; fitAddon: FitAddon } | null {
+  return getActiveTerminalScoped('main');
+}
+export function saveProjectTabs(projectName: string, scope: TerminalScope = 'main'): void {
+  saveProjectTabsScoped(projectName, scope);
+}
+export function restoreProjectTabs(
+  projectName: string,
+  projectPath?: string,
+  agentBinary?: string,
+  scope: TerminalScope = 'main',
+): Promise<boolean> {
+  return restoreProjectTabsScoped(projectName, projectPath, agentBinary, scope);
+}
+export function hasProjectTabs(projectName: string, scope: TerminalScope = 'main'): boolean {
+  return hasProjectTabsScoped(projectName, scope);
+}
+export function clearAllTabs(): Promise<void> { return clearAllTabsScoped('main'); }
+export function ActiveTabCrashOverlay() { return ActiveTabCrashOverlayScoped('main'); }
+
+/**
+ * Get the default label for a terminal tab (used when resetting a rename).
+ * Preserved signature: takes the tab object, returns its canonical label.
+ */
+export function getDefaultTerminalLabel(tab: TerminalTab): string {
+  if (tab.isAgent) {
+    const activeName = activeProjectName.value;
+    const activeProject = activeName ? projects.value.find(p => p.name === activeName) : null;
+    return activeProject?.agent ? `Agent ${activeProject.agent}` : 'Agent';
+  }
+  return 'Terminal';
+}
+
+/**
+ * Restore tabs from persisted state.json data on app startup (main scope).
+ * Preserved signature for main.tsx bootstrap.
+ */
+export async function restoreTabs(
+  savedData: { tabs: Array<{ sessionName: string; label: string; isAgent?: boolean }>; activeTabId: string },
+  projectPath?: string,
+  agentBinary?: string,
+): Promise<boolean> {
+  return restoreTabsScoped(savedData, projectPath, agentBinary, 'main');
+}
+
+// ---------------------------------------------------------------------------
+// New export: getTerminalScope for right-panel (and future) call sites
+// ---------------------------------------------------------------------------
+
+export function getTerminalScope(scope: TerminalScope) {
+  const s = getScope(scope);
+  return {
+    tabs: s.tabs,
+    activeTabId: s.activeTabId,
+    createNewTab: (opts?: CreateTabOptions) => createNewTabScoped(scope, opts),
+    closeTab: (id: string) => closeTabScoped(scope, id),
+    closeActiveTab: () => closeActiveTabScoped(scope),
+    cycleToNextTab: () => cycleToNextTabScoped(scope),
+    switchToTab: (id: string) => switchToTabScoped(scope, id),
+    renameTerminalTab: (id: string, label: string) => renameTerminalTabScoped(scope, id, label),
+    getActiveTerminal: () => getActiveTerminalScoped(scope),
+    saveProjectTabs: (projectName: string) => saveProjectTabsScoped(projectName, scope),
+    restoreProjectTabs: (projectName: string, projectPath?: string, agentBinary?: string) =>
+      restoreProjectTabsScoped(projectName, projectPath, agentBinary, scope),
+    hasProjectTabs: (projectName: string) => hasProjectTabsScoped(projectName, scope),
+    clearAllTabs: () => clearAllTabsScoped(scope),
+    ActiveTabCrashOverlay: () => ActiveTabCrashOverlayScoped(scope),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Test-only utility -- do not call in production.
+// Resets per-scope counters so each test starts from a clean baseline.
+// ---------------------------------------------------------------------------
+
+export function __resetScopeCountersForTesting(): void {
+  for (const [, state] of scopes) {
+    state.counter.n = 0;
+    state.projectTabCache.clear();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PTY exit event listener (scope-agnostic; single instance; HMR-resilient)
+// ---------------------------------------------------------------------------
+
+listen<{ session: string; code: number }>('pty-exited', (event) => {
+  const { session, code } = event.payload;
+  for (const [, state] of scopes) {
+    const tab = state.tabs.value.find(t => t.sessionName === session);
+    if (tab) {
+      tab.exitCode = code;
+      state.tabs.value = [...state.tabs.value]; // trigger reactivity
+      return; // D-14 guarantees unique session names across scopes
+    }
+  }
+}).catch((err) => {
+  // Defensive: listen() rejects in test environments that don't provide a
+  // Tauri event plugin (e.g., sibling test files that import this module
+  // transitively via unified-tab-bar but don't vi.mock('@tauri-apps/api/event')).
+  // In production this never fires.
+  console.warn('[efxmux] pty-exited listener setup failed:', err);
+});

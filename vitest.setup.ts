@@ -15,6 +15,17 @@ if (!globalThis.crypto?.getRandomValues) {
   });
 }
 
+// ─── ResizeObserver polyfill ─────────────────────────────────
+// jsdom lacks ResizeObserver. Terminal/editor resize handlers need it at
+// construction time. Use a no-op stub — tests do not assert on observer callbacks.
+if (!(globalThis as any).ResizeObserver) {
+  (globalThis as any).ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
 // ─── D-01: Tauri IPC auto-mock ───────────────────────────────
 // Set __TAURI_INTERNALS__ so any module importing @tauri-apps/api/core
 // does not throw at module load time (Pitfall 1 from research)
@@ -54,6 +65,7 @@ vi.mock('@xterm/xterm', () => {
     onData = vi.fn(() => ({ dispose: vi.fn() }));
     onResize = vi.fn(() => ({ dispose: vi.fn() }));
     onTitleChange = vi.fn(() => ({ dispose: vi.fn() }));
+    attachCustomKeyEventHandler = vi.fn();
     loadAddon = vi.fn();
     rows = 24;
     cols = 80;
@@ -68,26 +80,29 @@ vi.mock('@xterm/xterm', () => {
   return { Terminal: MockTerminal };
 });
 
-vi.mock('@xterm/addon-webgl', () => ({
-  WebglAddon: vi.fn().mockImplementation(() => ({
-    dispose: vi.fn(),
-    onContextLoss: vi.fn(() => ({ dispose: vi.fn() })),
-  })),
-}));
+vi.mock('@xterm/addon-webgl', () => {
+  class MockWebglAddon {
+    dispose = vi.fn();
+    onContextLoss = vi.fn(() => ({ dispose: vi.fn() }));
+  }
+  return { WebglAddon: MockWebglAddon };
+});
 
-vi.mock('@xterm/addon-fit', () => ({
-  FitAddon: vi.fn().mockImplementation(() => ({
-    fit: vi.fn(),
-    proposeDimensions: vi.fn(() => ({ cols: 80, rows: 24 })),
-    dispose: vi.fn(),
-  })),
-}));
+vi.mock('@xterm/addon-fit', () => {
+  class MockFitAddon {
+    fit = vi.fn();
+    proposeDimensions = vi.fn(() => ({ cols: 80, rows: 24 }));
+    dispose = vi.fn();
+  }
+  return { FitAddon: MockFitAddon };
+});
 
-vi.mock('@xterm/addon-web-links', () => ({
-  WebLinksAddon: vi.fn().mockImplementation(() => ({
-    dispose: vi.fn(),
-  })),
-}));
+vi.mock('@xterm/addon-web-links', () => {
+  class MockWebLinksAddon {
+    dispose = vi.fn();
+  }
+  return { WebLinksAddon: MockWebLinksAddon };
+});
 
 // ─── D-04: Signal reset utility ──────────────────────────────
 // Exported for test files that need to reset module-scoped signals.
