@@ -215,6 +215,47 @@ describe('terminal-tabs scope registry', () => {
       expect(lastSavedState.session['terminal-tabs']).toBeUndefined();
     });
 
+    it('hasProjectTabs("right") reads right-terminal-tabs:<project> from persisted state', async () => {
+      // Seed the persisted state with right-scope tabs, then re-load.
+      seedState.session['right-terminal-tabs:testproj'] = JSON.stringify({
+        tabs: [
+          { sessionName: 'testproj-r1', label: 'Right A', isAgent: false },
+          { sessionName: 'testproj-r2', label: 'Right B', isAgent: false },
+        ],
+        activeTabId: '',
+      });
+      const { loadAppState } = await import('../state-manager');
+      await loadAppState();
+
+      // Public accessor via getTerminalScope('right')
+      expect(getTerminalScope('right').hasProjectTabs('testproj')).toBe(true);
+      // Main scope must NOT see the right-scope persistence key as its own.
+      expect(getTerminalScope('main').hasProjectTabs('testproj')).toBe(false);
+    });
+
+    it('restoreProjectTabs for right scope restores the seeded right tabs', async () => {
+      seedState.session['right-terminal-tabs:testproj'] = JSON.stringify({
+        tabs: [
+          { sessionName: 'testproj-r1', label: 'Right A', isAgent: false },
+          { sessionName: 'testproj-r2', label: 'Right B', isAgent: false },
+        ],
+        activeTabId: '',
+      });
+      const { loadAppState } = await import('../state-manager');
+      await loadAppState();
+
+      const restored = await getTerminalScope('right').restoreProjectTabs('testproj', '/tmp/proj');
+      expect(restored).toBe(true);
+
+      const rightTabs = getTerminalScope('right').tabs.value;
+      expect(rightTabs).toHaveLength(2);
+      expect(rightTabs.map(t => t.sessionName)).toEqual(['testproj-r1', 'testproj-r2']);
+      // ownerScope is assigned to 'right' for every restored tab
+      for (const t of rightTabs) expect(t.ownerScope).toBe('right');
+      // Main scope must remain empty.
+      expect(getTerminalScope('main').tabs.value).toHaveLength(0);
+    });
+
     it('pty-exited scope-agnostic update: right-scope sessionName lookup hits right tabs only', async () => {
       // Seed a synthetic right-scope tab directly
       const rightSynth = {
