@@ -813,6 +813,27 @@ export function FileTree() {
       });
     })();
 
+    // Phase 18 Plan 09 (UAT Test 5 fix): listen for Cmd+Backspace routed through the native
+    // Tauri menu. WKWebView intercepts Cmd+Backspace via NSResponder doCommandBySelector:
+    // before it reaches our keydown handlers, so the shortcut is bound to a native MenuItem
+    // in src-tauri/src/lib.rs. The menu event handler emits 'delete-selected-tree-row';
+    // we consume it here and route to triggerDeleteConfirm for the currently-selected entry.
+    let unlistenDelete: (() => void) | null = null;
+    (async () => {
+      unlistenDelete = await listen('delete-selected-tree-row', () => {
+        // Guard: only act when a project is active and a row is actually selected.
+        const project = getActiveProject();
+        if (!project?.path) return;
+        let entry: FileEntry | undefined;
+        if (viewMode.value === 'flat') {
+          entry = entries.value[selectedIndex.value];
+        } else {
+          entry = flattenedTree.value[selectedIndex.value]?.entry;
+        }
+        if (entry) void triggerDeleteConfirm(entry);
+      });
+    })();
+
     // Phase 18 Plan 05 (D-15..D-18): Finder drop event handlers. main.tsx dispatches
     // tree-finder-* CustomEvents for OS drops whose paths are OUTSIDE the project root.
     async function handleFinderDragover(e: Event) {
@@ -918,6 +939,7 @@ export function FileTree() {
 
     return () => {
       if (unlistenFs) unlistenFs();
+      if (unlistenDelete) unlistenDelete();
       document.removeEventListener('project-changed', handleProjectChanged);
       document.removeEventListener('file-tree-scroll-to-selected', handleScrollToSelected);
       document.removeEventListener('tree-finder-dragover', handleFinderDragover);
