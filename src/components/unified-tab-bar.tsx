@@ -484,6 +484,42 @@ export function closeUnifiedTab(tabId: string): void {
 }
 
 /**
+ * Plan 18-11 (Gap G-01 secondary fix): auto-close an editor tab when its
+ * backing file is deleted from disk. Bypasses the unsaved-changes confirm
+ * modal because the file is gone and saving is impossible. Called by
+ * editor-tab.tsx when its git-status-changed listener detects that
+ * readFile(filePath) now fails with a file-not-found error.
+ *
+ * If multiple tabs point at the same filePath (e.g. one pinned + one
+ * unpinned), all matching tabs are removed. If filePath does not match
+ * any open tab, this is a silent no-op.
+ */
+export function closeEditorTabForDeletedFile(filePath: string): void {
+  const matching = editorTabs.value.filter(t => t.filePath === filePath);
+  if (matching.length === 0) return;
+
+  // If any of the matching tabs is active, switch away first.
+  const activeId = activeUnifiedTabId.value;
+  if (matching.some(t => t.id === activeId)) {
+    // Use the same helper closeUnifiedTab uses — switches to the adjacent
+    // tab based on tabOrder. switchToAdjacentTab works only while the tab
+    // is still present in allTabs, so call it BEFORE removing.
+    switchToAdjacentTab(activeId);
+  }
+
+  // Clear dirty state for each matching tab so persistence doesn't keep a
+  // dirty=true entry pointing at a deleted file.
+  for (const tab of matching) {
+    setEditorDirty(tab.id, false);
+  }
+
+  // Remove from editorTabs AND from tabOrder.
+  const matchingIds = new Set(matching.map(t => t.id));
+  setProjectEditorTabs(editorTabs.value.filter(t => !matchingIds.has(t.id)));
+  setProjectTabOrder(tabOrder.value.filter(id => !matchingIds.has(id)));
+}
+
+/**
  * Mark an editor tab as dirty/clean.
  */
 export function setEditorDirty(tabId: string, dirty: boolean): void {
