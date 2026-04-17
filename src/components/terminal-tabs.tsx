@@ -392,7 +392,19 @@ function persistTabStateScoped(scope: TerminalScope): void {
     label: t.label,
     isAgent: t.isAgent ?? false,
   }));
-  const data = JSON.stringify({ tabs, activeTabId: s.activeTabId.value });
+  // Plan 20-05-B: anchor the active-tab marker by sessionName (which survives
+  // restart) when the current activeTabId resolves to a dynamic tab. Tab ids
+  // are regenerated on each run, so the raw id alone cannot be restored.
+  // For sticky right-scope ids ('file-tree' | 'gsd'), we persist the id as-is
+  // via activeTabId — restoreProjectTabsScoped routes sticky ids separately.
+  const activeId = s.activeTabId.value;
+  const activeTab = s.tabs.value.find(t => t.id === activeId);
+  const activeSessionName = activeTab?.sessionName;
+  const data = JSON.stringify({
+    tabs,
+    activeTabId: activeId,
+    activeSessionName,
+  });
   const patch: Record<string, string> = {};
   if (scope === 'main') {
     // D-11 / backward compat: keep the flat 'terminal-tabs' key written too.
@@ -520,6 +532,13 @@ async function restoreProjectTabsScoped(
 ): Promise<boolean> {
   const s = getScope(scope);
   let tabData: Array<{ sessionName: string; label: string; isAgent?: boolean }> | null = null;
+  // Plan 20-05-B: preserve the persisted active-tab marker.
+  //   - `activeSessionName` is the stable identifier across restart (tab ids
+  //     are regenerated), so we prefer it when present.
+  //   - `activeStickyId` covers the right-scope case where the user last had
+  //     'file-tree' or 'gsd' selected (sticky tabs have no sessionName).
+  let savedActiveSessionName: string | undefined;
+  let savedActiveStickyId: string | undefined;
 
   // Try in-memory cache first
   const cached = s.projectTabCache.get(projectName);
@@ -541,9 +560,22 @@ async function restoreProjectTabsScoped(
               && typeof t.label === 'string'
               && (typeof t.isAgent === 'boolean' || typeof t.isAgent === 'undefined'),
           );
+          // Prefer the sessionName-anchored active marker written by
+          // persistTabStateScoped. This survives tab-id regeneration.
+          if (typeof parsed.activeSessionName === 'string' && parsed.activeSessionName) {
+            savedActiveSessionName = parsed.activeSessionName;
+          }
+          // For right scope, the persisted activeTabId can be a sticky id
+          // ('file-tree' | 'gsd'). Pass it through so restoreTabsScoped can
+          // seed the signal to the user's last sticky selection.
+          if (scope === 'right'
+              && typeof parsed.activeTabId === 'string'
+              && (parsed.activeTabId === 'file-tree' || parsed.activeTabId === 'gsd')) {
+            savedActiveStickyId = parsed.activeTabId;
+          }
         }
       } catch (err) {
-        console.warn('[efxmux] Failed to restore right-scope tabs:', err);
+        console.warn('[efxmux] Failed to restore scoped tabs:', err);
       }
     }
   }
@@ -551,7 +583,12 @@ async function restoreProjectTabsScoped(
   if (!tabData || tabData.length === 0) return false;
 
   const restored = await restoreTabsScoped(
-    { tabs: tabData, activeTabId: '' },
+    {
+      tabs: tabData,
+      activeTabId: '',
+      activeSessionName: savedActiveSessionName,
+      activeStickyId: savedActiveStickyId,
+    },
     projectPath,
     agentBinary,
     scope,
@@ -585,7 +622,14 @@ async function clearAllTabsScoped(scope: TerminalScope): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function restoreTabsScoped(
-  savedData: { tabs: Array<{ sessionName: string; label: string; isAgent?: boolean }>; activeTabId: string },
+  savedData: {
+    tabs: Array<{ sessionName: string; label: string; isAgent?: boolean }>;
+    activeTabId: string;
+    // Plan 20-05-B: sessionName-anchored active-tab hint (survives restart).
+    activeSessionName?: string;
+    // Plan 20-05-B: right-scope sticky id ('file-tree' | 'gsd') to seed post-restore.
+    activeStickyId?: string;
+  },
   projectPath: string | undefined,
   agentBinary: string | undefined,
   scope: TerminalScope,
@@ -651,8 +695,24 @@ async function restoreTabsScoped(
   if (restoredTabs.length === 0) return false;
 
   s.tabs.value = restoredTabs;
-  s.activeTabId.value = restoredTabs[0].id;
-  switchToTabScoped(scope, restoredTabs[0].id);
+
+  // Plan 20-05-B: prefer the sessionName-anchored active marker (survives
+  // restart), then fall back to the right-scope sticky id, then to first-tab.
+  let activeId: string | undefined;
+  if (savedData.activeSessionName) {
+    const match = restoredTabs.find(t => t.sessionName === savedData.activeSessionName);
+    if (match) activeId = match.id;
+  }
+  if (!activeId && scope === 'right' && savedData.activeStickyId) {
+    // Sticky id: signal stays at sticky, dynamic tabs are restored but inactive.
+    s.activeTabId.value = savedData.activeStickyId;
+    persistTabStateScoped(scope);
+    return true;
+  }
+  if (!activeId) activeId = restoredTabs[0].id;
+
+  s.activeTabId.value = activeId;
+  switchToTabScoped(scope, activeId);
 
   persistTabStateScoped(scope);
   return true;
@@ -770,8 +830,14 @@ export function createNewTab(options?: CreateTabOptions): Promise<TerminalTab | 
 }
 export function closeTab(tabId: string): Promise<void> { return closeTabScoped('main', tabId); }
 export function closeActiveTab(): Promise<void> { return closeActiveTabScoped('main'); }
-export function cycleToNextTab(): void { cycleToNextTabScoped('main'); }
-export function switchToTab(tabId: string): void { switchToTabScoped('main', tabId); }
+// Plan 20-05-B: cycleToNextTab and switchToTab persist activeTabId so tab-switch
+// selections survive a quit+restart (previously only tab mutations persisted).
+export function cycleToNextTab(): void { cycleToNextTabScoped('main'); persistTabStateScoped('main'); }
+export function switchToTab(tabId: string): void {
+  scopes.get('main')!.activeTabId.value = tabId;
+  switchToTabScoped('main', tabId);
+  persistTabStateScoped('main');
+}
 export function renameTerminalTab(tabId: string, newLabel: string): void {
   renameTerminalTabScoped('main', tabId, newLabel);
 }
@@ -794,6 +860,17 @@ export function hasProjectTabs(projectName: string, scope: TerminalScope = 'main
 }
 export function clearAllTabs(): Promise<void> { return clearAllTabsScoped('main'); }
 export function ActiveTabCrashOverlay() { return ActiveTabCrashOverlayScoped('main'); }
+
+/**
+ * Plan 20-05-B: persistence helper for code paths that mutate a scope's
+ * activeTabId signal directly (e.g., unified-tab-bar's sticky-tab click
+ * handlers for 'file-tree' / 'gsd' in the right panel, which bypass
+ * switchToTabScoped). Call this after any direct `activeTabId.value = ...`
+ * mutation to flush the change to state.json so it survives restart.
+ */
+export function persistActiveTabIdForScope(scope: TerminalScope): void {
+  persistTabStateScoped(scope);
+}
 
 /**
  * Get the default label for a terminal tab (used when resetting a rename).
@@ -832,8 +909,16 @@ export function getTerminalScope(scope: TerminalScope) {
     createNewTab: (opts?: CreateTabOptions) => createNewTabScoped(scope, opts),
     closeTab: (id: string) => closeTabScoped(scope, id),
     closeActiveTab: () => closeActiveTabScoped(scope),
-    cycleToNextTab: () => cycleToNextTabScoped(scope),
-    switchToTab: (id: string) => switchToTabScoped(scope, id),
+    // Plan 20-05-B: persist on switch/cycle so activeTabId selections survive restart.
+    // switchToTab also sets the activeTabId signal (prior callers set it manually
+    // before calling switchToTab; this makes the helper self-contained and the
+    // persist-on-switch guarantee independent of caller contract).
+    cycleToNextTab: () => { cycleToNextTabScoped(scope); persistTabStateScoped(scope); },
+    switchToTab: (id: string) => {
+      s.activeTabId.value = id;
+      switchToTabScoped(scope, id);
+      persistTabStateScoped(scope);
+    },
     renameTerminalTab: (id: string, label: string) => renameTerminalTabScoped(scope, id, label),
     getActiveTerminal: () => getActiveTerminalScoped(scope),
     saveProjectTabs: (projectName: string) => saveProjectTabsScoped(projectName, scope),

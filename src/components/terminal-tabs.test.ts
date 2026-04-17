@@ -256,6 +256,154 @@ describe('terminal-tabs scope registry', () => {
       expect(getTerminalScope('main').tabs.value).toHaveLength(0);
     });
 
+    // Plan 20-05-B: simulate the real bootstrap → restore flow.
+    // User quits with right-scope tabs open; we verify the state-manager round-trip
+    // (persist → save_state → reload → restore) actually reconstructs tabs.
+    it('full bootstrap flow: persist right-scope tabs, reload state, restore via getTerminalScope("right")', async () => {
+      // Step 1: app session 1 — create two right-scope tabs.
+      await getTerminalScope('right').createNewTab();
+      await getTerminalScope('right').createNewTab();
+      expect(getTerminalScope('right').tabs.value).toHaveLength(2);
+      // persistTabStateScoped fired on each create → save_state invoked twice.
+      // The final saved state should contain the right-terminal-tabs:testproj key.
+      expect(lastSavedState).toBeTruthy();
+      const persistedKey = 'right-terminal-tabs:testproj';
+      const persisted = lastSavedState.session[persistedKey];
+      expect(persisted).toBeTruthy();
+      const parsed = JSON.parse(persisted);
+      expect(parsed.tabs).toHaveLength(2);
+      expect(parsed.tabs[0].sessionName).toBe('testproj-r1');
+      expect(parsed.tabs[1].sessionName).toBe('testproj-r2');
+
+      // Step 2: simulate app quit — clear the in-memory right scope state.
+      // tabs are disposed (simulating full app teardown); only persisted state survives.
+      getTerminalScope('right').tabs.value = [];
+      getTerminalScope('right').activeTabId.value = 'file-tree'; // default
+      // Seed the persisted-state snapshot with the data from session 1, then reload.
+      seedState.session[persistedKey] = persisted;
+      const { loadAppState } = await import('../state-manager');
+      await loadAppState();
+
+      // Step 3: simulate bootstrap restore path (main.tsx bootstrap line 475-477).
+      const restored = await getTerminalScope('right').restoreProjectTabs(
+        'testproj',
+        '/tmp/proj',
+        undefined,
+      );
+      expect(restored).toBe(true);
+      const rightTabs = getTerminalScope('right').tabs.value;
+      expect(rightTabs).toHaveLength(2);
+      expect(rightTabs.map(t => t.sessionName)).toEqual(['testproj-r1', 'testproj-r2']);
+      for (const t of rightTabs) expect(t.ownerScope).toBe('right');
+    });
+
+    it('bootstrap restore: hasProjectTabs("right") returns true after prior-session persist', async () => {
+      // Session 1: create a right-scope tab (persisted via persistTabStateScoped)
+      await getTerminalScope('right').createNewTab();
+
+      // Feed the persisted payload into next-session seed state, then reload.
+      const persistedKey = 'right-terminal-tabs:testproj';
+      const persisted = lastSavedState.session[persistedKey];
+      expect(persisted).toBeTruthy();
+      // Clear in-memory scope (simulates fresh process start)
+      getTerminalScope('right').tabs.value = [];
+      seedState.session[persistedKey] = persisted;
+      const { loadAppState } = await import('../state-manager');
+      await loadAppState();
+
+      // The right scope must now detect persisted tabs BEFORE restore runs —
+      // this is how main.tsx could conditionally decide whether to restore.
+      expect(getTerminalScope('right').hasProjectTabs('testproj')).toBe(true);
+      // Main scope must not see the right-scope key as its own (D-16).
+      expect(getTerminalScope('main').hasProjectTabs('testproj')).toBe(false);
+    });
+
+    // Plan 20-05-B: activeTabId persistence across tab switches.
+    it('switchToTab persists activeTabId to state.json', async () => {
+      await getTerminalScope('right').createNewTab();
+      await getTerminalScope('right').createNewTab();
+      const tabs = getTerminalScope('right').tabs.value;
+      expect(tabs).toHaveLength(2);
+      // Switch to the FIRST tab (not the just-created second one).
+      lastSavedState = null;
+      getTerminalScope('right').switchToTab(tabs[0].id);
+      // A save_state call must have fired with activeTabId pointing at tabs[0].
+      expect(lastSavedState).toBeTruthy();
+      const persisted = lastSavedState.session['right-terminal-tabs:testproj'];
+      expect(persisted).toBeTruthy();
+      const parsed = JSON.parse(persisted);
+      expect(parsed.activeTabId).toBe(tabs[0].id);
+      expect(parsed.activeSessionName).toBe('testproj-r1');
+    });
+
+    // Plan 20-05-B: active-tab restoration uses sessionName-anchored marker.
+    it('restoreProjectTabs resolves activeSessionName to the restored tab id', async () => {
+      // Persist two right tabs with tab 2 as active (via switchToTab after create).
+      await getTerminalScope('right').createNewTab();
+      const secondTab = await getTerminalScope('right').createNewTab();
+      expect(secondTab).toBeTruthy();
+      // Switch explicitly to the second tab to ensure its sessionName is persisted as active.
+      getTerminalScope('right').switchToTab(secondTab!.id);
+
+      const persistedKey = 'right-terminal-tabs:testproj';
+      const persisted = lastSavedState.session[persistedKey];
+      expect(persisted).toBeTruthy();
+      const parsed = JSON.parse(persisted);
+      expect(parsed.activeSessionName).toBe('testproj-r2');
+
+      // Simulate restart
+      getTerminalScope('right').tabs.value = [];
+      getTerminalScope('right').activeTabId.value = 'file-tree';
+      seedState.session[persistedKey] = persisted;
+      const { loadAppState } = await import('../state-manager');
+      await loadAppState();
+
+      // Restore — the active tab id should resolve to the tab whose sessionName
+      // matches activeSessionName ('testproj-r2'), NOT the first tab.
+      const restored = await getTerminalScope('right').restoreProjectTabs(
+        'testproj', '/tmp/proj', undefined,
+      );
+      expect(restored).toBe(true);
+      const restoredTabs = getTerminalScope('right').tabs.value;
+      expect(restoredTabs).toHaveLength(2);
+      const activeId = getTerminalScope('right').activeTabId.value;
+      const activeRestored = restoredTabs.find(t => t.id === activeId);
+      expect(activeRestored).toBeTruthy();
+      expect(activeRestored?.sessionName).toBe('testproj-r2');
+    });
+
+    // Plan 20-05-B: right-scope sticky activeTabId survives restart.
+    it('restoreProjectTabs preserves right-scope sticky activeTabId (file-tree / gsd)', async () => {
+      // Create a right-scope dynamic tab, then switch back to the 'gsd' sticky.
+      await getTerminalScope('right').createNewTab();
+      // Direct signal mutation (how unified-tab-bar does it for sticky clicks);
+      // then persist via the helper.
+      getTerminalScope('right').activeTabId.value = 'gsd';
+      const { persistActiveTabIdForScope } = await import('./terminal-tabs');
+      persistActiveTabIdForScope('right');
+
+      const persistedKey = 'right-terminal-tabs:testproj';
+      const persisted = lastSavedState.session[persistedKey];
+      expect(persisted).toBeTruthy();
+      const parsed = JSON.parse(persisted);
+      expect(parsed.activeTabId).toBe('gsd');
+
+      // Simulate restart
+      getTerminalScope('right').tabs.value = [];
+      getTerminalScope('right').activeTabId.value = 'file-tree';
+      seedState.session[persistedKey] = persisted;
+      const { loadAppState } = await import('../state-manager');
+      await loadAppState();
+
+      const restored = await getTerminalScope('right').restoreProjectTabs(
+        'testproj', '/tmp/proj', undefined,
+      );
+      expect(restored).toBe(true);
+      // Dynamic tab was restored, AND the sticky 'gsd' id is preserved as active.
+      expect(getTerminalScope('right').tabs.value).toHaveLength(1);
+      expect(getTerminalScope('right').activeTabId.value).toBe('gsd');
+    });
+
     it('pty-exited scope-agnostic update: right-scope sessionName lookup hits right tabs only', async () => {
       // Seed a synthetic right-scope tab directly
       const rightSynth = {
