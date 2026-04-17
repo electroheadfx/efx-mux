@@ -54,6 +54,12 @@
     "codemirror": "^6.0.2",
     "lucide-preact": "^1.8.0",
     "marked": "^14.1.4",
-    "preact": "^10.29.1"
+    "preact": "^10.29.1",
+    "remark-frontmatter": "5.0.0",
+    "remark-gfm": "4.0.1",
+    "remark-parse": "11.0.0",
+    "unified": "11.0.5",
+    "unist-util-visit": "5.1.0",
+    "yaml": "2.8.3"
   }
 }

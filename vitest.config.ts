@@ -9,6 +9,18 @@ export default defineConfig({
     setupFiles: ['./vitest.setup.ts'],
     globals: true,
     passWithNoTests: true,
+    server: {
+      deps: {
+        inline: [
+          'unified',
+          'remark-parse',
+          'remark-gfm',
+          'remark-frontmatter',
+          'yaml',
+          'unist-util-visit',
+        ],
+      },
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary', 'html'],
