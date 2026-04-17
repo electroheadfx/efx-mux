@@ -433,7 +433,10 @@ function onTreeDocMouseMove(e: MouseEvent): void {
   rowEls.forEach(el => { el.style.borderLeft = ''; el.style.backgroundColor = ''; });
   for (const el of rowEls) {
     const rect = el.getBoundingClientRect();
-    if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
+    if (
+      e.clientX >= rect.left && e.clientX <= rect.right &&
+      e.clientY >= rect.top && e.clientY <= rect.bottom
+    ) {
       const idx = el.dataset.fileTreeIndex;
       if (idx !== undefined) {
         const entry = getEntryByIndex(parseInt(idx, 10));
@@ -460,7 +463,10 @@ async function onTreeDocMouseUp(e: MouseEvent): Promise<void> {
   const rowEls = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
   for (const el of rowEls) {
     const rect = el.getBoundingClientRect();
-    if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
+    if (
+      e.clientX >= rect.left && e.clientX <= rect.right &&
+      e.clientY >= rect.top && e.clientY <= rect.bottom
+    ) {
       const idx = el.dataset.fileTreeIndex;
       if (idx !== undefined) {
         const entry = getEntryByIndex(parseInt(idx, 10));
@@ -749,7 +755,10 @@ export function FileTree() {
       rowEls.forEach(el => { el.style.borderLeft = ''; el.style.backgroundColor = ''; });
       for (const el of rowEls) {
         const rect = el.getBoundingClientRect();
-        if (position.y >= rect.top && position.y <= rect.bottom) {
+        if (
+          position.x >= rect.left && position.x <= rect.right &&
+          position.y >= rect.top && position.y <= rect.bottom
+        ) {
           el.style.borderLeft = `2px solid ${colors.accent}`;
           el.style.backgroundColor = `${colors.accent}20`;
           break;
@@ -778,7 +787,10 @@ export function FileTree() {
       const rowEls = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
       for (const el of rowEls) {
         const rect = el.getBoundingClientRect();
-        if (position.y >= rect.top && position.y <= rect.bottom) {
+        if (
+          position.x >= rect.left && position.x <= rect.right &&
+          position.y >= rect.top && position.y <= rect.bottom
+        ) {
           const idx = el.dataset.fileTreeIndex;
           if (idx !== undefined) {
             const entry = getEntryByIndex(parseInt(idx, 10));
