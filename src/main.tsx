@@ -45,6 +45,15 @@ let mainPtyKey = '';
 let mainCurrentSession = '';
 let rightCurrentSession = '';
 
+// Phase 18 Plan 07 (UAT Test 16 fix): Tauri 2.10.x onDragDropEvent payload.position.y
+// is reported in WINDOW coordinates (origin = top of macOS native title bar) when
+// titleBarStyle is "Overlay". getBoundingClientRect() uses VIEWPORT coordinates
+// (origin = top of webview content). The y-axis difference is the macOS title-bar
+// height — stable at 28 CSS px on Sonoma/Sequoia. Subtract this offset before
+// dispatching tree-finder-* CustomEvents so the file-tree's hit-test math aligns.
+// Upstream bug: Tauri GitHub Issue #10744 (still open as of late 2025).
+const MACOS_TITLE_BAR_OFFSET = 28;
+
 function App() {
   return (
     <div id="app-root" class="flex flex-col w-screen h-screen overflow-hidden bg-bg text-text-bright font-mono text-sm font-light antialiased">
@@ -279,10 +288,16 @@ async function bootstrap() {
         const anyOutside = paths.length > 0 && paths.some(p => !projectPath || !p.startsWith(projectPath));
         if (!anyOutside) return;
         // Convert physical-pixel position to CSS pixels (per RESEARCH.md §1).
+        // Then subtract the macOS overlay title-bar offset so y aligns with
+        // viewport-relative getBoundingClientRect() coordinates used by file-tree hit-tests.
+        // (UAT Test 16 fix — Tauri Issue #10744)
         const dpr = window.devicePixelRatio || 1;
         const detail = {
           paths,
-          position: { x: payload.position.x / dpr, y: payload.position.y / dpr },
+          position: {
+            x: payload.position.x / dpr,
+            y: payload.position.y / dpr - MACOS_TITLE_BAR_OFFSET,
+          },
         };
         if (payload.type === 'enter' || payload.type === 'over') {
           document.dispatchEvent(new CustomEvent('tree-finder-dragover', { detail }));
