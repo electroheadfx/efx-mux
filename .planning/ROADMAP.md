@@ -137,7 +137,12 @@ Plans:
   3. User can view Progress sub-tab parsed from ROADMAP.md
   4. User can view History sub-tab from MILESTONES.md
   5. User can view State sub-tab (current position + decisions) from STATE.md
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+  - [ ] 19-01-PLAN.md -- Wave 0 foundation: install unified/remark deps, extend PanelsState + gsdSubTab signal, vitest ESM config, failing parser + pane test scaffolds
+  - [ ] 19-02-PLAN.md -- Wave 1: implement all 5 parse functions (parseMilestones/parsePhases/parseProgress/parseHistory/parseState) with unified/remark, turn Plan 01 tests green
+  - [ ] 19-03-PLAN.md -- Wave 2: build StatusBadge + 5 sub-tab components (Milestones/Phases/Progress/History/State), token-only, prop-driven
+  - [ ] 19-04-PLAN.md -- Wave 3: GSDPane container with md-file-changed path filtering, swap right-panel.tsx, delete gsd-viewer.tsx, human UAT checkpoint
 **UI hint**: yes
 
 ### Phase 20: Right Panel Multi-Terminal
