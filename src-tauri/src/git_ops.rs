@@ -10,6 +10,7 @@ use git2::{Repository, Signature};
 use std::path::Path;
 use std::process::Command;
 use tauri::async_runtime::spawn_blocking;
+use tauri::{AppHandle, Emitter, Runtime};
 
 /// Typed error enum for git operations (D-08).
 #[derive(Debug, Clone, serde::Serialize)]
@@ -460,19 +461,34 @@ pub async fn uncommit(repo_path: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// Outcome flag returned by revert_file_impl so the Tauri command layer knows
+/// whether to emit git-status-changed. CURRENT / pure-INDEX paths return NoOp
+/// (nothing mutated on disk); WT_NEW delete and checkout return Mutated.
+///
+/// Plan 18-10 (Gap G-01 primary fix): adding an emit after revert closes the
+/// "stale file-tree row after revert" bug reported in Phase 18 human UAT.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub enum RevertOutcome {
+    Mutated,
+    NoOp,
+}
+
 /// Synchronous inner implementation of revert_file for testing.
 ///
 /// UAT Test 18 fix (2026-04-16): status-aware branching.
 /// Earlier versions ran `git checkout -- <path>` unconditionally, which exits 1
 /// for untracked files ("pathspec did not match any file(s) known to git").
 ///
+/// Plan 18-10 (Gap G-01): returns RevertOutcome so the command layer can emit
+/// git-status-changed only on actual working-tree mutations.
+///
 /// Behavior by file status:
-///   - WT_NEW (untracked, working-tree-only): delete the file from disk.
-///   - WT_MODIFIED | WT_DELETED | WT_TYPECHANGE | WT_RENAMED: `git checkout -- <path>`.
-///   - CURRENT (no changes): Ok(()) no-op.
-///   - Other (purely INDEX_*): Ok(()) no-op (per-file revert button is not shown for
+///   - WT_NEW (untracked, working-tree-only): delete the file from disk → Mutated.
+///   - WT_MODIFIED | WT_DELETED | WT_TYPECHANGE | WT_RENAMED: `git checkout -- <path>` → Mutated.
+///   - CURRENT (no changes): NoOp.
+///   - Other (purely INDEX_*): NoOp (per-file revert button is not shown for
 ///     staged-only files; defensive default).
-pub fn revert_file_impl(repo_path: &str, file_path: &str) -> Result<(), GitError> {
+pub fn revert_file_impl(repo_path: &str, file_path: &str) -> Result<RevertOutcome, GitError> {
     let repo = Repository::open(repo_path).map_err(|_| GitError::NotARepo)?;
 
     // Get workdir for relative path calculation
@@ -503,7 +519,7 @@ pub fn revert_file_impl(repo_path: &str, file_path: &str) -> Result<(), GitError
         let abs = workdir.join(&rel_path);
         std::fs::remove_file(&abs)
             .map_err(|e| GitError::RevertError(format!("Failed to delete untracked file: {}", e)))?;
-        return Ok(());
+        return Ok(RevertOutcome::Mutated);
     }
 
     let needs_checkout = status.contains(git2::Status::WT_MODIFIED)
@@ -513,7 +529,7 @@ pub fn revert_file_impl(repo_path: &str, file_path: &str) -> Result<(), GitError
 
     if !needs_checkout {
         // CURRENT or purely INDEX_* — nothing to do for a per-file working-tree revert.
-        return Ok(());
+        return Ok(RevertOutcome::NoOp);
     }
 
     // Tracked working-tree change → shell out to system git for checkout (existing behavior).
@@ -530,16 +546,29 @@ pub fn revert_file_impl(repo_path: &str, file_path: &str) -> Result<(), GitError
         return Err(GitError::RevertError(stderr));
     }
 
-    Ok(())
+    Ok(RevertOutcome::Mutated)
 }
 
 /// Revert (discard) working tree changes for a single file.
+/// Emits `git-status-changed` after any mutation so the file-tree and editor
+/// tabs refresh. CURRENT / pure-INDEX paths are no-ops and do NOT emit.
+///
+/// Plan 18-10 (Gap G-01 primary fix): this is the fix for the "stale file-tree
+/// row after revert-as-delete" bug reported in Phase 18 human UAT.
 #[tauri::command]
-pub async fn revert_file(repo_path: String, file_path: String) -> Result<(), String> {
-    spawn_blocking(move || revert_file_impl(&repo_path, &file_path))
+pub async fn revert_file<R: Runtime>(
+    repo_path: String,
+    file_path: String,
+    app: AppHandle<R>,
+) -> Result<(), String> {
+    let outcome = spawn_blocking(move || revert_file_impl(&repo_path, &file_path))
         .await
         .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    if matches!(outcome, RevertOutcome::Mutated) {
+        let _ = app.emit("git-status-changed", ());
+    }
+    Ok(())
 }
 
 #[cfg(test)]
