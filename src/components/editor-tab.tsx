@@ -4,7 +4,7 @@
 import { useRef, useEffect } from 'preact/hooks';
 import { EditorView } from '@codemirror/view';
 import { listen } from '@tauri-apps/api/event';
-import { createEditorState, registerEditorView, unregisterEditorView, registerSaveCallback, unregisterSaveCallback, triggerEditorSave } from '../editor/setup';
+import { createEditorState, registerEditorView, unregisterEditorView, registerSaveCallback, unregisterSaveCallback } from '../editor/setup';
 import { getLanguageExtension } from '../editor/languages';
 import { writeFile, readFile } from '../services/file-service';
 import { showToast } from './toast';
@@ -120,18 +120,6 @@ export function EditorTab({ tabId, filePath, fileName, content, isActive }: Edit
       unlistenPromise.then(fn => fn());
     };
   }, [filePath, tabId]);
-
-  // Listen for editor-save event (dispatched by main.tsx on Cmd+S)
-  useEffect(() => {
-    function onEditorSave() {
-      if (viewRef.current) {
-        viewRef.current.focus();
-        triggerEditorSave(tabId);
-      }
-    }
-    document.addEventListener('editor-save', onEditorSave);
-    return () => document.removeEventListener('editor-save', onEditorSave);
-  }, [tabId]);
 
   return (
     <div

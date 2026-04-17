@@ -33,6 +33,7 @@ import {
 } from './state-manager';
 import { openProjectModal } from './components/project-modal';
 import { openEditorTab, openEditorTabPinned, restoreEditorTabs, activeUnifiedTabId, closeUnifiedTab, suppressEditorPersist, persistEditorTabs } from './components/unified-tab-bar';
+import { triggerEditorSave } from './editor/setup';
 import { serverPaneState, saveCurrentProjectState, restoreProjectState } from './components/server-pane';
 import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from './components/file-tree';
 import { detectAgent } from './server/server-bridge';
@@ -219,10 +220,13 @@ async function bootstrap() {
         sidebarCollapsed.value = !sidebarCollapsed.value;
         break;
       case key === 's' && e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey:
-        // Cmd+S: prevent browser Save Page dialog, dispatch save event to active editor
+        // Cmd+S: prevent browser Save Page dialog, save only the active editor tab's file.
+        // quick-260417-i0z: direct call to triggerEditorSave(activeUnifiedTabId) replaces
+        // the prior CustomEvent broadcast, which fired in every mounted EditorTab's
+        // listener (all tabs stay mounted via display:none) and saved every open file.
         e.preventDefault();
         if (activeUnifiedTabId.value.startsWith('editor-')) {
-          document.dispatchEvent(new CustomEvent('editor-save'));
+          triggerEditorSave(activeUnifiedTabId.value);
         }
         break;
       case key === 's' && e.ctrlKey && !e.shiftKey && !e.altKey:
