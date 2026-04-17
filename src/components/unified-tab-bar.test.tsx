@@ -28,6 +28,7 @@ import {
   openGitChangesTab,
   openOrMoveGitChangesToRight,
   activeUnifiedTabId,
+  closeUnifiedTab,
 } from './unified-tab-bar';
 import { terminalTabs, activeTabId, getTerminalScope } from './terminal-tabs';
 
@@ -188,6 +189,59 @@ describe('UnifiedTabBar scope prop (Phase 20, Plan 02)', () => {
       expect(gitChangesTab.value).not.toBeNull();
       expect(gitChangesTab.value?.owningScope).toBe('right');
       expect(gitChangesTab.value?.type).toBe('git-changes');
+    });
+  });
+
+  // ─── Fix #4: Git Changes tab — no rename, but activate + close OK ────────
+
+  describe('Fix #4 Git Changes tab is not renameable (but activate + close work)', () => {
+    it('double-click on Git Changes tab label does NOT enter rename mode', () => {
+      // Seed a Git Changes tab in main scope so it is rendered in the main bar.
+      openGitChangesTab();
+      expect(gitChangesTab.value?.owningScope).toBe('main');
+      const { container } = render(<UnifiedTabBar scope="main" />);
+      const gcEl = container.querySelector(`[data-tab-id="${gitChangesTab.value!.id}"]`) as HTMLElement;
+      expect(gcEl).not.toBeNull();
+      const labelSpan = gcEl.querySelector('span') as HTMLElement;
+      expect(labelSpan).not.toBeNull();
+      // Simulate a double-click: two click events on the label span.
+      fireEvent.click(labelSpan);
+      fireEvent.click(labelSpan);
+      // After the double-click, there must be NO <input> rendered in the
+      // Git Changes tab (rename mode suppressed for git-changes).
+      const input = gcEl.querySelector('input[type="text"]');
+      expect(input).toBeNull();
+    });
+
+    it('Git Changes tab remains activatable after rename attempt', () => {
+      openGitChangesTab();
+      const gcId = gitChangesTab.value!.id;
+      const { container } = render(<UnifiedTabBar scope="main" />);
+      const gcEl = container.querySelector(`[data-tab-id="${gcId}"]`) as HTMLElement;
+      expect(gcEl).not.toBeNull();
+      const labelSpan = gcEl.querySelector('span') as HTMLElement;
+      // Double-click attempt.
+      fireEvent.click(labelSpan);
+      fireEvent.click(labelSpan);
+      // Click the tab container to activate it.
+      activeUnifiedTabId.value = '';
+      fireEvent.click(gcEl);
+      expect(activeUnifiedTabId.value).toBe(gcId);
+    });
+
+    it('Git Changes tab remains closable after rename attempt', () => {
+      openGitChangesTab();
+      const gcId = gitChangesTab.value!.id;
+      expect(gitChangesTab.value).not.toBeNull();
+      const { container } = render(<UnifiedTabBar scope="main" />);
+      const gcEl = container.querySelector(`[data-tab-id="${gcId}"]`) as HTMLElement;
+      const labelSpan = gcEl.querySelector('span') as HTMLElement;
+      // Double-click attempt.
+      fireEvent.click(labelSpan);
+      fireEvent.click(labelSpan);
+      // Programmatically close the tab via the exported helper.
+      closeUnifiedTab(gcId);
+      expect(gitChangesTab.value).toBeNull();
     });
   });
 

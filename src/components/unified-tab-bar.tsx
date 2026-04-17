@@ -1381,6 +1381,12 @@ function renderTab(
               clearTimeout(tabLabelClickTimer);
               tabLabelClickTimer = null;
               pendingTabLabelClick = null;
+              // Fix #4 (20-05-D): Git Changes cannot be renamed. Activating +
+              // closing must remain functional. Suppress the rename-input
+              // render path for git-changes; other branches are unchanged.
+              if (tab.type === 'git-changes') {
+                return;
+              }
               // Do NOT call onClick(tab) here -- tab is already active from first click.
               // Calling it would trigger switchToTab -> terminal.focus() which steals
               // focus from the rename input that's about to render.
