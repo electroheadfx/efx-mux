@@ -13,6 +13,11 @@ import { Trash2, FilePlus, FolderPlus, ExternalLink, FolderOpen, Zap, Code2, Mou
 import { colors, fonts } from '../tokens';
 import { activeProjectName, projects } from '../state-manager';
 import type { ProjectEntry } from '../state-manager';
+// quick-260417-f6e: active-tab-aware seeding imports (circular with unified-tab-bar,
+// which imports revealFileInTree from this file; both signals are read inside an async
+// function body, so by the time seedSelectionFromActiveTab() runs both modules have
+// fully evaluated).
+import { activeUnifiedTabId, editorTabs } from './unified-tab-bar';
 import { ContextMenu, type ContextMenuItem } from './context-menu';
 import { showConfirmModal } from './confirm-modal';
 import { showToast } from './toast';
@@ -37,7 +42,12 @@ interface FileEntry {
 }
 
 const entries = signal<FileEntry[]>([]);
-const selectedIndex = signal(0);
+// quick-260417-f6e: -1 = no selection. Seeded from the active unified tab on initial
+// load / project switch. Terminal or git-changes tab active (or no tab) -> stays -1;
+// editor tab active -> revealFileInTree() writes a real index. Row 0 was the prior
+// default, which made the tree LIE about having a file open when the user was looking
+// at a terminal.
+const selectedIndex = signal(-1);
 // Phase 18 quick-260416-uig (bug 3): hoveredIndex is decoupled from selectedIndex.
 // Click / keyboard / reveal -> selectedIndex (drives white filename + persistent bg).
 // Mouse hover -> hoveredIndex (drives bg tint only; filename color is unchanged).
@@ -190,6 +200,28 @@ async function toggleTreeNode(node: TreeNode): Promise<void> {
 }
 
 /**
+ * quick-260417-f6e: Seed selectedIndex based on the currently-active unified tab
+ * on initial FileTree load (and project switch). Behavior:
+ *   - If activeUnifiedTabId points to an editor tab, reveal + select that file
+ *     in the current view (flat or tree). revealFileInTree handles folder expansion
+ *     in tree mode and loadDir(parent) in flat mode — and leaves selectedIndex at
+ *     the correct row.
+ *   - Otherwise (terminal tab, git-changes tab, or no tab), leave selectedIndex
+ *     at -1 so no row is highlighted.
+ *
+ * Called AFTER initTree/loadDir have populated their lists, so the index math
+ * inside revealFileInTree can resolve against real data.
+ */
+async function seedSelectionFromActiveTab(): Promise<void> {
+  const activeId = activeUnifiedTabId.value;
+  if (!activeId) return;  // no active tab -> leave -1
+  const match = editorTabs.value.find(t => t.id === activeId);
+  if (!match) return;     // active tab is terminal or git-changes -> leave -1
+  // Active tab is an editor tab -> reveal its file in the tree.
+  await revealFileInTree(match.filePath);
+}
+
+/**
  * Initialize tree from project root.
  */
 async function initTree(): Promise<void> {
@@ -203,13 +235,17 @@ async function initTree(): Promise<void> {
       expanded: false,
       depth: 0,
     }));
-    selectedIndex.value = 0;
+    // quick-260417-f6e: seed from active tab context instead of hard-coding 0.
+    selectedIndex.value = -1;
 
     // Execute any pending reveal that was deferred because tree wasn't loaded
     if (pendingRevealPath.value) {
       const pathToReveal = pendingRevealPath.value;
       pendingRevealPath.value = '';
       await revealFileInTree(pathToReveal);
+    } else {
+      // No explicit reveal pending -- seed from active tab (quick-260417-f6e).
+      await seedSelectionFromActiveTab();
     }
   } catch (err) {
     console.error('[efxmux] tree init failed:', err);
@@ -393,8 +429,17 @@ async function loadDir(path: string): Promise<void> {
     const result = await invoke<FileEntry[]>('list_directory', { path, projectRoot: project?.path || null });
     entries.value = result;
     currentPath.value = path;
-    selectedIndex.value = 0;
+    // quick-260417-f6e: default to -1 ("no row selected"). We only seed from the
+    // active tab on the FIRST load of the project root (initial mount / project
+    // switch). Sub-directory drilling leaves selectedIndex at -1 — the user is
+    // exploring, not opening a file.
+    selectedIndex.value = -1;
     loaded.value = true;
+    // Seed from active tab only when we landed on the project root (initial load
+    // or project switch). If path is a deeper directory, leave -1.
+    if (project?.path && path === project.path) {
+      await seedSelectionFromActiveTab();
+    }
   } catch (err) {
     console.error('[efxmux] list_directory failed:', err);
     entries.value = [];

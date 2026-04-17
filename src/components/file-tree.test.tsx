@@ -183,7 +183,15 @@ describe('delete key (UAT Test 5 fix)', () => {
     const fileList = document.querySelector('[tabindex="0"]') as HTMLElement;
     expect(fileList).not.toBeNull();
 
-    // Fire Delete key with a row selected (selectedIndex defaults to 0 → first entry = 'src').
+    // quick-260417-f6e: selectedIndex now defaults to -1 (no selection). Click the
+    // first row to establish a selection before firing Delete — this mirrors the
+    // real-world user flow (click row → press Delete).
+    const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(rows.length).toBeGreaterThan(0);
+    fireEvent.click(rows[0]);
+    await new Promise(r => setTimeout(r, 20));
+
+    // Fire Delete key with a row selected (selectedIndex now points to the clicked row).
     fireEvent.keyDown(fileList, { key: 'Delete' });
     // Allow async count_children (for folder confirm message) + modal render to settle.
     await new Promise(r => setTimeout(r, 80));
@@ -222,7 +230,15 @@ describe('delete key (UAT Test 5 fix)', () => {
     // The production listener should have been captured by the module-level vi.mock.
     expect(capturedDeleteListener).not.toBeNull();
 
-    // Invoke it with the first row selected (default selectedIndex = 0 → 'src').
+    // quick-260417-f6e: selectedIndex defaults to -1 (no selection). Click the first
+    // row to establish a selection before invoking the native menu listener — mirrors
+    // the real-world user flow (click row → Cmd+Backspace fires the menu item).
+    const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(rows.length).toBeGreaterThan(0);
+    fireEvent.click(rows[0]);
+    await new Promise(r => setTimeout(r, 20));
+
+    // Invoke the listener with a row selected (clicked 'src' above).
     capturedDeleteListener!();
     // Allow async count_children + modal render to settle.
     await new Promise(r => setTimeout(r, 80));
@@ -1180,6 +1196,34 @@ describe('active tab context on initial load (quick-260417-f6e)', () => {
     return { path: '/tmp/proj', name };
   }
 
+  /**
+   * JSDOM normalizes inline CSS colors to `rgb(r, g, b)` form. `colors.textMuted`
+   * etc. are hex literals. Convert to normalized rgb() for stable comparison.
+   */
+  function hexToRgbString(hex: string): string {
+    const h = hex.replace('#', '').toLowerCase();
+    const r = parseInt(h.substring(0, 2), 16);
+    const g = parseInt(h.substring(2, 4), 16);
+    const b = parseInt(h.substring(4, 6), 16);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+  const TEXT_MUTED = hexToRgbString(colors.textMuted);     // rgb(139, 148, 158)
+  const TEXT_PRIMARY = hexToRgbString(colors.textPrimary); // rgb(230, 237, 243)
+
+  /**
+   * Locate the filename span inside a rendered row. The filename span is the
+   * <span> with flex:1 whose inline `color` matches either textMuted or
+   * textPrimary. Returns `null` if not found (caller fails the test).
+   */
+  function findNameSpan(row: HTMLElement): HTMLElement | null {
+    const spans = row.querySelectorAll<HTMLElement>('span');
+    for (const s of Array.from(spans)) {
+      const c = (s.style.color || '').toLowerCase();
+      if (c === TEXT_MUTED || c === TEXT_PRIMARY) return s;
+    }
+    return null;
+  }
+
   beforeEach(() => {
     // Reset the active unified tab so every test starts from a clean 'no tab' state.
     activeUnifiedTabId.value = '';
@@ -1209,19 +1253,12 @@ describe('active tab context on initial load (quick-260417-f6e)', () => {
     await new Promise(r => setTimeout(r, 50));
 
     // Every row's filename span should have textMuted color (i.e. NOT selected).
-    // The filename is the inner <span> whose text matches the entry's name.
     const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) {
-      // The filename span is the one with flex:1 and whose inline color is either textMuted or textPrimary.
-      const spans = row.querySelectorAll<HTMLElement>('span');
-      // Find the span whose color attribute is one of the two filename colors.
-      const nameSpan = Array.from(spans).find(s => {
-        const c = (s.style.color || '').toLowerCase();
-        return c === colors.textMuted.toLowerCase() || c === colors.textPrimary.toLowerCase();
-      });
-      expect(nameSpan).toBeDefined();
-      expect((nameSpan!.style.color || '').toLowerCase()).toBe(colors.textMuted.toLowerCase());
+      const nameSpan = findNameSpan(row);
+      expect(nameSpan).not.toBeNull();
+      expect(nameSpan!.style.color).toBe(TEXT_MUTED);
     }
   });
 
@@ -1237,13 +1274,9 @@ describe('active tab context on initial load (quick-260417-f6e)', () => {
     const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) {
-      const spans = row.querySelectorAll<HTMLElement>('span');
-      const nameSpan = Array.from(spans).find(s => {
-        const c = (s.style.color || '').toLowerCase();
-        return c === colors.textMuted.toLowerCase() || c === colors.textPrimary.toLowerCase();
-      });
-      expect(nameSpan).toBeDefined();
-      expect((nameSpan!.style.color || '').toLowerCase()).toBe(colors.textMuted.toLowerCase());
+      const nameSpan = findNameSpan(row);
+      expect(nameSpan).not.toBeNull();
+      expect(nameSpan!.style.color).toBe(TEXT_MUTED);
     }
   });
 
@@ -1264,13 +1297,9 @@ describe('active tab context on initial load (quick-260417-f6e)', () => {
     expect(readmeRow).toBeDefined();
 
     // Its filename span must be textPrimary (selected), not textMuted.
-    const spans = readmeRow!.querySelectorAll<HTMLElement>('span');
-    const nameSpan = Array.from(spans).find(s => {
-      const c = (s.style.color || '').toLowerCase();
-      return c === colors.textMuted.toLowerCase() || c === colors.textPrimary.toLowerCase();
-    });
-    expect(nameSpan).toBeDefined();
-    expect((nameSpan!.style.color || '').toLowerCase()).toBe(colors.textPrimary.toLowerCase());
+    const nameSpan = findNameSpan(readmeRow!);
+    expect(nameSpan).not.toBeNull();
+    expect(nameSpan!.style.color).toBe(TEXT_PRIMARY);
   });
 
   it('Test D: no row is selected on fresh load with no active tab and no editor tabs', async () => {
@@ -1286,13 +1315,9 @@ describe('active tab context on initial load (quick-260417-f6e)', () => {
     const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) {
-      const spans = row.querySelectorAll<HTMLElement>('span');
-      const nameSpan = Array.from(spans).find(s => {
-        const c = (s.style.color || '').toLowerCase();
-        return c === colors.textMuted.toLowerCase() || c === colors.textPrimary.toLowerCase();
-      });
-      expect(nameSpan).toBeDefined();
-      expect((nameSpan!.style.color || '').toLowerCase()).toBe(colors.textMuted.toLowerCase());
+      const nameSpan = findNameSpan(row);
+      expect(nameSpan).not.toBeNull();
+      expect(nameSpan!.style.color).toBe(TEXT_MUTED);
     }
   });
 
@@ -1317,12 +1342,8 @@ describe('active tab context on initial load (quick-260417-f6e)', () => {
     // The first row's filename span should now be textPrimary (selected).
     const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
     const row0 = rows[0] as HTMLElement;
-    const spans = row0.querySelectorAll<HTMLElement>('span');
-    const nameSpan = Array.from(spans).find(s => {
-      const c = (s.style.color || '').toLowerCase();
-      return c === colors.textMuted.toLowerCase() || c === colors.textPrimary.toLowerCase();
-    });
-    expect(nameSpan).toBeDefined();
-    expect((nameSpan!.style.color || '').toLowerCase()).toBe(colors.textPrimary.toLowerCase());
+    const nameSpan = findNameSpan(row0);
+    expect(nameSpan).not.toBeNull();
+    expect(nameSpan!.style.color).toBe(TEXT_PRIMARY);
   });
 });
