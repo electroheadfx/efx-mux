@@ -6,6 +6,8 @@ import { FileTree, fileTreeFontSize, fileTreeLineHeight, detectedEditors } from 
 import { ConfirmModal } from './confirm-modal';
 import { ToastContainer } from './toast';
 import { projects, activeProjectName } from '../state-manager';
+import { activeUnifiedTabId, openEditorTab } from './unified-tab-bar';
+import { colors } from '../tokens';
 
 // Phase 18 Plan 08: module-level holder for the git-status-changed listener captured
 // by the vi.mock below. Used by the 'tree state preservation' describe to simulate
@@ -1158,5 +1160,169 @@ describe('continuous drop-target highlight during Finder drag (Gap G-02)', () =>
     expect(copyArgs).toBeDefined();
     expect(copyArgs?.from).toBe('/outside/foo.ts');
     expect(String(copyArgs?.to)).toContain('/tmp/proj/src/foo.ts');
+  });
+});
+
+// ── quick-260417-f6e: active-tab-aware seeding on initial load ──────────────
+//
+// On initial load / project switch, FileTree should ONLY highlight a row when
+// the active unified tab is an editor tab pointing at a file inside the
+// current project. Terminal tabs, the git-changes tab, and empty state should
+// leave selectedIndex at -1 so no row has the 'selected' color/bg.
+
+describe('active tab context on initial load (quick-260417-f6e)', () => {
+  // Use distinct project names per test so the module-private _editorTabsByProject
+  // Map doesn't bleed between tests (editorTabs is computed per-project).
+  let testCounter = 0;
+  function freshProject(): { path: string; name: string } {
+    testCounter += 1;
+    const name = `testproj-f6e-${testCounter}`;
+    return { path: '/tmp/proj', name };
+  }
+
+  beforeEach(() => {
+    // Reset the active unified tab so every test starts from a clean 'no tab' state.
+    activeUnifiedTabId.value = '';
+    // Pre-populate detectedEditors to avoid the async detect_editors IPC call
+    // (which isn't mocked here and would block ensureEditorsDetected).
+    detectedEditors.value = { zed: false, code: false, subl: false, cursor: false, idea: false };
+    fileTreeFontSize.value = 13;
+    fileTreeLineHeight.value = 2;
+
+    mockIPC((cmd, _args) => {
+      if (cmd === 'list_directory') return MOCK_ENTRIES;
+      if (cmd === 'read_file_text') return '# mock\n';
+      return null;
+    });
+
+    vi.stubGlobal('listen', vi.fn().mockResolvedValue(vi.fn()));
+  });
+
+  it('Test A: no row is selected when the active tab is a terminal', async () => {
+    const proj = freshProject();
+    projects.value = [{ path: proj.path, name: proj.name, agent: 'claude' }];
+    activeProjectName.value = proj.name;
+    // Mimic a terminal tab being active (any id that isn't 'editor-...' or 'git-changes').
+    activeUnifiedTabId.value = 'terminal-123';
+
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+
+    // Every row's filename span should have textMuted color (i.e. NOT selected).
+    // The filename is the inner <span> whose text matches the entry's name.
+    const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      // The filename span is the one with flex:1 and whose inline color is either textMuted or textPrimary.
+      const spans = row.querySelectorAll<HTMLElement>('span');
+      // Find the span whose color attribute is one of the two filename colors.
+      const nameSpan = Array.from(spans).find(s => {
+        const c = (s.style.color || '').toLowerCase();
+        return c === colors.textMuted.toLowerCase() || c === colors.textPrimary.toLowerCase();
+      });
+      expect(nameSpan).toBeDefined();
+      expect((nameSpan!.style.color || '').toLowerCase()).toBe(colors.textMuted.toLowerCase());
+    }
+  });
+
+  it('Test B: no row is selected when the active tab is the git-changes tab', async () => {
+    const proj = freshProject();
+    projects.value = [{ path: proj.path, name: proj.name, agent: 'claude' }];
+    activeProjectName.value = proj.name;
+    activeUnifiedTabId.value = 'git-changes';
+
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+
+    const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      const spans = row.querySelectorAll<HTMLElement>('span');
+      const nameSpan = Array.from(spans).find(s => {
+        const c = (s.style.color || '').toLowerCase();
+        return c === colors.textMuted.toLowerCase() || c === colors.textPrimary.toLowerCase();
+      });
+      expect(nameSpan).toBeDefined();
+      expect((nameSpan!.style.color || '').toLowerCase()).toBe(colors.textMuted.toLowerCase());
+    }
+  });
+
+  it('Test C: reveals + selects the active editor tab\'s file on mount', async () => {
+    const proj = freshProject();
+    projects.value = [{ path: proj.path, name: proj.name, agent: 'claude' }];
+    activeProjectName.value = proj.name;
+    // Populate an editor tab for the active project. openEditorTab also sets
+    // activeUnifiedTabId.value to the new tab's id.
+    openEditorTab('/tmp/proj/README.md', 'README.md', '# mock');
+
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 80));
+
+    // Locate the README.md row.
+    const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-file-tree-index]'));
+    const readmeRow = rows.find(r => r.textContent?.includes('README.md'));
+    expect(readmeRow).toBeDefined();
+
+    // Its filename span must be textPrimary (selected), not textMuted.
+    const spans = readmeRow!.querySelectorAll<HTMLElement>('span');
+    const nameSpan = Array.from(spans).find(s => {
+      const c = (s.style.color || '').toLowerCase();
+      return c === colors.textMuted.toLowerCase() || c === colors.textPrimary.toLowerCase();
+    });
+    expect(nameSpan).toBeDefined();
+    expect((nameSpan!.style.color || '').toLowerCase()).toBe(colors.textPrimary.toLowerCase());
+  });
+
+  it('Test D: no row is selected on fresh load with no active tab and no editor tabs', async () => {
+    const proj = freshProject();
+    projects.value = [{ path: proj.path, name: proj.name, agent: 'claude' }];
+    activeProjectName.value = proj.name;
+    // No active tab at all.
+    activeUnifiedTabId.value = '';
+
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+
+    const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      const spans = row.querySelectorAll<HTMLElement>('span');
+      const nameSpan = Array.from(spans).find(s => {
+        const c = (s.style.color || '').toLowerCase();
+        return c === colors.textMuted.toLowerCase() || c === colors.textPrimary.toLowerCase();
+      });
+      expect(nameSpan).toBeDefined();
+      expect((nameSpan!.style.color || '').toLowerCase()).toBe(colors.textMuted.toLowerCase());
+    }
+  });
+
+  it('Test E: ArrowDown from the no-selection state moves focus to row 0', async () => {
+    const proj = freshProject();
+    projects.value = [{ path: proj.path, name: proj.name, agent: 'claude' }];
+    activeProjectName.value = proj.name;
+    activeUnifiedTabId.value = '';
+
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+
+    // Precondition: no row is selected.
+    const rows0 = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(rows0.length).toBeGreaterThan(0);
+
+    const fileList = document.querySelector('[tabindex="0"]') as HTMLElement;
+    expect(fileList).not.toBeNull();
+    fireEvent.keyDown(fileList, { key: 'ArrowDown' });
+    await new Promise(r => setTimeout(r, 20));
+
+    // The first row's filename span should now be textPrimary (selected).
+    const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    const row0 = rows[0] as HTMLElement;
+    const spans = row0.querySelectorAll<HTMLElement>('span');
+    const nameSpan = Array.from(spans).find(s => {
+      const c = (s.style.color || '').toLowerCase();
+      return c === colors.textMuted.toLowerCase() || c === colors.textPrimary.toLowerCase();
+    });
+    expect(nameSpan).toBeDefined();
+    expect((nameSpan!.style.color || '').toLowerCase()).toBe(colors.textPrimary.toLowerCase());
   });
 });
