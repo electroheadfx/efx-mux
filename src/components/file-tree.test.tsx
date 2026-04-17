@@ -1347,3 +1347,182 @@ describe('active tab context on initial load (quick-260417-f6e)', () => {
     expect(nameSpan!.style.color).toBe(TEXT_PRIMARY);
   });
 });
+
+// ── quick-260417-hgw: create-then-open behaviors ────────────────────────────
+//
+// When the user creates a file via header [+], row context menu on a folder,
+// or row context menu on a file, the new file must:
+//   (1) open in an editor tab (fire file-opened CustomEvent),
+//   (2) be revealed/selected in the FileTree,
+// and for header [+] on a collapsed folder, the folder must auto-expand
+// BEFORE the InlineCreateRow renders.
+
+describe('create-then-open behaviors (quick-260417-hgw)', () => {
+  // Child entries used when 'src' is expanded so we can assert expansion happened.
+  const SRC_CHILDREN = [
+    { name: 'existing.ts', path: '/tmp/proj/src/existing.ts', is_dir: false, size: 10 },
+  ];
+
+  beforeEach(() => {
+    projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'claude' }];
+    activeProjectName.value = 'testproj';
+    detectedEditors.value = { zed: false, code: false, subl: false, cursor: false, idea: false };
+    activeUnifiedTabId.value = '';
+    fileTreeFontSize.value = 13;
+    fileTreeLineHeight.value = 2;
+
+    mockIPC((cmd, args) => {
+      if (cmd === 'list_directory') {
+        const path = (args as { path?: string })?.path;
+        if (path === '/tmp/proj/src') return SRC_CHILDREN;
+        return MOCK_ENTRIES;
+      }
+      if (cmd === 'create_file') return null;
+      if (cmd === 'create_folder') return null;
+      if (cmd === 'read_file_content') return '';
+      return null;
+    });
+
+    vi.stubGlobal('listen', vi.fn().mockResolvedValue(vi.fn()));
+  });
+
+  // Ensure we are in tree mode regardless of what previous describe blocks left behind.
+  async function forceTreeMode(): Promise<void> {
+    const treeToggle = document.querySelector('span[title="Tree mode"]') as HTMLElement | null;
+    if (treeToggle) {
+      fireEvent.click(treeToggle);
+      await new Promise(r => setTimeout(r, 50));
+    }
+  }
+
+  /**
+   * Open header [+] -> click first menu item matching label, type `name` and press Enter.
+   * Returns after the create has committed + one animation frame tick for the reveal.
+   */
+  async function headerCreateAndCommit(label: 'New File' | 'New Folder', name: string): Promise<void> {
+    const plusBtn = document.querySelector('[title="New file or folder"]') as HTMLElement;
+    expect(plusBtn).not.toBeNull();
+    fireEvent.click(plusBtn);
+    await new Promise(r => setTimeout(r, 30));
+    const item = Array.from(document.querySelectorAll('[role="menuitem"]'))
+      .find(el => el.textContent?.trim() === label) as HTMLElement | undefined;
+    expect(item).toBeDefined();
+    fireEvent.click(item!);
+    // Allow the async expand-if-collapsed to settle before the input mounts.
+    await new Promise(r => setTimeout(r, 80));
+    const input = document.querySelector('input') as HTMLInputElement | null;
+    expect(input).not.toBeNull();
+    fireEvent.input(input!, { target: { value: name } });
+    fireEvent.keyDown(input!, { key: 'Enter' });
+    // Await commit (createFile/createFolder) + emit + rAF-scheduled revealFileInTree.
+    await new Promise(r => setTimeout(r, 120));
+  }
+
+  it('dispatches file-opened CustomEvent after createFile commit', async () => {
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 60));
+    await forceTreeMode();
+
+    // Listen for the dispatched event.
+    let captured: { path: string; name: string } | null = null;
+    const listener = (e: Event) => {
+      const d = (e as CustomEvent).detail as { path: string; name: string };
+      if (d.name === 'hello.ts') captured = d;
+    };
+    document.addEventListener('file-opened', listener);
+
+    try {
+      await headerCreateAndCommit('New File', 'hello.ts');
+    } finally {
+      document.removeEventListener('file-opened', listener);
+    }
+
+    expect(captured).not.toBeNull();
+    expect(captured!.path).toMatch(/\/hello\.ts$/);
+    expect(captured!.name).toBe('hello.ts');
+  });
+
+  it('does NOT dispatch file-opened after createFolder commit', async () => {
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 60));
+    await forceTreeMode();
+
+    let firedForOur = false;
+    const listener = (e: Event) => {
+      const d = (e as CustomEvent).detail as { path: string; name: string };
+      if (d.name === 'newdir') firedForOur = true;
+    };
+    document.addEventListener('file-opened', listener);
+
+    try {
+      await headerCreateAndCommit('New Folder', 'newdir');
+    } finally {
+      document.removeEventListener('file-opened', listener);
+    }
+
+    expect(firedForOur).toBe(false);
+  });
+
+  it('expands collapsed target folder when header [+] New File is clicked', async () => {
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 80));
+    await forceTreeMode();
+
+    // Select the 'src' folder row (index 0 in MOCK_ENTRIES) by clicking it once.
+    // A single click in tree mode calls toggleTreeNode — so we need to click, wait
+    // for the expand, then click again to collapse so we can test the 'collapsed'
+    // starting state. Or simpler: keyboard-navigate (ArrowDown) from -1 to land on
+    // row 0 without toggling.
+    const fileList = document.querySelector('[tabindex="0"]') as HTMLElement;
+    expect(fileList).not.toBeNull();
+    fireEvent.keyDown(fileList, { key: 'ArrowDown' });
+    await new Promise(r => setTimeout(r, 20));
+    // Precondition: 'src' row is selected but NOT expanded (no 'existing.ts' in DOM).
+    expect(document.body.textContent).not.toContain('existing.ts');
+
+    // Click header [+] -> New File. The production code must expand 'src' before
+    // rendering the InlineCreateRow, so 'existing.ts' becomes visible.
+    const plusBtn = document.querySelector('[title="New file or folder"]') as HTMLElement;
+    fireEvent.click(plusBtn);
+    await new Promise(r => setTimeout(r, 20));
+    const item = Array.from(document.querySelectorAll('[role="menuitem"]'))
+      .find(el => el.textContent?.trim() === 'New File') as HTMLElement;
+    fireEvent.click(item);
+    // Allow ensureTargetExpanded -> toggleTreeNode -> list_directory to settle.
+    await new Promise(r => setTimeout(r, 100));
+
+    // Assertion: 'src' is now expanded (existing.ts child is rendered).
+    expect(document.body.textContent).toContain('existing.ts');
+    // And the InlineCreateRow input is rendered.
+    const input = document.querySelector('input');
+    expect(input).not.toBeNull();
+  });
+
+  it('does NOT collapse already-expanded target folder when header [+] New File is clicked', async () => {
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 80));
+    await forceTreeMode();
+
+    // Click 'src' once to expand it (tree-mode click toggles a folder).
+    const srcRow = document.querySelector('[data-file-tree-index="0"]') as HTMLElement;
+    expect(srcRow).not.toBeNull();
+    fireEvent.click(srcRow);
+    await new Promise(r => setTimeout(r, 80));
+    // Precondition: expanded (children visible).
+    expect(document.body.textContent).toContain('existing.ts');
+
+    // Open header [+] -> New File. The code must NOT toggle a second time.
+    const plusBtn = document.querySelector('[title="New file or folder"]') as HTMLElement;
+    fireEvent.click(plusBtn);
+    await new Promise(r => setTimeout(r, 20));
+    const item = Array.from(document.querySelectorAll('[role="menuitem"]'))
+      .find(el => el.textContent?.trim() === 'New File') as HTMLElement;
+    fireEvent.click(item);
+    await new Promise(r => setTimeout(r, 100));
+
+    // Post-condition: 'src' is STILL expanded (children still visible).
+    expect(document.body.textContent).toContain('existing.ts');
+    const input = document.querySelector('input');
+    expect(input).not.toBeNull();
+  });
+});
