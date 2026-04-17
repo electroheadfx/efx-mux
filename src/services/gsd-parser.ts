@@ -333,19 +333,191 @@ export function parseProgress(md: string): ProgressData {
 }
 
 // ---------------------------------------------------------------------------
-// parseHistory + parseState -- stubs, implemented in Task 2
+// YAML frontmatter helpers (for parseState)
 // ---------------------------------------------------------------------------
 
-export function parseHistory(_md: string): HistoryData {
-  return { milestones: [], parseError: 'Not yet implemented' };
+function parseFrontmatter(md: string): Record<string, unknown> {
+  try {
+    const processor = unified().use(remarkParse).use(remarkFrontmatter, ['yaml']);
+    const tree = processor.parse(md) as Root;
+    const yamlNode = tree.children.find(n => n.type === 'yaml') as
+      | { type: 'yaml'; value: string }
+      | undefined;
+    if (!yamlNode) return {};
+    const parsed = parseYaml(yamlNode.value);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
 }
 
-export function parseState(_md: string): StateData {
+function normalizeFrontmatter(raw: Record<string, unknown>): StateFrontmatter {
+  const progressRaw =
+    raw.progress && typeof raw.progress === 'object'
+      ? (raw.progress as Record<string, unknown>)
+      : undefined;
   return {
-    frontmatter: {},
-    decisions: [],
-    pendingTodos: [],
-    blockers: [],
-    parseError: 'Not yet implemented',
+    gsdStateVersion:
+      typeof raw.gsd_state_version === 'string' || typeof raw.gsd_state_version === 'number'
+        ? String(raw.gsd_state_version)
+        : undefined,
+    milestone: typeof raw.milestone === 'string' ? raw.milestone : undefined,
+    milestoneName: typeof raw.milestone_name === 'string' ? raw.milestone_name : undefined,
+    status: typeof raw.status === 'string' ? raw.status : undefined,
+    stoppedAt: typeof raw.stopped_at === 'string' ? raw.stopped_at : undefined,
+    lastActivity: typeof raw.last_activity === 'string' ? raw.last_activity : undefined,
+    progress: progressRaw
+      ? {
+          totalPhases:
+            typeof progressRaw.total_phases === 'number' ? progressRaw.total_phases : undefined,
+          completedPhases:
+            typeof progressRaw.completed_phases === 'number'
+              ? progressRaw.completed_phases
+              : undefined,
+          totalPlans:
+            typeof progressRaw.total_plans === 'number' ? progressRaw.total_plans : undefined,
+          completedPlans:
+            typeof progressRaw.completed_plans === 'number'
+              ? progressRaw.completed_plans
+              : undefined,
+          percent: typeof progressRaw.percent === 'number' ? progressRaw.percent : undefined,
+        }
+      : undefined,
   };
+}
+
+// ---------------------------------------------------------------------------
+// parseHistory -- GSD-04 (MILESTONES.md full file, one entry per H2)
+// ---------------------------------------------------------------------------
+
+export function parseHistory(md: string): HistoryData {
+  try {
+    if (!md || md.trim().length === 0) return { milestones: [] };
+    const processor = unified().use(remarkParse).use(remarkGfm);
+    const tree = processor.parse(md) as Root;
+    const milestones: HistoryMilestone[] = [];
+    // Each `## vX.Y.Z ...` heading starts one milestone block
+    for (let i = 0; i < tree.children.length; i++) {
+      const node = tree.children[i];
+      if (node.type !== 'heading' || (node as Heading).depth !== 2) continue;
+      const title = inlineText(node).trim();
+      const shipMatch = title.match(/shipped\s+([\d-]+)/i);
+      const shipDate = shipMatch ? shipMatch[1] : '';
+      // Collect body until next H2
+      const body: Content[] = [];
+      for (let j = i + 1; j < tree.children.length; j++) {
+        const n = tree.children[j];
+        if (n.type === 'heading' && (n as Heading).depth === 2) break;
+        body.push(n as Content);
+      }
+      const accomplishments: string[] = [];
+      let phaseCount: number | undefined;
+      let planCount: number | undefined;
+      let taskCount: number | undefined;
+      for (const b of body) {
+        if (b.type === 'list') {
+          for (const item of (b as List).children) {
+            const text = inlineText(item).trim();
+            if (!text) continue;
+            accomplishments.push(text);
+            const phaseM = text.match(/(\d+)\s+phases?/i);
+            if (phaseM && phaseCount === undefined) phaseCount = parseInt(phaseM[1], 10);
+            const planM = text.match(/(\d+)\s+plans?/i);
+            if (planM && planCount === undefined) planCount = parseInt(planM[1], 10);
+            const taskM = text.match(/(\d+)\s+tasks?/i);
+            if (taskM && taskCount === undefined) taskCount = parseInt(taskM[1], 10);
+          }
+        }
+      }
+      milestones.push({ title, shipDate, phaseCount, planCount, taskCount, accomplishments });
+    }
+    return { milestones };
+  } catch (err) {
+    console.warn('[efxmux] parseHistory failed:', err);
+    return { milestones: [], parseError: 'Parse failed' };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// parseState -- GSD-05 (STATE.md YAML frontmatter + selected sections)
+// NOTE: per D-10, ## Quick Tasks Completed is NEVER parsed here.
+// ---------------------------------------------------------------------------
+
+function collectH3List(nodes: Content[], h3Text: string): string[] {
+  const out: string[] = [];
+  let inside = false;
+  for (const n of nodes) {
+    if (n.type === 'heading' && (n as Heading).depth === 3) {
+      if (inlineText(n).trim() === h3Text) {
+        inside = true;
+        continue;
+      }
+      if (inside) break;
+    }
+    if (inside && n.type === 'list') {
+      for (const item of (n as List).children) {
+        const t = inlineText(item).trim();
+        if (t && t !== 'None.' && t.toLowerCase() !== 'none') out.push(t);
+      }
+    }
+  }
+  return out;
+}
+
+export function parseState(md: string): StateData {
+  try {
+    const frontmatterRaw = parseFrontmatter(md);
+    const frontmatter = normalizeFrontmatter(frontmatterRaw);
+    const processor = unified().use(remarkParse).use(remarkGfm).use(remarkFrontmatter, ['yaml']);
+    const tree = processor.parse(md) as Root;
+
+    // Current Position
+    const posNodes = extractSection(tree, 'Current Position', 2);
+    const currentPosition = posNodes.map(inlineText).join('\n').trim() || undefined;
+
+    // Accumulated Context → Decisions / Pending Todos / Blockers (all H3 bullet lists)
+    const contextNodes = extractSection(tree, 'Accumulated Context', 2);
+    const decisions = collectH3List(contextNodes, 'Decisions');
+    const pendingTodos = collectH3List(contextNodes, 'Pending Todos');
+    const blockers = collectH3List(contextNodes, 'Blockers/Concerns');
+
+    // Session Continuity -- H2 paragraph with "Last session:", "Stopped at:", "Resume file:" lines
+    const sessionNodes = extractSection(tree, 'Session Continuity', 2);
+    let lastSession: string | undefined;
+    let stoppedAt: string | undefined;
+    let resumeFile: string | undefined;
+    for (const n of sessionNodes) {
+      if (n.type !== 'paragraph') continue;
+      const text = inlineText(n).trim();
+      const lastM = text.match(/Last session:\s*(.+)/);
+      const stoppedM = text.match(/Stopped at:\s*(.+)/);
+      const resumeM = text.match(/Resume file:\s*(.+)/);
+      if (lastM) lastSession = lastM[1].trim();
+      if (stoppedM) stoppedAt = stoppedM[1].trim();
+      if (resumeM) resumeFile = resumeM[1].trim();
+    }
+    const sessionContinuity =
+      lastSession || stoppedAt || resumeFile
+        ? { lastSession, stoppedAt, resumeFile }
+        : undefined;
+
+    // Per D-10: `## Quick Tasks Completed` section is deliberately excluded here.
+    return {
+      frontmatter,
+      currentPosition,
+      decisions,
+      pendingTodos,
+      blockers,
+      sessionContinuity,
+    };
+  } catch (err) {
+    console.warn('[efxmux] parseState failed:', err);
+    return {
+      frontmatter: {},
+      decisions: [],
+      pendingTodos: [],
+      blockers: [],
+      parseError: 'Parse failed',
+    };
+  }
 }
