@@ -565,6 +565,43 @@ pub fn cleanup_dead_sessions() -> Result<Vec<String>, String> {
     Ok(cleaned)
 }
 
+/// Phase 20 D-19: Kill legacy "<project>-right" tmux sessions from the pre-Phase-20
+/// right-panel layout. Best-effort; silently ignores missing sessions. Called once
+/// at app bootstrap (after `cleanup_dead_sessions`).
+///
+/// Returns the list of session names actually killed (for logging). Never returns Err —
+/// migration is best-effort and must not block startup (T-20-09 mitigation).
+///
+/// Project names are sanitized identically to `send_literal_sequence` / `spawn_terminal`
+/// (alphanumeric + '-' + '_', lowercased) before being joined with the `-right` suffix,
+/// so a tampered project name cannot target an arbitrary session (T-20-07 mitigation).
+#[tauri::command]
+pub fn kill_legacy_right_sessions(project_names: Vec<String>) -> Result<Vec<String>, String> {
+    let mut killed = Vec::new();
+    for name in project_names {
+        // Mirror pty.rs session-name sanitizer: alphanumeric + '-' + '_', lowercased.
+        let sanitized: String = name
+            .chars()
+            .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
+            .collect::<String>()
+            .to_lowercase();
+        if sanitized.is_empty() {
+            continue;
+        }
+        let target = format!("{}-right", sanitized);
+        // tmux returns non-zero when session doesn't exist — treat as no-op.
+        if let Ok(out) = std::process::Command::new("tmux")
+            .args(["kill-session", "-t", &target])
+            .output()
+        {
+            if out.status.success() {
+                killed.push(target);
+            }
+        }
+    }
+    Ok(killed)
+}
+
 /// Send a literal byte sequence directly to a tmux pane's stdin.
 /// Uses `tmux send-keys -l` which bypasses tmux's key-parsing table entirely,
 /// so sequences like \x1b[13;2u (CSI u / kitty keyboard protocol) reach the

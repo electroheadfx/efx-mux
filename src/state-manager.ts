@@ -43,7 +43,7 @@ export const projects = signal<ProjectEntry[]>([]);
 export const activeProjectName = signal<string | null>(null);
 export const sidebarCollapsed = signal(false);
 export const rightTopTab = signal('File Tree');
-export const rightBottomTab = signal('Bash');
+// (Phase 20 D-01/D-20: removed rightBottomTab signal — right panel no longer has a separate bottom tab.)
 export const gsdSubTab = signal('State'); // Phase 19 D-02: default sub-tab is State
 
 // ---------------------------------------------------------------------------
@@ -68,21 +68,29 @@ export async function loadAppState(): Promise<AppState> {
     if (!currentState.project.projects) currentState.project.projects = [];
   } catch (err) {
     console.warn('[efxmux] Failed to load state, using defaults:', err);
-    // Return a minimal default state matching Rust defaults
+    // Return a minimal default state matching Rust defaults (Phase 20 D-20: legacy keys dropped)
     currentState = {
       version: 1,
-      layout: { 'sidebar-w': '200px', 'right-w': '25%', 'right-h-pct': '50', 'sidebar-collapsed': false },
+      layout: { 'sidebar-w': '200px', 'right-w': '25%', 'sidebar-collapsed': false },
       theme: { mode: 'dark' },
-      session: { 'main-tmux-session': 'efx-mux', 'right-tmux-session': 'efx-mux-right' },
+      session: { 'main-tmux-session': 'efx-mux' },
       project: { active: null, projects: [] },
-      panels: { 'right-top-tab': 'File Tree', 'right-bottom-tab': 'Bash', 'gsd-sub-tab': 'State' },
+      panels: { 'right-top-tab': 'File Tree', 'gsd-sub-tab': 'State' },
     };
+  }
+
+  // Phase 20 D-20: silent, idempotent migration — drop legacy right-panel layout keys.
+  // These keys were written by the pre-Phase-20 right-panel layout and have no consumers anymore.
+  // Deleting pre-signal-restore ensures signals never read stale migrated values.
+  if (currentState) {
+    delete (currentState.panels as Record<string, string | undefined>)['right-bottom-tab'];
+    delete (currentState.session as Record<string, string | undefined>)['right-tmux-session'];
+    delete (currentState.layout as Record<string, string | boolean | undefined>)['right-h-pct'];
   }
 
   // Set signals from loaded state
   sidebarCollapsed.value = currentState?.layout?.['sidebar-collapsed'] === true || currentState?.layout?.['sidebar-collapsed'] === 'true';
   if (currentState?.panels?.['right-top-tab']) rightTopTab.value = currentState.panels['right-top-tab'];
-  if (currentState?.panels?.['right-bottom-tab']) rightBottomTab.value = currentState.panels['right-bottom-tab'];
   if (currentState?.panels?.['gsd-sub-tab']) gsdSubTab.value = currentState.panels['gsd-sub-tab'];
 
   // Restore projects and active project from persisted state (T-08-07-02)

@@ -3,8 +3,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { mockIPC } from '@tauri-apps/api/mocks';
 import {
-  projects, activeProjectName, sidebarCollapsed, rightTopTab, rightBottomTab,
-  loadAppState, saveAppState, getCurrentState,
+  projects, activeProjectName, sidebarCollapsed, rightTopTab,
+  loadAppState, saveAppState, getCurrentState, updateSession,
   addProject, updateProject, removeProject, switchProject,
 } from './state-manager';
 import type { AppState } from './state-manager';
@@ -41,7 +41,6 @@ describe('state-manager', () => {
     activeProjectName.value = null;
     sidebarCollapsed.value = false;
     rightTopTab.value = 'File Tree';
-    rightBottomTab.value = 'Bash';
 
     // Reset module-level currentState by forcing a load_state error,
     // which causes loadAppState() to set currentState to defaults
@@ -189,6 +188,97 @@ describe('state-manager', () => {
 
       await switchProject('switched-project');
       expect(activeProjectName.value).toBe('switched-project');
+    });
+  });
+
+  // Phase 20 D-20: legacy-key migration — the three pre-Phase-20 right-panel layout
+  // keys must be silently dropped on load so Plan 04's new AppState shape is clean.
+  describe('Phase 20 legacy key migration (D-20)', () => {
+    it('fresh-load default AppState omits right-bottom-tab / right-tmux-session / right-h-pct', async () => {
+      vi.spyOn(console, 'warn').mockReturnValue();
+      mockIPC((cmd) => {
+        if (cmd === 'load_state') throw new Error('no state.json yet'); // triggers fallback default
+        if (cmd === 'save_state') return null;
+        return null;
+      });
+      await loadAppState();
+      const state = getCurrentState()!;
+      expect(state.panels['right-bottom-tab']).toBeUndefined();
+      expect(state.session['right-tmux-session']).toBeUndefined();
+      expect(state.layout['right-h-pct']).toBeUndefined();
+    });
+
+    it('drops legacy keys from loaded older state.json', async () => {
+      mockIPC((cmd) => {
+        if (cmd === 'load_state') return {
+          version: 1,
+          layout: { 'sidebar-w': '200px', 'right-w': '25%', 'right-h-pct': '50' },
+          theme: { mode: 'dark' },
+          session: { 'main-tmux-session': 'efx-mux', 'right-tmux-session': 'efx-mux-right' },
+          project: { active: null, projects: [] },
+          panels: { 'right-top-tab': 'File Tree', 'right-bottom-tab': 'Bash', 'gsd-sub-tab': 'State' },
+        };
+        if (cmd === 'save_state') return null;
+        return null;
+      });
+      await loadAppState();
+      const state = getCurrentState()!;
+      expect(state.panels['right-bottom-tab']).toBeUndefined();
+      expect(state.session['right-tmux-session']).toBeUndefined();
+      expect(state.layout['right-h-pct']).toBeUndefined();
+      // Untouched keys remain:
+      expect(state.panels['right-top-tab']).toBe('File Tree');
+      expect(state.panels['gsd-sub-tab']).toBe('State');
+      expect(state.session['main-tmux-session']).toBe('efx-mux');
+      expect(state.layout['sidebar-w']).toBe('200px');
+    });
+
+    it('preserves unknown non-legacy keys (surgical migration)', async () => {
+      mockIPC((cmd) => {
+        if (cmd === 'load_state') return {
+          version: 1,
+          layout: { 'sidebar-w': '200px', 'right-w': '25%' },
+          theme: { mode: 'dark' },
+          session: { 'main-tmux-session': 'efx-mux', 'future-hypothetical-key': 'value' },
+          project: { active: null, projects: [] },
+          panels: { 'right-top-tab': 'File Tree' },
+        };
+        if (cmd === 'save_state') return null;
+        return null;
+      });
+      await loadAppState();
+      const state = getCurrentState()!;
+      expect(state.session['future-hypothetical-key']).toBe('value');
+    });
+  });
+
+  describe('Phase 20 right-scope persistence (D-15/D-16)', () => {
+    beforeEach(async () => {
+      mockIPC((cmd) => {
+        if (cmd === 'load_state') return {
+          version: 1, layout: {}, theme: { mode: 'dark' }, session: {},
+          project: { active: null, projects: [] }, panels: {},
+        };
+        if (cmd === 'save_state') return null;
+        return null;
+      });
+      await loadAppState();
+    });
+
+    it('updateSession writes right-terminal-tabs:<project> key', async () => {
+      const payload = JSON.stringify({ tabs: [], activeTabId: 'file-tree' });
+      await updateSession({ 'right-terminal-tabs:foo': payload });
+      const state = getCurrentState()!;
+      expect(state.session['right-terminal-tabs:foo']).toBe(payload);
+    });
+
+    it('right-scope and main-scope terminal-tabs keys coexist independently', async () => {
+      const mainPayload = JSON.stringify({ tabs: [{ sessionName: 'foo', label: 'A', isAgent: false }], activeTabId: 'a' });
+      const rightPayload = JSON.stringify({ tabs: [{ sessionName: 'foo-r1', label: 'B', isAgent: false }], activeTabId: 'b' });
+      await updateSession({ 'terminal-tabs:foo': mainPayload, 'right-terminal-tabs:foo': rightPayload });
+      const state = getCurrentState()!;
+      expect(state.session['terminal-tabs:foo']).toBe(mainPayload);
+      expect(state.session['right-terminal-tabs:foo']).toBe(rightPayload);
     });
   });
 });
