@@ -218,6 +218,68 @@ async function initTree(): Promise<void> {
 }
 
 /**
+ * Refresh the tree from disk while preserving the user's expand/collapse state
+ * AND the currently-selected entry. Designed for the git-status-changed listener
+ * path, where a file mutation (create/delete/rename/move/copy) requires re-reading
+ * the directory listing without disturbing the rest of the user's view.
+ *
+ * Algorithm (UAT Tests 6 + 7 fix, 2026-04-16):
+ *   1. Snapshot the set of currently-expanded folder paths.
+ *   2. Snapshot the path of the currently-selected entry.
+ *   3. Run initTree() (replaces treeNodes.value with fresh root entries, expanded:false).
+ *   4. Re-expand the snapshot paths in shortest-first order so parents are loaded
+ *      before children can be located. Each re-expansion uses toggleTreeNode which
+ *      lazy-loads children when needed.
+ *   5. Re-anchor selectedIndex by walking the post-refresh flattenedTree to find
+ *      the previously-selected path. If the entry is gone (mutation deleted it),
+ *      clamp to the prior index or 0.
+ *
+ * NOTE: initTree() itself is NOT modified — its current "wipe" semantics remain
+ * correct for project-switch (handleProjectChanged) and initial mount.
+ */
+async function refreshTreePreservingState(): Promise<void> {
+  // 1. Snapshot expanded paths from current flattened tree
+  const expandedPaths = new Set<string>();
+  for (const node of flattenedTree.value) {
+    if (node.entry.is_dir && node.expanded) {
+      expandedPaths.add(node.entry.path);
+    }
+  }
+  // 2. Snapshot currently-selected entry's path (by index → path)
+  const prevIndex = selectedIndex.value;
+  const prevSelectedPath = flattenedTree.value[prevIndex]?.entry.path ?? null;
+
+  // 3. Rebuild the tree from disk (this resets every node to expanded:false + selectedIndex=0)
+  await initTree();
+
+  // 4. Re-expand snapshot paths in shortest-first order so parents load before children
+  const sortedExpanded = Array.from(expandedPaths).sort((a, b) => a.length - b.length);
+  for (const path of sortedExpanded) {
+    // Locate the node in the current flattened tree (must re-read each pass because
+    // toggleTreeNode mutates treeNodes.value, invalidating prior references).
+    const node = flattenedTree.value.find(n => n.entry.path === path && n.entry.is_dir);
+    if (!node || node.expanded) continue;
+    try {
+      await toggleTreeNode(node);
+    } catch {
+      // Swallow: a folder may have been deleted by the mutation; silently leave it collapsed.
+    }
+  }
+
+  // 5. Re-anchor selectedIndex by previous path if still present
+  if (prevSelectedPath) {
+    const newIdx = flattenedTree.value.findIndex(n => n.entry.path === prevSelectedPath);
+    if (newIdx >= 0) {
+      selectedIndex.value = newIdx;
+    } else {
+      // Entry was deleted — clamp to a safe index
+      const flatLen = flattenedTree.value.length;
+      selectedIndex.value = Math.min(prevIndex, Math.max(0, flatLen - 1));
+    }
+  }
+}
+
+/**
  * Find the parent TreeNode for a given node in the flattened list.
  */
 function findParentNode(node: TreeNode, allNodes: TreeNode[]): TreeNode | null {
@@ -734,14 +796,20 @@ export function FileTree() {
     }
     document.addEventListener('file-tree-scroll-to-selected', handleScrollToSelected);
 
-    // Phase 18 Plan 03: listen for git-status-changed to refresh tree after file ops
+    // Phase 18 Plan 03 + Plan 08: listen for git-status-changed to refresh tree after file ops.
+    // Plan 08 introduced refreshTreePreservingState() to preserve expand/collapse state.
     let unlistenFs: (() => void) | null = null;
     (async () => {
       unlistenFs = await listen('git-status-changed', () => {
         const project = getActiveProject();
         if (!project?.path) return;
-        if (viewMode.value === 'tree') initTree();
-        else loadDir(currentPath.value);
+        if (viewMode.value === 'tree') {
+          // UAT Tests 6 + 7 fix (2026-04-16): use the state-preserving refresh path
+          // instead of initTree(), which would wipe all expansion state on every mutation.
+          void refreshTreePreservingState();
+        } else {
+          loadDir(currentPath.value);
+        }
       });
     })();
 
