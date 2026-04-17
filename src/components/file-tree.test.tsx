@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/preact';
 import { mockIPC } from '@tauri-apps/api/mocks';
 import { FileTree, fileTreeFontSize, fileTreeLineHeight, detectedEditors } from './file-tree';
+import { ConfirmModal } from './confirm-modal';
 import { ToastContainer } from './toast';
 import { projects, activeProjectName } from '../state-manager';
 
@@ -11,16 +12,23 @@ import { projects, activeProjectName } from '../state-manager';
 // a file-mutation event being emitted from Rust.
 let capturedGitStatusListener: (() => void) | null = null;
 
-// Phase 18 Plan 08: intercept @tauri-apps/api/event.listen so tests can capture
-// the git-status-changed callback and invoke it synchronously. Other event
-// subscriptions return a no-op unlisten function — behaviourally equivalent to
-// the pre-existing vi.stubGlobal('listen', ...) stubs for the other describe blocks.
+// Phase 18 Plan 09 (UAT Test 5 fix): module-level holder for the delete-selected-tree-row
+// listener captured by the vi.mock below. Used by the 'delete key (UAT Test 5 fix)'
+// describe to simulate the native-menu Cmd+Backspace event being emitted from Rust.
+let capturedDeleteListener: (() => void) | null = null;
+
+// Phase 18 Plan 08 + Plan 09: intercept @tauri-apps/api/event.listen so tests can capture
+// the git-status-changed callback AND the delete-selected-tree-row callback and invoke
+// them synchronously. Other event subscriptions return a no-op unlisten function —
+// behaviourally equivalent to the pre-existing vi.stubGlobal('listen', ...) stubs for
+// the other describe blocks.
 vi.mock('@tauri-apps/api/event', async () => {
   const actual = await vi.importActual<typeof import('@tauri-apps/api/event')>('@tauri-apps/api/event');
   return {
     ...actual,
     listen: vi.fn().mockImplementation(async (event: string, cb: () => void) => {
       if (event === 'git-status-changed') capturedGitStatusListener = cb;
+      if (event === 'delete-selected-tree-row') capturedDeleteListener = cb;
       return vi.fn();
     }),
   };
@@ -139,12 +147,15 @@ describe('context menu', () => {
   });
 });
 
-describe('delete key', () => {
+describe('delete key (UAT Test 5 fix)', () => {
   beforeEach(() => {
     projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'claude' }];
     activeProjectName.value = 'testproj';
     fileTreeFontSize.value = 13;
     fileTreeLineHeight.value = 2;
+    // Phase 18 Plan 09: reset the capture each run so the 'Cmd+Backspace' test
+    // sees a freshly-registered listener from its own render() call.
+    capturedDeleteListener = null;
 
     mockIPC((cmd, _args) => {
       if (cmd === 'list_directory') return MOCK_ENTRIES;
@@ -152,20 +163,33 @@ describe('delete key', () => {
       if (cmd === 'delete_file') return null;
       return null;
     });
-
-    vi.stubGlobal('listen', vi.fn().mockResolvedValue(vi.fn()));
   });
 
-  it('pressing Delete on focused scroll container dispatches a confirm modal flow', async () => {
-    render(<FileTree />);
+  it('pressing Delete on focused scroll container surfaces ConfirmModal with "permanently deleted" copy', async () => {
+    // Render BOTH the FileTree and the ConfirmModal host so the modal's markup is observable.
+    // Without ConfirmModal mounted, showConfirmModal sets modalState.visible=true but no DOM
+    // is produced — the bogus Plan 18-03 test passed only because prior describes left the
+    // literal "Delete" string in the DOM.
+    render(
+      <>
+        <FileTree />
+        <ConfirmModal />
+      </>
+    );
     await new Promise(r => setTimeout(r, 50));
+
     const fileList = document.querySelector('[tabindex="0"]') as HTMLElement;
     expect(fileList).not.toBeNull();
+
+    // Fire Delete key with a row selected (selectedIndex defaults to 0 → first entry = 'src').
     fireEvent.keyDown(fileList, { key: 'Delete' });
-    // Wait a tick for the async invoke (count_children) to settle
-    await new Promise(r => setTimeout(r, 20));
-    // ConfirmModal should surface "Delete" copy somewhere in the DOM.
-    expect(document.body.textContent).toMatch(/Delete/);
+    // Allow async count_children (for folder confirm message) + modal render to settle.
+    await new Promise(r => setTimeout(r, 80));
+
+    // Real assertion: the confirm modal's message contains "permanently deleted" (from
+    // triggerDeleteConfirm's message template). This copy is unique to the rendered modal
+    // body and will NOT be satisfied by DOM pollution from prior describes.
+    expect(document.body.textContent).toMatch(/permanently deleted/);
   });
 
   it('pressing plain Backspace still navigates to parent in flat mode (existing behavior)', async () => {
@@ -177,6 +201,32 @@ describe('delete key', () => {
       // No throw — existing behavior preserved
       expect(true).toBe(true);
     }
+  });
+
+  it('delete-selected-tree-row event path routes to triggerDeleteConfirm (Cmd+Backspace fix)', async () => {
+    // This simulates the Tauri menu event that fires when the user presses Cmd+Backspace
+    // on macOS. The native menu handler in src-tauri/src/lib.rs emits this event;
+    // file-tree.tsx consumes it in its useEffect and routes the currently-selected entry
+    // to triggerDeleteConfirm. WKWebView's NSResponder doCommandBySelector: interception
+    // on the JS keydown path is bypassed entirely by this native-menu detour.
+    render(
+      <>
+        <FileTree />
+        <ConfirmModal />
+      </>
+    );
+    await new Promise(r => setTimeout(r, 50));
+
+    // The production listener should have been captured by the module-level vi.mock.
+    expect(capturedDeleteListener).not.toBeNull();
+
+    // Invoke it with the first row selected (default selectedIndex = 0 → 'src').
+    capturedDeleteListener!();
+    // Allow async count_children + modal render to settle.
+    await new Promise(r => setTimeout(r, 80));
+
+    // Same assertion as the Delete-key test: modal surfaces with "permanently deleted".
+    expect(document.body.textContent).toMatch(/permanently deleted/);
   });
 });
 
