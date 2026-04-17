@@ -821,9 +821,11 @@ function computeDynamicTabsForScope(scope: TerminalScope): UnifiedTab[] {
 function getOrderedTabsForScope(scope: TerminalScope): UnifiedTab[] {
   const dynamic = computeDynamicTabsForScope(scope);
   if (scope === 'main') return dynamic;
+  // Fix #3 (20-05-C): GSD FIRST, File Tree SECOND (overrides D-17 spec
+  // per UAT feedback — users expect the progress/plan view to lead).
   const sticky: UnifiedTab[] = [
-    { type: 'file-tree', id: 'file-tree' },
     { type: 'gsd',       id: 'gsd' },
+    { type: 'file-tree', id: 'file-tree' },
   ];
   return [...sticky, ...dynamic];
 }
@@ -857,6 +859,7 @@ const DRAG_THRESHOLD = 5; // px before drag starts
 interface ReorderState {
   sourceId: string | null;
   sourceEl: HTMLElement | null;
+  sourceScope: TerminalScope | null; // Fix #5 (20-05-E): cross-scope drag
   ghostEl: HTMLElement | null;
   startX: number;
   dragging: boolean;
@@ -865,12 +868,13 @@ interface ReorderState {
 const reorder: ReorderState = {
   sourceId: null,
   sourceEl: null,
+  sourceScope: null,
   ghostEl: null,
   startX: 0,
   dragging: false,
 };
 
-function onTabMouseDown(e: MouseEvent, tabId: string): void {
+function onTabMouseDown(e: MouseEvent, tabId: string, scope: TerminalScope): void {
   // Phase 20 Plan 02: sticky tabs are not draggable (D-03, Pitfall 7).
   if (tabId === 'file-tree' || tabId === 'gsd') return;
   // Only left button, ignore close button clicks
@@ -889,6 +893,7 @@ function onTabMouseDown(e: MouseEvent, tabId: string): void {
 
   reorder.sourceId = tabId;
   reorder.sourceEl = target;
+  reorder.sourceScope = scope; // Fix #5 (20-05-E)
   reorder.startX = e.clientX;
   reorder.dragging = false;
 
@@ -991,6 +996,26 @@ function onDocMouseUp(e: MouseEvent): void {
   }
 
   if (targetId && targetId !== reorder.sourceId) {
+    // ── Fix #5 (20-05-E): cross-scope drop detection ──────────────────────
+    const targetEl = Array.from(tabEls).find(el => el.dataset.tabId === targetId) ?? null;
+    const targetScope = (targetEl?.closest('[data-tablist-scope]') as HTMLElement | null)
+      ?.getAttribute('data-tablist-scope') as TerminalScope | null;
+    if (
+      reorder.sourceScope &&
+      targetScope &&
+      targetScope !== reorder.sourceScope
+    ) {
+      handleCrossScopeDrop(
+        reorder.sourceId,
+        reorder.sourceScope,
+        targetId,
+        targetScope,
+        insertAfter,
+      );
+      cleanupReorder();
+      return;
+    }
+    // ── Same-scope reorder (existing behavior) ───────────────────────────
     const ordered = getOrderedTabs();
     const allIds = ordered.map(t => t.id);
     const sourceIdx = allIds.indexOf(reorder.sourceId);
@@ -1011,6 +1036,82 @@ function onDocMouseUp(e: MouseEvent): void {
   cleanupReorder();
 }
 
+/**
+ * Fix #5 (20-05-E): move a tab across scopes.
+ *
+ * Scaffold: handles `main <-> right` for terminal/agent tabs (the most common
+ * UAT case) and the Git Changes move via the existing
+ * openOrMoveGitChangesToRight / openGitChangesTab helpers.
+ * Full xterm DOM container migration + cross-scope session persistence are
+ * TODO (tracked in 20-05-SUMMARY.md).
+ */
+export function handleCrossScopeDrop(
+  sourceId: string,
+  sourceScope: TerminalScope,
+  _targetId: string,
+  targetScope: TerminalScope,
+  _insertAfter: boolean,
+): void {
+  // Sticky tabs cannot cross scopes (rejected in onTabMouseDown already).
+  if (sourceId === 'file-tree' || sourceId === 'gsd') return;
+
+  // Git Changes — delegate to existing move helpers.
+  const gc = gitChangesTab.value;
+  if (gc && gc.id === sourceId) {
+    if (targetScope === 'right') {
+      openOrMoveGitChangesToRight();
+    } else if (targetScope === 'main') {
+      // Flip back to main (openGitChangesTab handles the flip symmetrically).
+      openGitChangesTab();
+    }
+    return;
+  }
+
+  // Editor tabs — right scope does not render editor tabs; skip (TODO).
+  if (sourceId.startsWith('editor-')) {
+    return;
+  }
+
+  // Terminal/Agent tabs — primary UAT path.
+  const sourceTabs = getTerminalScope(sourceScope).tabs.value;
+  const found = sourceTabs.find(t => t.id === sourceId);
+  if (!found) return;
+
+  const movedTab = { ...found, ownerScope: targetScope };
+  getTerminalScope(sourceScope).tabs.value = sourceTabs.filter(t => t.id !== sourceId);
+  getTerminalScope(targetScope).tabs.value = [
+    ...getTerminalScope(targetScope).tabs.value,
+    movedTab,
+  ];
+
+  // Move scoped tab order.
+  setScopedTabOrder(
+    sourceScope,
+    getScopedTabOrder(sourceScope).filter(id => id !== sourceId),
+  );
+  setScopedTabOrder(
+    targetScope,
+    [...getScopedTabOrder(targetScope), sourceId],
+  );
+
+  // Activate in target scope; fall back source active-tab if needed.
+  getTerminalScope(targetScope).activeTabId.value = sourceId;
+  if (getTerminalScope(sourceScope).activeTabId.value === sourceId) {
+    const remaining = getTerminalScope(sourceScope).tabs.value;
+    getTerminalScope(sourceScope).activeTabId.value = remaining[0]?.id ?? '';
+  }
+
+  // TODO (20-05-E): migrate xterm DOM container from source
+  // `.terminal-containers[data-scope=X]` wrapper to the target scope wrapper,
+  // and sync session persistence so the move survives an app restart.
+  console.info(
+    '[efxmux] cross-scope drag: moved tab',
+    sourceId,
+    'from', sourceScope, 'to', targetScope,
+    '— DOM container migration + session persistence still TODO',
+  );
+}
+
 function cleanupReorder(): void {
   if (reorder.sourceEl) {
     reorder.sourceEl.style.opacity = '';
@@ -1025,6 +1126,7 @@ function cleanupReorder(): void {
   });
   reorder.sourceId = null;
   reorder.sourceEl = null;
+  reorder.sourceScope = null; // Fix #5 (20-05-E)
   reorder.ghostEl = null;
   reorder.startX = 0;
   reorder.dragging = false;
@@ -1080,6 +1182,7 @@ export function UnifiedTabBar({ scope }: UnifiedTabBarProps) {
     <div
       class="flex shrink-0 items-center border-b"
       role="tablist"
+      data-tablist-scope={scope}
       style={{
         backgroundColor: colors.bgBase,
         borderColor: colors.bgBorder,
@@ -1226,7 +1329,11 @@ function renderTab(
         data-sticky-tab-id={tab.id}
         title={label}
         onClick={() => onClick(tab)}
-        class={`unified-tab sticky-tab ${isActive ? 'active' : ''}`}
+        // Fix #2 (20-05-B): block WKWebView text-selection initiated by a
+        // drag attempt on a sticky tab. preventDefault on mousedown stops
+        // the browser from starting a text-selection range.
+        onMouseDown={(e: MouseEvent) => { e.preventDefault(); }}
+        class={`unified-tab sticky-tab select-none ${isActive ? 'active' : ''}`}
         style={{
           padding: '8px 12px',
           fontSize: '11px',
@@ -1239,11 +1346,12 @@ function renderTab(
           gap: '4px',
           cursor: 'pointer',
           userSelect: 'none',
+          WebkitUserSelect: 'none',
           flexShrink: 0,
         }}
       >
-        <Icon size={14} style={{ color: iconColor, flexShrink: 0 }} />
-        <span>{label}</span>
+        <Icon size={14} style={{ color: iconColor, flexShrink: 0, pointerEvents: 'none' }} />
+        <span style={{ userSelect: 'none', WebkitUserSelect: 'none', pointerEvents: 'none' }}>{label}</span>
         {/* No close button — sticky tabs are uncloseable (D-03). */}
         {/* No onDblClick — sticky tabs cannot be renamed (D-03). */}
       </div>
@@ -1336,7 +1444,7 @@ function renderTab(
         }
       }}
       title={tabTitle}
-      onMouseDown={e => onTabMouseDown(e, tab.id)}
+      onMouseDown={e => onTabMouseDown(e, tab.id, scope)}
     >
       {indicator}
       {renamingTabId.value === tab.id ? (
@@ -1398,6 +1506,12 @@ function renderTab(
               clearTimeout(tabLabelClickTimer);
               tabLabelClickTimer = null;
               pendingTabLabelClick = null;
+              // Fix #4 (20-05-D): Git Changes cannot be renamed. Activating +
+              // closing must remain functional. Suppress the rename-input
+              // render path for git-changes; other branches are unchanged.
+              if (tab.type === 'git-changes') {
+                return;
+              }
               // Do NOT call onClick(tab) here -- tab is already active from first click.
               // Calling it would trigger switchToTab -> terminal.focus() which steals
               // focus from the rename input that's about to render.

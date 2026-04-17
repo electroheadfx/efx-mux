@@ -28,6 +28,8 @@ import {
   openGitChangesTab,
   openOrMoveGitChangesToRight,
   activeUnifiedTabId,
+  closeUnifiedTab,
+  handleCrossScopeDrop,
 } from './unified-tab-bar';
 import { terminalTabs, activeTabId, getTerminalScope } from './terminal-tabs';
 
@@ -188,6 +190,243 @@ describe('UnifiedTabBar scope prop (Phase 20, Plan 02)', () => {
       expect(gitChangesTab.value).not.toBeNull();
       expect(gitChangesTab.value?.owningScope).toBe('right');
       expect(gitChangesTab.value?.type).toBe('git-changes');
+    });
+  });
+
+  // ─── Fix #5: cross-scope drag (main -> right scaffold) ───────────────────
+
+  describe('Fix #5 cross-scope drag: main -> right terminal tab', () => {
+    it('moves a main-scope terminal tab to the right scope on drop', () => {
+      // Seed a main-scope terminal tab.
+      const main = getTerminalScope('main');
+      const right = getTerminalScope('right');
+      const mainTab = {
+        id: 'tab-main-xs-1',
+        sessionName: 'sess-xs-1',
+        label: 'Terminal 1',
+        terminal: null as any,
+        fitAddon: null as any,
+        container: null as any,
+        ptyConnected: false,
+        isAgent: false,
+        ownerScope: 'main' as const,
+      };
+      main.tabs.value = [mainTab as any];
+      main.activeTabId.value = mainTab.id;
+      right.tabs.value = [];
+      right.activeTabId.value = '';
+
+      handleCrossScopeDrop(mainTab.id, 'main', 'some-right-target', 'right', false);
+
+      // Signal movement
+      expect(main.tabs.value.find(t => t.id === mainTab.id)).toBeUndefined();
+      const moved = right.tabs.value.find(t => t.id === mainTab.id);
+      expect(moved).toBeDefined();
+      expect(moved!.ownerScope).toBe('right');
+
+      // Active tab falls back in source; target is activated.
+      expect(main.activeTabId.value).toBe('');
+      expect(right.activeTabId.value).toBe(mainTab.id);
+    });
+
+    it('tablist root carries data-tablist-scope attribute', () => {
+      const { container } = render(<UnifiedTabBar scope="right" />);
+      const tablist = container.querySelector('[role="tablist"]') as HTMLElement;
+      expect(tablist).not.toBeNull();
+      expect(tablist.getAttribute('data-tablist-scope')).toBe('right');
+    });
+
+    it('cross-scope drop on Git Changes delegates to openOrMoveGitChangesToRight', () => {
+      openGitChangesTab();
+      const gcId = gitChangesTab.value!.id;
+      expect(gitChangesTab.value?.owningScope).toBe('main');
+      handleCrossScopeDrop(gcId, 'main', 'some-right-target', 'right', false);
+      expect(gitChangesTab.value?.owningScope).toBe('right');
+    });
+
+    it('sticky tab drop is a no-op (sticky tabs cannot cross scopes)', () => {
+      const main = getTerminalScope('main');
+      const right = getTerminalScope('right');
+      const beforeMain = main.tabs.value.length;
+      const beforeRight = right.tabs.value.length;
+      handleCrossScopeDrop('file-tree', 'right', 'some-main-target', 'main', false);
+      handleCrossScopeDrop('gsd', 'right', 'some-main-target', 'main', false);
+      expect(main.tabs.value.length).toBe(beforeMain);
+      expect(right.tabs.value.length).toBe(beforeRight);
+    });
+  });
+
+  // ─── Fix #4: Git Changes tab — no rename, but activate + close OK ────────
+
+  describe('Fix #4 Git Changes tab is not renameable (but activate + close work)', () => {
+    it('double-click on Git Changes tab label does NOT enter rename mode', () => {
+      // Seed a Git Changes tab in main scope so it is rendered in the main bar.
+      openGitChangesTab();
+      expect(gitChangesTab.value?.owningScope).toBe('main');
+      const { container } = render(<UnifiedTabBar scope="main" />);
+      const gcEl = container.querySelector(`[data-tab-id="${gitChangesTab.value!.id}"]`) as HTMLElement;
+      expect(gcEl).not.toBeNull();
+      const labelSpan = gcEl.querySelector('span') as HTMLElement;
+      expect(labelSpan).not.toBeNull();
+      // Simulate a double-click: two click events on the label span.
+      fireEvent.click(labelSpan);
+      fireEvent.click(labelSpan);
+      // After the double-click, there must be NO <input> rendered in the
+      // Git Changes tab (rename mode suppressed for git-changes).
+      const input = gcEl.querySelector('input[type="text"]');
+      expect(input).toBeNull();
+    });
+
+    it('Git Changes tab remains activatable after rename attempt', () => {
+      openGitChangesTab();
+      const gcId = gitChangesTab.value!.id;
+      const { container } = render(<UnifiedTabBar scope="main" />);
+      const gcEl = container.querySelector(`[data-tab-id="${gcId}"]`) as HTMLElement;
+      expect(gcEl).not.toBeNull();
+      const labelSpan = gcEl.querySelector('span') as HTMLElement;
+      // Double-click attempt.
+      fireEvent.click(labelSpan);
+      fireEvent.click(labelSpan);
+      // Click the tab container to activate it.
+      activeUnifiedTabId.value = '';
+      fireEvent.click(gcEl);
+      expect(activeUnifiedTabId.value).toBe(gcId);
+    });
+
+    it('Git Changes tab remains closable after rename attempt', () => {
+      openGitChangesTab();
+      const gcId = gitChangesTab.value!.id;
+      expect(gitChangesTab.value).not.toBeNull();
+      const { container } = render(<UnifiedTabBar scope="main" />);
+      const gcEl = container.querySelector(`[data-tab-id="${gcId}"]`) as HTMLElement;
+      const labelSpan = gcEl.querySelector('span') as HTMLElement;
+      // Double-click attempt.
+      fireEvent.click(labelSpan);
+      fireEvent.click(labelSpan);
+      // Programmatically close the tab via the exported helper.
+      closeUnifiedTab(gcId);
+      expect(gitChangesTab.value).toBeNull();
+    });
+  });
+
+  // ─── Fix #3: GSD renders FIRST, File Tree SECOND (overrides D-17) ────────
+
+  describe('Fix #3 sticky tab order: GSD first, File Tree second', () => {
+    it('DOM order of sticky tabs is [GSD, File Tree]', () => {
+      const { container } = render(<UnifiedTabBar scope="right" />);
+      const stickies = Array.from(
+        container.querySelectorAll('[data-sticky-tab-id]'),
+      ) as HTMLElement[];
+      expect(stickies.length).toBe(2);
+      expect(stickies[0].getAttribute('data-sticky-tab-id')).toBe('gsd');
+      expect(stickies[1].getAttribute('data-sticky-tab-id')).toBe('file-tree');
+    });
+
+    it('GSD label appears before File Tree label in document order', () => {
+      render(<UnifiedTabBar scope="right" />);
+      const gsdText = screen.getByText('GSD');
+      const fileTreeText = screen.getByText('File Tree');
+      // Node.compareDocumentPosition: if GSD precedes File Tree, result has
+      // DOCUMENT_POSITION_FOLLOWING (4) bit set from GSD's perspective.
+      const pos = gsdText.compareDocumentPosition(fileTreeText);
+      expect(pos & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+  });
+
+  // ─── Fix #2: sticky tab text selection blocked during drag attempt ──────
+
+  describe('Fix #2 sticky tabs block text selection on drag attempt', () => {
+    it('sticky File Tree tab has userSelect:none and WebkitUserSelect:none', () => {
+      const { container } = render(<UnifiedTabBar scope="right" />);
+      const el = container.querySelector('[data-sticky-tab-id="file-tree"]') as HTMLElement;
+      expect(el).not.toBeNull();
+      // Inline style set by the renderer
+      expect(el.style.userSelect).toBe('none');
+      expect(el.style.webkitUserSelect).toBe('none');
+    });
+
+    it('sticky GSD tab has userSelect:none and WebkitUserSelect:none', () => {
+      const { container } = render(<UnifiedTabBar scope="right" />);
+      const el = container.querySelector('[data-sticky-tab-id="gsd"]') as HTMLElement;
+      expect(el).not.toBeNull();
+      expect(el.style.userSelect).toBe('none');
+      expect(el.style.webkitUserSelect).toBe('none');
+    });
+
+    it('mousedown on sticky tab calls preventDefault (blocks text-select drag)', () => {
+      const { container } = render(<UnifiedTabBar scope="right" />);
+      const el = container.querySelector('[data-sticky-tab-id="file-tree"]') as HTMLElement;
+      expect(el).not.toBeNull();
+      const ev = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      const defaultPrevented = !el.dispatchEvent(ev);
+      // dispatchEvent returns false when preventDefault was called
+      expect(defaultPrevented || ev.defaultPrevented).toBe(true);
+    });
+  });
+
+  // ─── Fix #1: dropdown flip when near viewport right edge ──────────────────
+
+  describe('Fix #1 plus-menu dropdown flips when near viewport right edge', () => {
+    // The Dropdown component uses getBoundingClientRect() on the trigger
+    // WRAPPER (the outer div that Dropdown renders around the user trigger).
+    // We patch Element.prototype.getBoundingClientRect so EVERY call during
+    // the open sequence returns our simulated rect.
+    function mockBCR(rect: Partial<DOMRect>) {
+      const originalProto = Element.prototype.getBoundingClientRect;
+      Element.prototype.getBoundingClientRect = function () {
+        return {
+          left: 0, right: 0, top: 0, bottom: 0,
+          width: 0, height: 0, x: 0, y: 0,
+          toJSON: () => ({}),
+          ...rect,
+        } as DOMRect;
+      };
+      return () => { Element.prototype.getBoundingClientRect = originalProto; };
+    }
+
+    it('flips menu left when trigger is close to the viewport right edge', () => {
+      render(<UnifiedTabBar scope="right" />);
+      // Simulate every element rect: left=innerWidth-20, right=innerWidth-4.
+      // This forces handleToggle to flip since left + 160 > innerWidth.
+      const restore = mockBCR({
+        left: window.innerWidth - 20,
+        right: window.innerWidth - 4,
+        top: 10,
+        bottom: 26,
+        width: 16,
+        height: 16,
+      });
+      const plusBtn = screen.getByLabelText('Add new tab');
+      fireEvent.click(plusBtn);
+      const menu = document.querySelector('[role="menu"]') as HTMLElement | null;
+      expect(menu).not.toBeNull();
+      const leftPx = parseFloat(menu!.style.left || '0');
+      const MENU_MIN_WIDTH = 160;
+      // After flip, menu.left + 160 should fit inside the viewport.
+      expect(leftPx + MENU_MIN_WIDTH).toBeLessThanOrEqual(window.innerWidth);
+      // And it should differ from the un-flipped rect.left (innerWidth-20).
+      expect(leftPx).toBeLessThan(window.innerWidth - 20);
+      restore();
+    });
+
+    it('left-aligns menu normally when there is ample horizontal room', () => {
+      render(<UnifiedTabBar scope="right" />);
+      const restore = mockBCR({
+        left: 50,
+        right: 66,
+        top: 10,
+        bottom: 26,
+        width: 16,
+        height: 16,
+      });
+      const plusBtn = screen.getByLabelText('Add new tab');
+      fireEvent.click(plusBtn);
+      const menu = document.querySelector('[role="menu"]') as HTMLElement | null;
+      expect(menu).not.toBeNull();
+      // No flip expected: menu left should equal rect.left (50).
+      const leftPx = parseFloat(menu!.style.left || '0');
+      expect(leftPx).toBe(50);
+      restore();
     });
   });
 
