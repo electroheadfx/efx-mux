@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 Phase: 19
 Plan: Not started
 Status: Ready to execute
-Last activity: 2026-04-17 - Completed quick task 260417-iat: Add keyboard shortcut to delete folder in file tree
+Last activity: 2026-04-17 - Completed quick task 260417-je3: Add HMR-wipe guard to save_state
 
 **Code review fixes pending (non-blocking):**
 
@@ -110,6 +110,7 @@ None.
 | 260417-hgw | Auto-open new file in tab + expand parent folder on create | 2026-04-17 |
 | 260417-i0z | Save only active tab's file on Cmd+S (not all open editor tabs) | 2026-04-17 |
 | 260417-iat | Add keyboard shortcut to delete folder in file tree | 2026-04-17 |
+| 260417-je3 | Add HMR-wipe guard to save_state Tauri command (refuse overwriting non-empty projects with empty list) | 2026-04-17 |
 
 ## Session Continuity
 
