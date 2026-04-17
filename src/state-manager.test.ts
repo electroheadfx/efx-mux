@@ -3,8 +3,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { mockIPC } from '@tauri-apps/api/mocks';
 import {
-  projects, activeProjectName, sidebarCollapsed, rightTopTab, rightBottomTab,
-  loadAppState, saveAppState, getCurrentState,
+  projects, activeProjectName, sidebarCollapsed, rightTopTab,
+  loadAppState, saveAppState, getCurrentState, updateSession,
   addProject, updateProject, removeProject, switchProject,
 } from './state-manager';
 import type { AppState } from './state-manager';
@@ -41,7 +41,6 @@ describe('state-manager', () => {
     activeProjectName.value = null;
     sidebarCollapsed.value = false;
     rightTopTab.value = 'File Tree';
-    rightBottomTab.value = 'Bash';
 
     // Reset module-level currentState by forcing a load_state error,
     // which causes loadAppState() to set currentState to defaults
