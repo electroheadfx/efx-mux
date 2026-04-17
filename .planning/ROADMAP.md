@@ -111,13 +111,20 @@ Plans:
   4. User can drag/drop files and folders to reorder within tree
   5. User can drag files from Finder into tree to import
   6. User can create new file from folder context in file tree
-**Plans**: 5 plans
+**Plans**: 8 plans + 4 gap-closure plans
 Plans:
   - [x] 18-01-PLAN.md -- Rust file ops + external editor + file-service wrappers (Wave 1)
   - [x] 18-02-PLAN.md -- ContextMenu submenu extension + tauri.conf dragDropEnabled (Wave 1)
   - [x] 18-03-PLAN.md -- File tree context menu, Delete flow, InlineCreateRow (Wave 2)
   - [x] 18-04-PLAN.md -- Open In submenu + header [+] and Open In buttons (Wave 3)
   - [x] 18-05-PLAN.md -- Intra-tree drag + Finder drop import (Wave 4)
+  - [x] 18-06-PLAN.md -- UAT gap closure: create_file existence guard + revert_file branching + handleRevertAll resilience
+  - [x] 18-07-PLAN.md -- UAT gap closure: macOS title-bar y-offset + x-axis hit-test bounds
+  - [x] 18-08-PLAN.md -- UAT gap closure: refreshTreePreservingState (expand/collapse persistence)
+  - [x] 18-09-PLAN.md -- UAT gap closure: Cmd+Backspace via native menu (WKWebView NSResponder bypass)
+  - [ ] 18-10-PLAN.md -- Human UAT gap G-01 primary: revert emits git-status-changed so file-tree refreshes (Wave 1)
+  - [ ] 18-11-PLAN.md -- Human UAT gap G-01 secondary: editor-tab auto-close on file deletion (Wave 2)
+  - [ ] 18-12-PLAN.md -- Human UAT gap G-02: per-row drop-target highlight during Finder drag (Wave 1)
 **UI hint**: yes
 
 ### Phase 19: GSD Sub-Tabs
