@@ -44,6 +44,21 @@ pub fn run() {
             // ── Edit menu — wires Cmd+C/V/X/A to WKWebView clipboard (per D-16) ──
             // PredefinedMenuItem maps to OS-level accelerators; WKWebView inherits.
             // @tauri-apps/plugin-clipboard-manager NOT needed for Cmd+C/V.
+            //
+            // Phase 18 Plan 09 (UAT Test 5 fix): register a MenuItem bound to Cmd+Backspace
+            // so WKWebView does NOT swallow the keystroke via NSResponder doCommandBySelector:.
+            // The handler emits a 'delete-selected-tree-row' event that file-tree.tsx consumes.
+            // Item is visually present (macOS requires menu items to be visible for accelerators
+            // to fire), but its effect is scoped — it only fires when the file tree has a
+            // selected row (handled in the JS listener).
+            let delete_selection_item = MenuItem::with_id(
+                app,
+                "delete-selection",
+                "Delete Selection",
+                true,
+                Some("CmdOrCtrl+Backspace"),
+            )?;
+
             let edit_menu = SubmenuBuilder::new(app, "Edit")
                 .item(&PredefinedMenuItem::undo(app, None)?)
                 .item(&PredefinedMenuItem::redo(app, None)?)
@@ -53,6 +68,8 @@ pub fn run() {
                 .item(&PredefinedMenuItem::paste(app, None)?)
                 .separator()
                 .item(&PredefinedMenuItem::select_all(app, None)?)
+                .separator()
+                .item(&delete_selection_item)
                 .build()?;
 
             // ── Window menu ───────────────────────────────────────────────────────
@@ -195,6 +212,9 @@ pub fn run() {
                 "quit" => { let _ = app.emit("quit-requested", ()); }
                 "add-project" => { let _ = app.emit("add-project-requested", ()); }
                 "preferences" => { let _ = app.emit("preferences-requested", ()); }
+                // Phase 18 Plan 09 (UAT Test 5 fix): Cmd+Backspace → file-tree delete flow.
+                // file-tree.tsx listens for this event and routes to triggerDeleteConfirm.
+                "delete-selection" => { let _ = app.emit("delete-selected-tree-row", ()); }
                 _ => {}
             }
         })
