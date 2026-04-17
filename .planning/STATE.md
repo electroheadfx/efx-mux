@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: Workspace Evolution
 status: executing
-stopped_at: Phase 19 UI-SPEC approved
-last_updated: "2026-04-17T15:05:08.710Z"
-last_activity: 2026-04-17 -- Phase 19 execution started
+stopped_at: Completed 19-01-PLAN.md
+last_updated: "2026-04-17T15:15:55.690Z"
+last_activity: 2026-04-17
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 27
-  completed_plans: 23
-  percent: 85
+  completed_plans: 24
+  percent: 89
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 ## Current Position
 
 Phase: 19 (gsd-sub-tabs) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 19
-Last activity: 2026-04-17 -- Phase 19 execution started
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-04-17
 
 **Code review fixes pending (non-blocking):**
 
@@ -60,6 +60,7 @@ Progress: [██████████] 100% (Phase 17)
 - v0.2.0: Sync inner functions for Rust testability of async Tauri commands
 - v0.1.0: Arrow.js -> Preact migration (Phase 6.1)
 - v0.1.0: tmux session backend for persistence
+- [Phase 19]: Phase 19 Plan 01: Added gsd_sub_tab to Rust PanelsState (not LayoutState.extra) for semantic correctness; parser stubs return typed empties with parseError='Not yet implemented' to give Plan 02 a deterministic RED state
 
 ### Pending Todos
 
@@ -111,11 +112,12 @@ None.
 | 260417-i0z | Save only active tab's file on Cmd+S (not all open editor tabs) | 2026-04-17 |
 | 260417-iat | Add keyboard shortcut to delete folder in file tree | 2026-04-17 |
 | 260417-je3 | Add HMR-wipe guard to save_state Tauri command (refuse overwriting non-empty projects with empty list) | 2026-04-17 |
+| Phase 19 P01 | 8min | 3 tasks | 10 files |
 
 ## Session Continuity
 
-Last session: 2026-04-17T12:40:32.215Z
-Stopped at: Phase 19 UI-SPEC approved
-Resume file: .planning/phases/19-gsd-sub-tabs/19-UI-SPEC.md
+Last session: 2026-04-17T15:15:55.686Z
+Stopped at: Completed 19-01-PLAN.md
+Resume file: None
 
 Next: `/gsd-execute-phase 15` or `/gsd-code-review-fix 17` to fix remaining warnings

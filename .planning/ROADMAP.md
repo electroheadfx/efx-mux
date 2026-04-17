@@ -139,7 +139,7 @@ Plans:
   5. User can view State sub-tab (current position + decisions) from STATE.md
 **Plans**: 4 plans
 Plans:
-  - [ ] 19-01-PLAN.md -- Wave 0 foundation: install unified/remark deps, extend PanelsState + gsdSubTab signal, vitest ESM config, failing parser + pane test scaffolds
+  - [x] 19-01-PLAN.md -- Wave 0 foundation: install unified/remark deps, extend PanelsState + gsdSubTab signal, vitest ESM config, failing parser + pane test scaffolds
   - [ ] 19-02-PLAN.md -- Wave 1: implement all 5 parse functions (parseMilestones/parsePhases/parseProgress/parseHistory/parseState) with unified/remark, turn Plan 01 tests green
   - [ ] 19-03-PLAN.md -- Wave 2: build StatusBadge + 5 sub-tab components (Milestones/Phases/Progress/History/State), token-only, prop-driven
   - [ ] 19-04-PLAN.md -- Wave 3: GSDPane container with md-file-changed path filtering, swap right-panel.tsx, delete gsd-viewer.tsx, human UAT checkpoint
@@ -193,7 +193,7 @@ Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21
 | 16. Sidebar Evolution + Git Control | v0.3.0 | 4/4 | Complete   | 2026-04-15 |
 | 17. Main Panel File Tabs | v0.3.0 | 5/5 | Complete   | 2026-04-15 |
 | 18. File Tree Enhancements | v0.3.0 | 12/12 | Complete    | 2026-04-17 |
-| 19. GSD Sub-Tabs | v0.3.0 | 0/? | Not started | - |
+| 19. GSD Sub-Tabs | v0.3.0 | 1/4 | In Progress|  |
 | 20. Right Panel Multi-Terminal | v0.3.0 | 0/? | Not started | - |
 | 21. Bug Fix Sprint | v0.3.0 | 0/? | Not started | - |
 
