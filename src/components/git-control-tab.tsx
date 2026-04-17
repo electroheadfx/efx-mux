@@ -9,7 +9,7 @@
 import { useEffect } from 'preact/hooks';
 import { signal, computed } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
+import { listen, emit } from '@tauri-apps/api/event';
 import { ChevronDown, ChevronRight, Loader, X, GitBranch, Maximize2, Pencil, ArrowUp, Undo2 } from 'lucide-preact';
 import { colors, fonts, fontSizes, spacing, radii } from '../tokens';
 import { projects, activeProjectName } from '../state-manager';
@@ -216,6 +216,11 @@ async function handleRevertFile(file: GitFile): Promise<void> {
   if (!project) return;
   try {
     await revertFile(project.path, file.path);
+    // Plan 18-10 (Gap G-01 fix): belt-and-braces emit from the frontend too.
+    // The Rust revert_file already emits when it mutates (Task 1), but emitting
+    // here ensures file-tree refresh even if a future refactor of the Rust path
+    // drops the emit. Idempotent — file-tree listener debounces via refreshTreePreservingState.
+    await emit('git-status-changed');
     await refreshGitFiles();
   } catch (err) {
     const errMsg = err instanceof GitError ? err.details || err.code : String(err);
@@ -244,6 +249,10 @@ async function handleRevertAll(): Promise<void> {
         failures.push(file.name);
       }
     }
+    // Plan 18-10 (Gap G-01 fix): emit git-status-changed so the file-tree refreshes
+    // after the batch — the Rust revert_file also emits per-file in Task 1, so this
+    // is a redundant final emit guaranteeing at least one refresh after the batch.
+    await emit('git-status-changed');
     await refreshGitFiles();
     if (failures.length > 0) {
       const totalAttempted = successCount + failures.length;
