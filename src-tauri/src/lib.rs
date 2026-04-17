@@ -12,7 +12,7 @@ mod theme;
 use std::collections::HashMap;
 use tauri::{Emitter, Manager};
 use tauri::menu::{MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder};
-use terminal::pty::{ack_bytes, check_tmux, cleanup_dead_sessions, destroy_pty_session, get_agent_version, get_pty_sessions, resize_pty, send_literal_sequence, spawn_terminal, write_pty, PtyManager};
+use terminal::pty::{ack_bytes, check_tmux, cleanup_dead_sessions, destroy_pty_session, get_agent_version, get_pty_sessions, kill_legacy_right_sessions, resize_pty, send_literal_sequence, spawn_terminal, write_pty, PtyManager};
 use theme::iterm2::import_iterm2_theme;
 use server::{detect_agent, kill_all_servers, restart_server, start_server, stop_server, ServerProcesses};
 use state::{get_config_dir, load_state, save_state, ManagedAppState};
@@ -133,6 +133,7 @@ pub fn run() {
             get_pty_sessions,
             destroy_pty_session,
             cleanup_dead_sessions,
+            kill_legacy_right_sessions, // Phase 20 D-19 migration
 
             // Theme
             load_theme,
