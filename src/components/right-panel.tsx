@@ -5,7 +5,7 @@
 
 import { useEffect, useRef } from 'preact/hooks';
 import { invoke } from '@tauri-apps/api/core';
-import { rightTopTab, rightBottomTab, loadAppState, activeProjectName, projects } from '../state-manager';
+import { rightTopTab, rightBottomTab, loadAppState, saveAppState, getCurrentState, activeProjectName, projects } from '../state-manager';
 import { getTheme, registerTerminal } from '../theme/theme-manager';
 import { colors } from '../tokens';
 import { TabBar } from './tab-bar';
@@ -104,7 +104,17 @@ export function RightPanel() {
         <TabBar
           tabs={RIGHT_TOP_TABS}
           activeTab={rightTopTab}
-          onSwitch={(tab) => { rightTopTab.value = tab; }}
+          onSwitch={(tab) => {
+            rightTopTab.value = tab;
+            const state = getCurrentState();
+            if (state) {
+              state.panels = state.panels ?? {};
+              state.panels['right-top-tab'] = tab;
+              saveAppState(state).catch(err =>
+                console.warn('[efxmux] persist right-top-tab failed:', err)
+              );
+            }
+          }}
         />
         <div class="right-top-content flex-1 min-h-0 overflow-hidden relative p-1">
           <div style={{ height: '100%', display: rightTopTab.value === 'GSD' ? 'block' : 'none' }}>

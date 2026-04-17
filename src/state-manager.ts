@@ -81,7 +81,7 @@ export async function loadAppState(): Promise<AppState> {
 
   // Set signals from loaded state
   sidebarCollapsed.value = currentState?.layout?.['sidebar-collapsed'] === true || currentState?.layout?.['sidebar-collapsed'] === 'true';
-  if (currentState?.panels?.['right-top-tab'] && currentState.panels['right-top-tab'] !== 'gsd') rightTopTab.value = currentState.panels['right-top-tab'];
+  if (currentState?.panels?.['right-top-tab']) rightTopTab.value = currentState.panels['right-top-tab'];
   if (currentState?.panels?.['right-bottom-tab']) rightBottomTab.value = currentState.panels['right-bottom-tab'];
   if (currentState?.panels?.['gsd-sub-tab']) gsdSubTab.value = currentState.panels['gsd-sub-tab'];
 
