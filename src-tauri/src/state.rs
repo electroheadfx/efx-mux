@@ -294,6 +294,38 @@ pub fn load_state_sync() -> AppState {
     AppState::default()
 }
 
+/// Returns true if writing `incoming` would wipe a non-empty on-disk project list.
+/// Used by `save_state` (the JS-facing Tauri command) to defend against the
+/// HMR-on-checkout state.json wipe scenario: Vite remounts Preact with an empty
+/// in-memory state, which propagates through beforeunload/save-on-mount and would
+/// otherwise atomically replace the user's real project registry.
+///
+/// Internal Rust callers (add_project, remove_project, switch_project,
+/// update_project) call `save_state_sync` directly with already-mutated state
+/// and bypass this guard -- exactly what we want for legitimate "user removed
+/// last project" flows.
+pub fn would_wipe_projects(incoming: &AppState) -> bool {
+    if !incoming.project.projects.is_empty() {
+        return false;
+    }
+    // Incoming has no projects; check if disk has any.
+    let disk = load_state_sync();
+    !disk.project.projects.is_empty()
+}
+
+/// Save with the HMR-wipe guard. If the guard trips, returns Ok(()) silently
+/// (no error to the frontend) but logs a warning to stderr.
+pub fn guarded_save(state: &AppState) -> Result<(), String> {
+    if would_wipe_projects(state) {
+        eprintln!(
+            "[efxmux] WARNING: refused to overwrite non-empty project list with empty state \
+             (likely Vite HMR remount or blank state replacement). state.json left untouched."
+        );
+        return Ok(());
+    }
+    save_state_sync(state)
+}
+
 /// Save state to state.json. Called from spawn_blocking thread (per D-11, D-12)
 pub fn save_state_sync(state: &AppState) -> Result<(), String> {
     // Create config dir if missing (don't rely on ensure_config_dir which swallows errors)
@@ -340,8 +372,10 @@ pub async fn save_state(
         });
         *guard = state.clone();
     }
-    // Use spawn_blocking for file I/O (per D-11, D-12)
-    tauri::async_runtime::spawn_blocking(move || save_state_sync(&state))
+    // Use spawn_blocking for file I/O (per D-11, D-12).
+    // Route through guarded_save to defend against the HMR-wipe scenario
+    // (Vite remount sending empty projects via beforeunload/save-on-mount).
+    tauri::async_runtime::spawn_blocking(move || guarded_save(&state))
         .await
         .map_err(|e| e.to_string())?
 }
