@@ -142,17 +142,37 @@ persistence are TODO (see below).
   - Editor tabs -> no-op (right scope does not render editor tabs; a future
     plan can extend this).
 
-**TODO (tracked for follow-up):**
+**Follow-up completed by 20-05-D:**
+
+- Editor tabs: `EditorTabData.ownerScope: TerminalScope` added; default
+  'main' (legacy tabs without the field also treated as 'main').
+  `computeDynamicTabsForScope` now filters editors by scope, so
+  right-panel renders its own editor tabs and main excludes right-owned
+  editors.
+- Cross-scope drop for editors: `handleCrossScopeDrop` flips
+  `ownerScope`, moves the id between scoped orders, activates via the
+  correct scope signal, and falls source active-tab back when needed.
+- Right-panel editor mount: `RightPanel` mounts `<EditorTab>` for each
+  right-owned editor. CodeMirror `registerEditorView` keys on tab id, so
+  the save + dirty pipeline works identically for right-scope editors.
+- Persistence: `persistEditorTabs` writes `ownerScope` for every editor
+  tab; `restoreEditorTabs` reads it back and rewires scoped orders so
+  cross-scope placement survives restart.
+- `handleTabClick` routes editor activation to the owning scope's signal
+  (right editors set `getTerminalScope('right').activeTabId` instead of
+  `activeUnifiedTabId`, preventing `MainPanel` from also rendering them).
+
+**Remaining follow-up (not addressed by 20-05-D):**
+
 - Migrate the xterm.js DOM container from the source
-  `.terminal-containers[data-scope=X]` wrapper to the target wrapper. xterm
-  survives element reparenting but needs a `fit()` + `resize` signal after
-  the move to re-measure cols/rows against the new container.
-- Sync `saveProjectTabsScoped` / `restoreProjectTabsScoped` so the move
-  survives app restart (right-scope persistence key is
+  `.terminal-containers[data-scope=X]` wrapper to the target wrapper on
+  cross-scope TERMINAL tab drag. xterm survives element reparenting but
+  needs a `fit()` + `resize` signal after the move to re-measure
+  cols/rows against the new container.
+- Sync `saveProjectTabsScoped` / `restoreProjectTabsScoped` so terminal
+  cross-scope moves survive restart (right-scope persistence key is
   `right-terminal-tabs:<project>`; main's is `terminal-tabs:<project>`).
-  Both keys need writing on every cross-scope move.
-- Bidirectional beyond Git Changes + terminal: editor tabs would need a
-  right-scope render branch in `computeDynamicTabsForScope`.
+  Both keys need writing on every cross-scope terminal move.
 
 Tests (`unified-tab-bar.test.tsx` -> `Fix #5 cross-scope drag`):
 - `handleCrossScopeDrop` moves a main terminal tab to right (signal, order,
