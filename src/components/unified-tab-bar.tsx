@@ -498,6 +498,69 @@ activeUnifiedTabId.subscribe(() => {
   if (!_suppressPersist) persistEditorTabs();
 });
 
+// ── Git Changes persistence (Fix #3, Plan 20-05-E) ───────────────────────────
+//
+// Prior to this fix, `gitChangesTab` was ephemeral — a user who moved Git
+// Changes into the right panel would find it gone after a quit/restart. We
+// now round-trip the tab's id + owningScope through state.json under a
+// per-project key (`git-changes-tab:<project>`), and restore it on bootstrap.
+
+const GIT_CHANGES_KEY_PREFIX = 'git-changes-tab:';
+
+/** Serialize gitChangesTab into state.json under a per-project session key. */
+function persistGitChangesTab(): void {
+  const activeName = activeProjectName.value;
+  if (!activeName) return;
+  const key = `${GIT_CHANGES_KEY_PREFIX}${activeName}`;
+  const current = gitChangesTab.value;
+  if (!current) {
+    // Tab was closed — write empty marker so next restore knows it's gone.
+    updateSession({ [key]: '' });
+    return;
+  }
+  updateSession({
+    [key]: JSON.stringify({
+      id: current.id,
+      owningScope: current.owningScope,
+    }),
+  });
+}
+
+/**
+ * Restore gitChangesTab from persisted state for a given project.
+ * Must be called during the app's post-load bootstrap (after loadAppState
+ * has populated getCurrentState). Safe to call when no prior state exists.
+ */
+export function restoreGitChangesTab(projectName: string): void {
+  const state = getCurrentState();
+  const raw = state?.session?.[`${GIT_CHANGES_KEY_PREFIX}${projectName}`];
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw) as { id?: string; owningScope?: TerminalScope };
+    if (!parsed?.id || !parsed?.owningScope) return;
+    const restored: GitChangesTabData = {
+      type: 'git-changes',
+      id: parsed.id,
+      owningScope: parsed.owningScope,
+    };
+    gitChangesTab.value = restored;
+    // Route into the correct scoped tab order so the tab bar renders it.
+    if (parsed.owningScope === 'right') {
+      appendToRightTabOrder(restored.id);
+    } else {
+      setScopedTabOrder('main', [...getScopedTabOrder('main'), restored.id]);
+      setProjectTabOrder([...tabOrder.value, restored.id]);
+    }
+  } catch {
+    // Corrupt persisted payload — ignore silently.
+  }
+}
+
+// Watch gitChangesTab for changes and persist. Subscription fires on open,
+// close, and scope-flip (all branches of openGitChangesTab /
+// openOrMoveGitChangesToRight / closeUnifiedTab).
+gitChangesTab.subscribe(() => { persistGitChangesTab(); });
+
 /**
  * Open the Git Changes tab (main scope), or focus it if already open.
  * Pitfall 3: gitChangesTab carries `owningScope` so only the owning panel renders it.
@@ -633,6 +696,22 @@ export function closeUnifiedTab(tabId: string): void {
       setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
     }
     scopeHandle.closeTab(tabId);
+    return;
+  }
+
+  // Fix #3 (20-05-E): right-owned Git Changes is excluded from `allTabs`
+  // (main view), so the normal `tab` lookup misses it. Handle it here so
+  // the × button still closes the tab and clears persistence.
+  const gc = gitChangesTab.value;
+  if (gc && gc.id === tabId && gc.owningScope === 'right') {
+    // Fall right-scope active back to 'file-tree' if it was pointing here.
+    const right = getTerminalScope('right');
+    if (right.activeTabId.value === tabId) {
+      right.activeTabId.value = 'file-tree';
+    }
+    gitChangesTab.value = null;
+    // Clean the right-scope tab order too.
+    setScopedTabOrder('right', getScopedTabOrder('right').filter(id => id !== tabId));
     return;
   }
 

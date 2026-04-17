@@ -280,5 +280,16 @@ describe('state-manager', () => {
       expect(state.session['terminal-tabs:foo']).toBe(mainPayload);
       expect(state.session['right-terminal-tabs:foo']).toBe(rightPayload);
     });
+
+    // Fix #3 (20-05-E): gitChangesTab persistence round-trip.
+    it('git-changes-tab:<project> session key round-trips id + owningScope', async () => {
+      const payload = JSON.stringify({ id: 'git-changes-42', owningScope: 'right' });
+      await updateSession({ 'git-changes-tab:myproj': payload });
+      const state = getCurrentState()!;
+      expect(state.session['git-changes-tab:myproj']).toBe(payload);
+      const parsed = JSON.parse(state.session['git-changes-tab:myproj']);
+      expect(parsed.id).toBe('git-changes-42');
+      expect(parsed.owningScope).toBe('right');
+    });
   });
 });

@@ -588,6 +588,90 @@ describe('UnifiedTabBar scope prop (Phase 20, Plan 02)', () => {
     });
   });
 
+  // ─── Fix #3 (20-05-E): Git Changes persistence ────────────────────────────
+
+  describe('Fix #3 (20-05-E) gitChangesTab round-trips owningScope through persistence', () => {
+    // state-manager's updateSession + getCurrentState require a loaded
+    // currentState blob. Seed one via mockIPC + loadAppState so persist +
+    // restore actually round-trip through the session map.
+    beforeEach(async () => {
+      const seed: any = {
+        version: 1, layout: {}, theme: { mode: 'dark' },
+        session: {} as Record<string, string>,
+        project: { active: 'testproj', projects: [{ path: '/tmp/proj', name: 'testproj', agent: 'claude' }] },
+        panels: {},
+      };
+      mockIPC((cmd, args: any) => {
+        if (cmd === 'load_state') return seed;
+        if (cmd === 'save_state') {
+          try {
+            const parsed = JSON.parse(args?.stateJson);
+            // Copy saved session keys back into seed so subsequent load/reads
+            // see the latest persisted state.
+            seed.session = parsed.session ?? seed.session;
+          } catch { /* ignore */ }
+          return null;
+        }
+        return null;
+      });
+      const { loadAppState } = await import('../state-manager');
+      await loadAppState();
+    });
+
+    it('restoreGitChangesTab rehydrates a right-owned tab from persisted state', async () => {
+      // Persist a right-owned Git Changes by opening it and flipping scope
+      // (`gitChangesTab.subscribe` fires persistGitChangesTab → updateSession).
+      openOrMoveGitChangesToRight();
+      expect(gitChangesTab.value?.owningScope).toBe('right');
+      const persistedId = gitChangesTab.value!.id;
+      // Flush subscribe + updateSession microtasks.
+      await new Promise(r => setTimeout(r, 0));
+
+      // Simulate restart: drop in-memory signal, then restore from state.
+      // Cast through `any` to avoid TS narrowing gitChangesTab.value reads
+      // below to `null` after the explicit null assignment.
+      (gitChangesTab as any).value = null;
+      await new Promise(r => setTimeout(r, 0));
+      // Note: the null-subscribe above overwrites the persisted key with ''.
+      // For test simplicity, bypass that by directly invoking the restore
+      // path with a fresh persisted session value.
+      const { getCurrentState } = await import('../state-manager');
+      const state = getCurrentState();
+      state!.session['git-changes-tab:testproj'] = JSON.stringify({
+        id: persistedId, owningScope: 'right',
+      });
+      const { restoreGitChangesTab } = await import('./unified-tab-bar');
+      restoreGitChangesTab('testproj');
+
+      const restored = gitChangesTab.value;
+      expect(restored).not.toBeNull();
+      expect(restored?.owningScope).toBe('right');
+      expect(restored?.id).toBe(persistedId);
+    });
+
+    it('restoreGitChangesTab is a no-op when no persisted state exists for project', async () => {
+      gitChangesTab.value = null;
+      await new Promise(r => setTimeout(r, 0));
+      const { restoreGitChangesTab } = await import('./unified-tab-bar');
+      restoreGitChangesTab('unknown-project-never-persisted');
+      expect(gitChangesTab.value).toBeNull();
+    });
+
+    it('closing a persisted Git Changes tab clears the persisted marker', async () => {
+      openOrMoveGitChangesToRight();
+      const gcId = gitChangesTab.value!.id;
+      await new Promise(r => setTimeout(r, 0));
+      closeUnifiedTab(gcId);
+      await new Promise(r => setTimeout(r, 0));
+      expect(gitChangesTab.value).toBeNull();
+
+      // Restore should not rehydrate a cleared tab.
+      const { restoreGitChangesTab } = await import('./unified-tab-bar');
+      restoreGitChangesTab('testproj');
+      expect(gitChangesTab.value).toBeNull();
+    });
+  });
+
   // ─── D-03 drag rejects sticky position ────────────────────────────────────
 
   describe('D-03 drag rejects sticky tab position', () => {

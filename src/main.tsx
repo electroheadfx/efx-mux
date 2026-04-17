@@ -32,7 +32,7 @@ import {
   getProjects, getActiveProject, projects, activeProjectName
 } from './state-manager';
 import { openProjectModal } from './components/project-modal';
-import { openEditorTab, openEditorTabPinned, restoreEditorTabs, activeUnifiedTabId, closeUnifiedTab, suppressEditorPersist, persistEditorTabs, gitChangesTab } from './components/unified-tab-bar';
+import { openEditorTab, openEditorTabPinned, restoreEditorTabs, activeUnifiedTabId, closeUnifiedTab, suppressEditorPersist, persistEditorTabs, gitChangesTab, restoreGitChangesTab } from './components/unified-tab-bar';
 import { triggerEditorSave } from './editor/setup';
 import { serverPaneState, saveCurrentProjectState, restoreProjectState } from './components/server-pane';
 import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from './components/file-tree';
@@ -473,6 +473,12 @@ async function bootstrap() {
     // main.tsx serializes both restores (await chain) so the race that Pitfall 4
     // guards against (concurrent persist during restore) cannot happen here.
     if (activeName) {
+      // Fix #3 (20-05-E): restore Git Changes tab (incl. owningScope=right) so
+      // a user who had Git Changes pinned in the right panel still has it on
+      // the next launch. Must run BEFORE right-scope tab restoration so the
+      // RightPanel renders the gc body correctly when its activeTabId matches
+      // the restored Git Changes id.
+      restoreGitChangesTab(activeName);
       try {
         await getTerminalScope('right').restoreProjectTabs(activeName, activeProject?.path, agentBinary ?? undefined);
       } catch (err) {
@@ -582,6 +588,14 @@ document.addEventListener('project-changed', async (e: Event) => {
         await initFirstTab(themeOptions, newMainSession, project.path, agentBinary ?? undefined);
       }
 
+      // Fix #3 (20-05-E): clear gitChangesTab (prior project may have owned it)
+      // then restore from new project's persisted state. Cast through `any`
+      // to prevent TS from narrowing subsequent `gitChangesTab.value` reads
+      // below — `restoreGitChangesTab` may reassign the signal but control-flow
+      // analysis cannot see across the function boundary.
+      (gitChangesTab as any).value = null;
+      restoreGitChangesTab(newProjectName);
+
       // Phase 20 D-18: restore right-scope tabs for the new project. Serialized
       // after main-scope restore to avoid concurrent persist writes racing on
       // the same state.json blob.
@@ -595,9 +609,13 @@ document.addEventListener('project-changed', async (e: Event) => {
       const rightScope = getTerminalScope('right');
       const rightActive = rightScope.activeTabId.value;
       const rightTabs = rightScope.tabs.value;
+      // Read gitChangesTab.value into a local so TS control-flow narrowing from
+      // the earlier `gitChangesTab.value = null` reset does not collapse the
+      // subsequent property reads to `never` (Fix #3 side effect).
+      const gcNow = gitChangesTab.value;
       const rightResolvable = rightActive === 'file-tree'
         || rightActive === 'gsd'
-        || (gitChangesTab.value?.owningScope === 'right' && gitChangesTab.value.id === rightActive)
+        || (gcNow?.owningScope === 'right' && gcNow.id === rightActive)
         || rightTabs.some(t => t.id === rightActive);
       if (!rightResolvable) {
         rightScope.activeTabId.value = 'file-tree';
