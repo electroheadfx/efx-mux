@@ -191,6 +191,30 @@ describe('UnifiedTabBar scope prop (Phase 20, Plan 02)', () => {
     });
   });
 
+  // ─── Fix #3: GSD renders FIRST, File Tree SECOND (overrides D-17) ────────
+
+  describe('Fix #3 sticky tab order: GSD first, File Tree second', () => {
+    it('DOM order of sticky tabs is [GSD, File Tree]', () => {
+      const { container } = render(<UnifiedTabBar scope="right" />);
+      const stickies = Array.from(
+        container.querySelectorAll('[data-sticky-tab-id]'),
+      ) as HTMLElement[];
+      expect(stickies.length).toBe(2);
+      expect(stickies[0].getAttribute('data-sticky-tab-id')).toBe('gsd');
+      expect(stickies[1].getAttribute('data-sticky-tab-id')).toBe('file-tree');
+    });
+
+    it('GSD label appears before File Tree label in document order', () => {
+      render(<UnifiedTabBar scope="right" />);
+      const gsdText = screen.getByText('GSD');
+      const fileTreeText = screen.getByText('File Tree');
+      // Node.compareDocumentPosition: if GSD precedes File Tree, result has
+      // DOCUMENT_POSITION_FOLLOWING (4) bit set from GSD's perspective.
+      const pos = gsdText.compareDocumentPosition(fileTreeText);
+      expect(pos & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+  });
+
   // ─── Fix #2: sticky tab text selection blocked during drag attempt ──────
 
   describe('Fix #2 sticky tabs block text selection on drag attempt', () => {

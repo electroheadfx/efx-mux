@@ -821,9 +821,11 @@ function computeDynamicTabsForScope(scope: TerminalScope): UnifiedTab[] {
 function getOrderedTabsForScope(scope: TerminalScope): UnifiedTab[] {
   const dynamic = computeDynamicTabsForScope(scope);
   if (scope === 'main') return dynamic;
+  // Fix #3 (20-05-C): GSD FIRST, File Tree SECOND (overrides D-17 spec
+  // per UAT feedback — users expect the progress/plan view to lead).
   const sticky: UnifiedTab[] = [
-    { type: 'file-tree', id: 'file-tree' },
     { type: 'gsd',       id: 'gsd' },
+    { type: 'file-tree', id: 'file-tree' },
   ];
   return [...sticky, ...dynamic];
 }
