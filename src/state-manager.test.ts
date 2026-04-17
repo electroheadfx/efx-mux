@@ -191,4 +191,27 @@ describe('state-manager', () => {
       expect(activeProjectName.value).toBe('switched-project');
     });
   });
+
+  // Phase 20 D-20: RED sentinel (expanded in Task 3) — legacy keys must be migrated out.
+  describe('Phase 20 legacy key migration (D-20) — RED sentinel', () => {
+    it('drops legacy keys from loaded older state.json', async () => {
+      mockIPC((cmd) => {
+        if (cmd === 'load_state') return {
+          version: 1,
+          layout: { 'sidebar-w': '200px', 'right-w': '25%', 'right-h-pct': '50' },
+          theme: { mode: 'dark' },
+          session: { 'main-tmux-session': 'efx-mux', 'right-tmux-session': 'efx-mux-right' },
+          project: { active: null, projects: [] },
+          panels: { 'right-top-tab': 'File Tree', 'right-bottom-tab': 'Bash', 'gsd-sub-tab': 'State' },
+        };
+        if (cmd === 'save_state') return null;
+        return null;
+      });
+      await loadAppState();
+      const state = getCurrentState()!;
+      expect(state.panels['right-bottom-tab']).toBeUndefined();
+      expect(state.session['right-tmux-session']).toBeUndefined();
+      expect(state.layout['right-h-pct']).toBeUndefined();
+    });
+  });
 });
