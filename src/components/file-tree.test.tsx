@@ -1,8 +1,9 @@
 // file-tree.test.tsx — Render tests for FileTree component
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/preact';
 import { mockIPC } from '@tauri-apps/api/mocks';
 import { FileTree, fileTreeFontSize, fileTreeLineHeight, detectedEditors } from './file-tree';
+import { ToastContainer } from './toast';
 import { projects, activeProjectName } from '../state-manager';
 
 const MOCK_ENTRIES = [
@@ -412,12 +413,16 @@ describe('drag', () => {
     // (which is rows[0] = 'src' folder). Equivalent semantics to "cursor over folder row".
     const fileRow = rows[1];
     fireEvent.mouseDown(fileRow, { button: 0, clientX: 50, clientY: 50 });
+    // After Plan 18-07 added x-axis bounds to hit-tests, clientX must be 0 so
+    // 0 >= 0 && 0 <= 0 is TRUE on the zero-rect row (rect.right=0 in jsdom).
+    // The mouseDown above uses clientX=50 only to record the drag START position
+    // (drag-threshold check uses delta, not absolute), not for the hit-test.
     fireEvent.mouseMove(document, {
-      clientX: 60,
+      clientX: 0,
       clientY: 0,
     });
     fireEvent.mouseUp(document, {
-      clientX: 60,
+      clientX: 0,
       clientY: 0,
     });
     await new Promise(r => setTimeout(r, 20));
@@ -473,11 +478,11 @@ describe('finder drop', () => {
     });
     render(<FileTree />);
     await new Promise(r => setTimeout(r, 50));
-    // jsdom returns zero rects; use y=0 to match the first zero-rect row (src folder).
+    // jsdom returns zero rects; use x=0 AND y=0 so 0 >= 0 && 0 <= 0 matches both axes after Plan 18-07 added the x-axis bounds check (the realistic-geometry coverage lives in the new 'finder drop hit-test geometry' describe block below).
     document.dispatchEvent(new CustomEvent('tree-finder-drop', {
       detail: {
         paths: ['/Users/bob/Downloads/extra.txt'],
-        position: { x: 5, y: 0 },
+        position: { x: 0, y: 0 },
       },
     }));
     await new Promise(r => setTimeout(r, 20));
@@ -620,5 +625,130 @@ describe('hover vs. click selection', () => {
     await new Promise(r => setTimeout(r, 20));
     rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
     expect(nameSpan(rows[1]).style.color).toMatch(/rgb\(230, ?237, ?243\)|#E6EDF3/i);
+  });
+});
+
+// ── Phase 18 Plan 07: Regression tests for x-axis hit-test bounds ────────────
+// These tests use mocked getBoundingClientRect with realistic non-zero rects to
+// exercise production geometry — jsdom returns zero-rects by default which
+// hides the y-only hit-test bug from the existing 'finder drop' describe block.
+
+describe('finder drop hit-test geometry (UAT Test 17 regression)', () => {
+  // Layout simulated:
+  //   Scroll container: left=0, right=280, top=34, bottom=900
+  //   Row 0 (src):      left=0, right=280, top=100, bottom=124
+  //   Row 1 (README):   left=0, right=280, top=124, bottom=148
+  //   Row 2 (index.ts): left=0, right=280, top=148, bottom=172
+  // The terminal panel is conceptually at x>=280 — drops there must NOT match a row.
+  const ROW_RECTS: Record<string, DOMRect> = {
+    '0': { top: 100, bottom: 124, left: 0, right: 280, width: 280, height: 24, x: 0, y: 100, toJSON: () => ({}) } as DOMRect,
+    '1': { top: 124, bottom: 148, left: 0, right: 280, width: 280, height: 24, x: 0, y: 124, toJSON: () => ({}) } as DOMRect,
+    '2': { top: 148, bottom: 172, left: 0, right: 280, width: 280, height: 24, x: 0, y: 148, toJSON: () => ({}) } as DOMRect,
+  };
+  const SCROLL_CONTAINER_RECT: DOMRect = {
+    top: 34, bottom: 900, left: 0, right: 280, width: 280, height: 866, x: 0, y: 34, toJSON: () => ({}),
+  } as DOMRect;
+
+  let getBCRSpy: ReturnType<typeof vi.spyOn> | null = null;
+
+  beforeEach(() => {
+    projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'claude' }];
+    activeProjectName.value = 'testproj';
+    fileTreeFontSize.value = 13;
+    fileTreeLineHeight.value = 2;
+    vi.stubGlobal('listen', vi.fn().mockResolvedValue(vi.fn()));
+
+    // Mock Element.prototype.getBoundingClientRect: route by data-file-tree-index, fall back to scroll container, then zero.
+    getBCRSpy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      const idx = (this as HTMLElement).dataset?.fileTreeIndex;
+      if (idx !== undefined && ROW_RECTS[idx]) return ROW_RECTS[idx];
+      // Identify the scroll container by tabindex="0"
+      if ((this as HTMLElement).getAttribute?.('tabindex') === '0') return SCROLL_CONTAINER_RECT;
+      return new DOMRect(0, 0, 0, 0);
+    });
+  });
+
+  afterEach(() => {
+    getBCRSpy?.mockRestore();
+    getBCRSpy = null;
+  });
+
+  it('drop with cursor.x OUTSIDE scroll container shows toast and does NOT call copy_path', async () => {
+    let copyCalls = 0;
+    mockIPC((cmd, _args) => {
+      if (cmd === 'list_directory') return MOCK_ENTRIES;
+      if (cmd === 'detect_editors') return { zed: false, code: false, subl: false, cursor: false, idea: false };
+      if (cmd === 'copy_path') { copyCalls++; return null; }
+      return null;
+    });
+    // Mount ToastContainer alongside FileTree so the 'Drop target outside file tree'
+    // toast is rendered into the DOM and assertable via document.body.textContent.
+    render(<><FileTree /><ToastContainer /></>);
+    await new Promise(r => setTimeout(r, 50));
+
+    // Cursor at (x=500, y=110) — y is INSIDE row 0's vertical band (100..124),
+    // but x is OUTSIDE the scroll container (right edge at 280).
+    // Pre-fix: y-only hit-test matched row 0 → copy_path was called with src targetDir.
+    // Post-fix: x-axis check rejects the row, fallback container check also fails (x=500>280),
+    //   so the outside-container toast fires and no copy happens.
+    document.dispatchEvent(new CustomEvent('tree-finder-drop', {
+      detail: {
+        paths: ['/Users/bob/Downloads/extra.txt'],
+        position: { x: 500, y: 110 },
+      },
+    }));
+    await new Promise(r => setTimeout(r, 30));
+
+    expect(copyCalls).toBe(0);
+    expect(document.body.textContent).toContain('Drop target outside file tree');
+  });
+
+  it('dragover with cursor.x OUTSIDE scroll container does NOT highlight any row', async () => {
+    mockIPC((cmd, _args) => {
+      if (cmd === 'list_directory') return MOCK_ENTRIES;
+      if (cmd === 'detect_editors') return { zed: false, code: false, subl: false, cursor: false, idea: false };
+      return null;
+    });
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+
+    document.dispatchEvent(new CustomEvent('tree-finder-dragover', {
+      detail: {
+        paths: ['/Users/bob/Downloads/extra.txt'],
+        position: { x: 500, y: 110 }, // x outside, y inside row 0 band
+      },
+    }));
+    await new Promise(r => setTimeout(r, 30));
+
+    // No row should have the highlight border applied
+    const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    const anyHighlighted = Array.from(rows).some(r => r.style.borderLeft && r.style.borderLeft.includes('solid'));
+    expect(anyHighlighted).toBe(false);
+  });
+
+  it('drop with cursor INSIDE row 0 (src folder) targets that folder via copy_path', async () => {
+    let copyArgs: Record<string, unknown> | undefined;
+    mockIPC((cmd, args) => {
+      if (cmd === 'list_directory') return MOCK_ENTRIES;
+      if (cmd === 'detect_editors') return { zed: false, code: false, subl: false, cursor: false, idea: false };
+      if (cmd === 'copy_path') { copyArgs = args as Record<string, unknown>; return null; }
+      return null;
+    });
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+
+    // Cursor at (x=140, y=110) — INSIDE row 0's full 2D rect (left=0..right=280, top=100..bottom=124)
+    // Confirms positive case: a correct-geometry drop still works after the x-axis bounds addition.
+    document.dispatchEvent(new CustomEvent('tree-finder-drop', {
+      detail: {
+        paths: ['/Users/bob/Downloads/extra.txt'],
+        position: { x: 140, y: 110 },
+      },
+    }));
+    await new Promise(r => setTimeout(r, 30));
+
+    expect(copyArgs).toBeDefined();
+    expect(copyArgs?.from).toBe('/Users/bob/Downloads/extra.txt');
+    expect(String(copyArgs?.to)).toBe('/tmp/proj/src/extra.txt');
   });
 });
