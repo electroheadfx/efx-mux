@@ -30,6 +30,8 @@ import {
   activeUnifiedTabId,
   closeUnifiedTab,
   handleCrossScopeDrop,
+  openEditorTabPinned,
+  editorTabs,
 } from './unified-tab-bar';
 import { terminalTabs, activeTabId, getTerminalScope } from './terminal-tabs';
 
@@ -427,6 +429,108 @@ describe('UnifiedTabBar scope prop (Phase 20, Plan 02)', () => {
       const leftPx = parseFloat(menu!.style.left || '0');
       expect(leftPx).toBe(50);
       restore();
+    });
+  });
+
+  // ─── Plan 20-05-D: editor tabs across scopes ───────────────────────────────
+
+  describe('Plan 20-05-D editor tabs cross-scope', () => {
+    it("computeDynamicTabsForScope('right') returns an editor tab with ownerScope='right'", () => {
+      // Open a main-scope editor, then flip it to right.
+      openEditorTabPinned('/tmp/proj/foo.ts', 'foo.ts', 'x');
+      const ed = editorTabs.value.find(t => t.filePath === '/tmp/proj/foo.ts');
+      expect(ed).toBeDefined();
+      expect(ed!.ownerScope).toBe('main');
+
+      handleCrossScopeDrop(ed!.id, 'main', 'irrelevant-target', 'right', false);
+
+      const flipped = editorTabs.value.find(t => t.id === ed!.id);
+      expect(flipped?.ownerScope).toBe('right');
+
+      // Render the right-scope tab bar and assert the editor label appears.
+      const { container } = render(<UnifiedTabBar scope="right" />);
+      const rightDynamicTabs = container.querySelectorAll('[data-tab-id]');
+      const ids = Array.from(rightDynamicTabs).map(el => el.getAttribute('data-tab-id'));
+      expect(ids).toContain(ed!.id);
+    });
+
+    it("computeDynamicTabsForScope('main') excludes editor tabs that have ownerScope='right'", () => {
+      openEditorTabPinned('/tmp/proj/bar.ts', 'bar.ts', 'x');
+      const ed = editorTabs.value.find(t => t.filePath === '/tmp/proj/bar.ts');
+      expect(ed).toBeDefined();
+
+      handleCrossScopeDrop(ed!.id, 'main', 'irrelevant-target', 'right', false);
+
+      const { container } = render(<UnifiedTabBar scope="main" />);
+      const mainTabs = container.querySelectorAll('[data-tab-id]');
+      const ids = Array.from(mainTabs).map(el => el.getAttribute('data-tab-id'));
+      expect(ids).not.toContain(ed!.id);
+    });
+
+    it("handleCrossScopeDrop flips an editor's ownerScope and updates both scoped orders", () => {
+      openEditorTabPinned('/tmp/proj/baz.ts', 'baz.ts', 'x');
+      const ed = editorTabs.value.find(t => t.filePath === '/tmp/proj/baz.ts')!;
+
+      // Before: editor renders in main tab bar.
+      {
+        const { container } = render(<UnifiedTabBar scope="main" />);
+        const ids = Array.from(container.querySelectorAll('[data-tab-id]'))
+          .map(el => el.getAttribute('data-tab-id'));
+        expect(ids).toContain(ed.id);
+        cleanup();
+      }
+
+      handleCrossScopeDrop(ed.id, 'main', 'irrelevant-target', 'right', false);
+
+      // ownerScope flipped.
+      expect(editorTabs.value.find(t => t.id === ed.id)?.ownerScope).toBe('right');
+
+      // Right scope's activeTabId is now the editor id.
+      expect(getTerminalScope('right').activeTabId.value).toBe(ed.id);
+
+      // After: editor renders ONLY in right tab bar, not in main.
+      const mainRender = render(<UnifiedTabBar scope="main" />);
+      const mainIds = Array.from(mainRender.container.querySelectorAll('[data-tab-id]'))
+        .map(el => el.getAttribute('data-tab-id'));
+      expect(mainIds).not.toContain(ed.id);
+      cleanup();
+
+      const rightRender = render(<UnifiedTabBar scope="right" />);
+      const rightIds = Array.from(rightRender.container.querySelectorAll('[data-tab-id]'))
+        .map(el => el.getAttribute('data-tab-id'));
+      expect(rightIds).toContain(ed.id);
+    });
+
+    it('handleTabClick on an editor in right scope activates via right.activeTabId, not main activeUnifiedTabId', () => {
+      openEditorTabPinned('/tmp/proj/qux.ts', 'qux.ts', 'x');
+      const ed = editorTabs.value.find(t => t.filePath === '/tmp/proj/qux.ts')!;
+      handleCrossScopeDrop(ed.id, 'main', 'irrelevant-target', 'right', false);
+
+      // Reset active signals to catch whether the click handler routes correctly.
+      activeUnifiedTabId.value = '';
+      getTerminalScope('right').activeTabId.value = 'file-tree';
+
+      const { container } = render(<UnifiedTabBar scope="right" />);
+      const edEl = container.querySelector(`[data-tab-id="${ed.id}"]`) as HTMLElement;
+      expect(edEl).not.toBeNull();
+      fireEvent.click(edEl);
+
+      expect(getTerminalScope('right').activeTabId.value).toBe(ed.id);
+      // Main's unified active id MUST NOT have been set to the editor id
+      // (otherwise MainPanel would also render it as active).
+      expect(activeUnifiedTabId.value).not.toBe(ed.id);
+    });
+
+    it('cross-scope drop activates target via right signal; source unified active falls back', () => {
+      openEditorTabPinned('/tmp/proj/zap.ts', 'zap.ts', 'x');
+      const ed = editorTabs.value.find(t => t.filePath === '/tmp/proj/zap.ts')!;
+      activeUnifiedTabId.value = ed.id; // simulate editor active in main
+
+      handleCrossScopeDrop(ed.id, 'main', 'irrelevant-target', 'right', false);
+
+      expect(getTerminalScope('right').activeTabId.value).toBe(ed.id);
+      // Main's unified active must have fallen back (to '' in empty case).
+      expect(activeUnifiedTabId.value).not.toBe(ed.id);
     });
   });
 

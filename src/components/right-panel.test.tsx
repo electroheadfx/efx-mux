@@ -20,6 +20,9 @@ import { getTerminalScope } from './terminal-tabs';
 import {
   gitChangesTab,
   activeUnifiedTabId,
+  openEditorTabPinned,
+  editorTabs,
+  handleCrossScopeDrop,
 } from './unified-tab-bar';
 
 // Tauri event listener mock — listen() returns a no-op unsubscribe.
@@ -224,6 +227,63 @@ describe('RightPanel (Phase 20, Plan 04)', () => {
       // There should be no extra body between GSD and terminal wrapper.
       const { gitChanges } = getBodies(container);
       expect(gitChanges).toBeNull();
+    });
+  });
+
+  // ─── Plan 20-05-D: editor tab rendering in right panel ─────────────────────
+
+  describe('Plan 20-05-D right-scope editor tabs', () => {
+    // Use distinct project names per test so the module-private
+    // _editorTabsByProject Map doesn't leak tabs across tests.
+    beforeEach(() => {
+      const projName = `rp-d-proj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      projects.value = [{ path: '/tmp/proj', name: projName, agent: 'claude' } as any];
+      activeProjectName.value = projName;
+    });
+
+    it('renders an EditorTab mount when a right-owned editor tab is active', () => {
+      // Open an editor in main scope, then flip it to right via drag drop.
+      openEditorTabPinned('/tmp/proj/rp-a.ts', 'rp-a.ts', 'hello');
+      const ed = editorTabs.value.find(t => t.filePath === '/tmp/proj/rp-a.ts');
+      expect(ed).toBeDefined();
+      handleCrossScopeDrop(ed!.id, 'main', 'irrelevant', 'right', false);
+      expect(editorTabs.value.find(t => t.id === ed!.id)?.ownerScope).toBe('right');
+
+      // Activate the editor in right scope.
+      getTerminalScope('right').activeTabId.value = ed!.id;
+
+      const { container } = render(<RightPanel />);
+
+      // The CodeMirror container lives as a child of the right-panel-content
+      // wrapper. We check for a `.cm-editor` descendant (CodeMirror root).
+      // Under jsdom CodeMirror does render its DOM even without layout.
+      const content = container.querySelector('.right-panel-content') as HTMLElement;
+      expect(content).not.toBeNull();
+      const cmRoot = content.querySelector('.cm-editor');
+      expect(cmRoot).not.toBeNull();
+    });
+
+    it('hides the terminal-containers wrapper when a right editor tab is active', () => {
+      openEditorTabPinned('/tmp/proj/rp-b.ts', 'rp-b.ts', 'hi');
+      const ed = editorTabs.value.find(t => t.filePath === '/tmp/proj/rp-b.ts')!;
+      handleCrossScopeDrop(ed.id, 'main', 'irrelevant', 'right', false);
+      getTerminalScope('right').activeTabId.value = ed.id;
+
+      const { container } = render(<RightPanel />);
+      const wrapper = container.querySelector(
+        '.terminal-containers[data-scope="right"]',
+      ) as HTMLElement;
+      expect(wrapper).not.toBeNull();
+      expect(wrapper.style.display).toBe('none');
+    });
+
+    it('right panel does NOT mount editor tabs that still have ownerScope=main', () => {
+      openEditorTabPinned('/tmp/proj/rp-c.ts', 'rp-c.ts', 'hi');
+      // Intentionally do NOT cross-scope drop.
+      const { container } = render(<RightPanel />);
+      const content = container.querySelector('.right-panel-content') as HTMLElement;
+      // No CodeMirror mount inside right panel content.
+      expect(content.querySelector('.cm-editor')).toBeNull();
     });
   });
 });
