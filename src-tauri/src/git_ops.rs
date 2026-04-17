@@ -808,4 +808,39 @@ mod tests {
             "File should be reverted to original content"
         );
     }
+
+    #[test]
+    fn revert_file_deletes_untracked() {
+        // UAT Test 18 fix: per-file revert on an untracked file MUST delete it
+        // (git checkout is meaningless for untracked content; current impl errors).
+        let (dir, path) = setup_git_repo();
+        let file_path = dir.path().join("untracked.txt");
+        std::fs::write(&file_path, "untracked content").unwrap();
+        assert!(file_path.exists(), "Untracked file must exist before revert");
+
+        let result = revert_file_impl(&path, "untracked.txt");
+        assert!(result.is_ok(), "revert_file on untracked file must succeed: {:?}", result);
+        assert!(
+            !file_path.exists(),
+            "Untracked file MUST be deleted from disk after revert"
+        );
+    }
+
+    #[test]
+    fn revert_file_no_op_on_clean() {
+        // UAT Test 18 fix: revert on a clean (CURRENT) tracked file must be a silent no-op.
+        let (dir, path) = setup_git_repo();
+        let file_path = dir.path().join("tracked.txt");
+
+        // Create and commit a file
+        std::fs::write(&file_path, "committed content").unwrap();
+        run_git(dir.path(), &["add", "tracked.txt"]);
+        run_git(dir.path(), &["commit", "-m", "add tracked.txt"]);
+
+        // Revert without modifying — should be a no-op
+        let result = revert_file_impl(&path, "tracked.txt");
+        assert!(result.is_ok(), "revert_file on clean tracked file must succeed: {:?}", result);
+        let content = std::fs::read_to_string(&file_path).unwrap();
+        assert_eq!(content, "committed content", "Clean file content must be unchanged");
+    }
 }
