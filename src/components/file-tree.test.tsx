@@ -967,3 +967,78 @@ describe('tree state preservation (UAT Tests 6 + 7)', () => {
     expect(listDirCalls).toBeGreaterThan(initialCalls);
   });
 });
+
+// ── Phase 18 Plan 10 (Gap G-01): revert removes stale row via git-status-changed emit ─────
+//
+// Plan 10 added an emit('git-status-changed') from revert_file (Rust) AND from
+// handleRevertFile / handleRevertAll (frontend). This test verifies that when
+// the emit fires (simulated by invoking the captured listener), the file-tree
+// refresh loads the new list and the previously-shown row disappears.
+//
+// This does NOT test the Rust emit directly — that is covered by the cargo test
+// in Plan 10 Task 1 (revert_file_impl_returns_mutated_for_untracked_delete). Here
+// we verify the JS-side consumer of the emit (the file-tree listener) does the right
+// thing when the emit fires.
+
+describe('revert removes stale row via git-status-changed (Gap G-01)', () => {
+  beforeEach(() => {
+    projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'claude' }];
+    activeProjectName.value = 'testproj';
+    fileTreeFontSize.value = 13;
+    fileTreeLineHeight.value = 2;
+    capturedGitStatusListener = null;
+
+    // First list_directory call returns [foo.ts, bar.ts]; subsequent calls
+    // return only [bar.ts] (simulating foo.ts having been deleted by revert).
+    let callCount = 0;
+    mockIPC((cmd, _args) => {
+      if (cmd === 'list_directory') {
+        callCount++;
+        if (callCount === 1) {
+          return [
+            { name: 'foo.ts', path: '/tmp/proj/foo.ts', is_dir: false, size: 0 },
+            { name: 'bar.ts', path: '/tmp/proj/bar.ts', is_dir: false, size: 0 },
+          ];
+        }
+        return [
+          { name: 'bar.ts', path: '/tmp/proj/bar.ts', is_dir: false, size: 0 },
+        ];
+      }
+      if (cmd === 'detect_editors') {
+        return { zed: false, code: false, subl: false, cursor: false, idea: false };
+      }
+      return null;
+    });
+  });
+
+  it('capturing the listener then invoking it removes the reverted row from flat-mode DOM', async () => {
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 80));
+
+    // Force flat mode via the existing switchToFlat helper pattern. If another
+    // describe left viewMode in a different state, click the 'Flat mode' toggle
+    // to land in a deterministic starting point.
+    const flatToggle = document.querySelector('span[title="Flat mode"]') as HTMLElement | null;
+    if (flatToggle) {
+      fireEvent.click(flatToggle);
+      await new Promise(r => setTimeout(r, 50));
+    }
+
+    // Sanity: before revert, the tree shows foo.ts + bar.ts.
+    expect(document.body.textContent).toMatch(/foo\.ts/);
+    expect(document.body.textContent).toMatch(/bar\.ts/);
+
+    // The listener MUST have been captured by the module-scoped vi.mock.
+    expect(capturedGitStatusListener).not.toBeNull();
+
+    // Simulate the post-revert emit: the Rust revert_file command emits
+    // git-status-changed after fs::remove_file succeeds. Here we just invoke
+    // the captured callback directly.
+    capturedGitStatusListener!();
+    await new Promise(r => setTimeout(r, 200)); // allow refresh pipeline to run
+
+    // After the refresh, foo.ts should be gone but bar.ts should remain.
+    expect(document.body.textContent).not.toMatch(/foo\.ts/);
+    expect(document.body.textContent).toMatch(/bar\.ts/);
+  });
+});
