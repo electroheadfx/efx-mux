@@ -1147,23 +1147,35 @@ export function UnifiedTabBar({ scope }: UnifiedTabBarProps) {
   const hasDynamicRight = scope === 'right' && computeDynamicTabsForScope('right').length > 0;
 
   function handleTabClick(tab: UnifiedTab): void {
-    activeUnifiedTabId.value = tab.id;
-    // Sticky tabs: set the right-scope active id so the right panel content switches
+    // Sticky tabs always live in right scope; never touch main's active.
     if (tab.type === 'file-tree' || tab.type === 'gsd') {
       getTerminalScope('right').activeTabId.value = tab.id;
       return;
     }
-    // If it's a terminal tab, sync activeTabId and switch container visibility
+    // Terminal tab: scope determined by tab.scope.
     if (tab.type === 'terminal') {
       const scopeHandle = getTerminalScope(tab.scope);
       scopeHandle.activeTabId.value = tab.id;
       if (tab.scope === 'main') {
+        activeUnifiedTabId.value = tab.id;
         activeTabId.value = tab.id;
         switchToTab(tab.id);
       } else {
         scopeHandle.switchToTab(tab.id);
       }
+      return;
     }
+    // Git Changes: owning scope determines which active signal to set.
+    if (tab.type === 'git-changes') {
+      if (tab.owningScope === 'right') {
+        getTerminalScope('right').activeTabId.value = tab.id;
+      } else {
+        activeUnifiedTabId.value = tab.id;
+      }
+      return;
+    }
+    // Editor (Monaco) tabs — main-scope only today.
+    activeUnifiedTabId.value = tab.id;
   }
 
   function handleClose(e: MouseEvent, tabId: string): void {
