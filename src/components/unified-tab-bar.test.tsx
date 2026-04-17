@@ -29,6 +29,7 @@ import {
   openOrMoveGitChangesToRight,
   activeUnifiedTabId,
   closeUnifiedTab,
+  handleCrossScopeDrop,
 } from './unified-tab-bar';
 import { terminalTabs, activeTabId, getTerminalScope } from './terminal-tabs';
 
@@ -189,6 +190,69 @@ describe('UnifiedTabBar scope prop (Phase 20, Plan 02)', () => {
       expect(gitChangesTab.value).not.toBeNull();
       expect(gitChangesTab.value?.owningScope).toBe('right');
       expect(gitChangesTab.value?.type).toBe('git-changes');
+    });
+  });
+
+  // ─── Fix #5: cross-scope drag (main -> right scaffold) ───────────────────
+
+  describe('Fix #5 cross-scope drag: main -> right terminal tab', () => {
+    it('moves a main-scope terminal tab to the right scope on drop', () => {
+      // Seed a main-scope terminal tab.
+      const main = getTerminalScope('main');
+      const right = getTerminalScope('right');
+      const mainTab = {
+        id: 'tab-main-xs-1',
+        sessionName: 'sess-xs-1',
+        label: 'Terminal 1',
+        terminal: null as any,
+        fitAddon: null as any,
+        container: null as any,
+        ptyConnected: false,
+        isAgent: false,
+        ownerScope: 'main' as const,
+      };
+      main.tabs.value = [mainTab as any];
+      main.activeTabId.value = mainTab.id;
+      right.tabs.value = [];
+      right.activeTabId.value = '';
+
+      handleCrossScopeDrop(mainTab.id, 'main', 'some-right-target', 'right', false);
+
+      // Signal movement
+      expect(main.tabs.value.find(t => t.id === mainTab.id)).toBeUndefined();
+      const moved = right.tabs.value.find(t => t.id === mainTab.id);
+      expect(moved).toBeDefined();
+      expect(moved!.ownerScope).toBe('right');
+
+      // Active tab falls back in source; target is activated.
+      expect(main.activeTabId.value).toBe('');
+      expect(right.activeTabId.value).toBe(mainTab.id);
+    });
+
+    it('tablist root carries data-tablist-scope attribute', () => {
+      const { container } = render(<UnifiedTabBar scope="right" />);
+      const tablist = container.querySelector('[role="tablist"]') as HTMLElement;
+      expect(tablist).not.toBeNull();
+      expect(tablist.getAttribute('data-tablist-scope')).toBe('right');
+    });
+
+    it('cross-scope drop on Git Changes delegates to openOrMoveGitChangesToRight', () => {
+      openGitChangesTab();
+      const gcId = gitChangesTab.value!.id;
+      expect(gitChangesTab.value?.owningScope).toBe('main');
+      handleCrossScopeDrop(gcId, 'main', 'some-right-target', 'right', false);
+      expect(gitChangesTab.value?.owningScope).toBe('right');
+    });
+
+    it('sticky tab drop is a no-op (sticky tabs cannot cross scopes)', () => {
+      const main = getTerminalScope('main');
+      const right = getTerminalScope('right');
+      const beforeMain = main.tabs.value.length;
+      const beforeRight = right.tabs.value.length;
+      handleCrossScopeDrop('file-tree', 'right', 'some-main-target', 'main', false);
+      handleCrossScopeDrop('gsd', 'right', 'some-main-target', 'main', false);
+      expect(main.tabs.value.length).toBe(beforeMain);
+      expect(right.tabs.value.length).toBe(beforeRight);
     });
   });
 
