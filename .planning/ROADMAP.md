@@ -122,9 +122,9 @@ Plans:
   - [x] 18-07-PLAN.md -- UAT gap closure: macOS title-bar y-offset + x-axis hit-test bounds
   - [x] 18-08-PLAN.md -- UAT gap closure: refreshTreePreservingState (expand/collapse persistence)
   - [x] 18-09-PLAN.md -- UAT gap closure: Cmd+Backspace via native menu (WKWebView NSResponder bypass)
-  - [ ] 18-10-PLAN.md -- Human UAT gap G-01 primary: revert emits git-status-changed so file-tree refreshes (Wave 1)
-  - [ ] 18-11-PLAN.md -- Human UAT gap G-01 secondary: editor-tab auto-close on file deletion (Wave 2)
-  - [ ] 18-12-PLAN.md -- Human UAT gap G-02: per-row drop-target highlight during Finder drag (Wave 1)
+  - [x] 18-10-PLAN.md -- Human UAT gap G-01 primary: revert emits git-status-changed so file-tree refreshes (Wave 1)
+  - [x] 18-11-PLAN.md -- Human UAT gap G-01 secondary: editor-tab auto-close on file deletion (Wave 2)
+  - [x] 18-12-PLAN.md -- Human UAT gap G-02: per-row drop-target highlight during Finder drag (Wave 1)
 **UI hint**: yes
 
 ### Phase 19: GSD Sub-Tabs
@@ -187,7 +187,7 @@ Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21
 | 15. Foundation Primitives | v0.3.0 | 2/2 | Complete    | 2026-04-14 |
 | 16. Sidebar Evolution + Git Control | v0.3.0 | 4/4 | Complete   | 2026-04-15 |
 | 17. Main Panel File Tabs | v0.3.0 | 5/5 | Complete   | 2026-04-15 |
-| 18. File Tree Enhancements | v0.3.0 | 5/5 | Complete   | 2026-04-16 |
+| 18. File Tree Enhancements | v0.3.0 | 12/12 | Complete    | 2026-04-17 |
 | 19. GSD Sub-Tabs | v0.3.0 | 0/? | Not started | - |
 | 20. Right Panel Multi-Terminal | v0.3.0 | 0/? | Not started | - |
 | 21. Bug Fix Sprint | v0.3.0 | 0/? | Not started | - |
