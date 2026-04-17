@@ -191,6 +191,72 @@ describe('UnifiedTabBar scope prop (Phase 20, Plan 02)', () => {
     });
   });
 
+  // ─── Fix #1: dropdown flip when near viewport right edge ──────────────────
+
+  describe('Fix #1 plus-menu dropdown flips when near viewport right edge', () => {
+    // The Dropdown component uses getBoundingClientRect() on the trigger
+    // WRAPPER (the outer div that Dropdown renders around the user trigger).
+    // We patch Element.prototype.getBoundingClientRect so EVERY call during
+    // the open sequence returns our simulated rect.
+    function mockBCR(rect: Partial<DOMRect>) {
+      const originalProto = Element.prototype.getBoundingClientRect;
+      Element.prototype.getBoundingClientRect = function () {
+        return {
+          left: 0, right: 0, top: 0, bottom: 0,
+          width: 0, height: 0, x: 0, y: 0,
+          toJSON: () => ({}),
+          ...rect,
+        } as DOMRect;
+      };
+      return () => { Element.prototype.getBoundingClientRect = originalProto; };
+    }
+
+    it('flips menu left when trigger is close to the viewport right edge', () => {
+      render(<UnifiedTabBar scope="right" />);
+      // Simulate every element rect: left=innerWidth-20, right=innerWidth-4.
+      // This forces handleToggle to flip since left + 160 > innerWidth.
+      const restore = mockBCR({
+        left: window.innerWidth - 20,
+        right: window.innerWidth - 4,
+        top: 10,
+        bottom: 26,
+        width: 16,
+        height: 16,
+      });
+      const plusBtn = screen.getByLabelText('Add new tab');
+      fireEvent.click(plusBtn);
+      const menu = document.querySelector('[role="menu"]') as HTMLElement | null;
+      expect(menu).not.toBeNull();
+      const leftPx = parseFloat(menu!.style.left || '0');
+      const MENU_MIN_WIDTH = 160;
+      // After flip, menu.left + 160 should fit inside the viewport.
+      expect(leftPx + MENU_MIN_WIDTH).toBeLessThanOrEqual(window.innerWidth);
+      // And it should differ from the un-flipped rect.left (innerWidth-20).
+      expect(leftPx).toBeLessThan(window.innerWidth - 20);
+      restore();
+    });
+
+    it('left-aligns menu normally when there is ample horizontal room', () => {
+      render(<UnifiedTabBar scope="right" />);
+      const restore = mockBCR({
+        left: 50,
+        right: 66,
+        top: 10,
+        bottom: 26,
+        width: 16,
+        height: 16,
+      });
+      const plusBtn = screen.getByLabelText('Add new tab');
+      fireEvent.click(plusBtn);
+      const menu = document.querySelector('[role="menu"]') as HTMLElement | null;
+      expect(menu).not.toBeNull();
+      // No flip expected: menu left should equal rect.left (50).
+      const leftPx = parseFloat(menu!.style.left || '0');
+      expect(leftPx).toBe(50);
+      restore();
+    });
+  });
+
   // ─── D-03 drag rejects sticky position ────────────────────────────────────
 
   describe('D-03 drag rejects sticky tab position', () => {
