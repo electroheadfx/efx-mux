@@ -4,14 +4,14 @@ milestone: v0.3.0
 milestone_name: Workspace Evolution
 status: executing
 stopped_at: Phase 18 UI-SPEC approved
-last_updated: "2026-04-16T18:40:00.883Z"
-last_activity: 2026-04-16 -- Phase 18 execution started
+last_updated: "2026-04-17T05:39:07.433Z"
+last_activity: 2026-04-17 -- Phase 18 execution started
 progress:
   total_phases: 7
   completed_phases: 3
-  total_plans: 16
-  completed_plans: 11
-  percent: 69
+  total_plans: 20
+  completed_plans: 16
+  percent: 80
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** A single native macOS window that co-locates AI agent terminals alongside live GSD progress, git diff, and file tree -- all persisted across restarts via tmux.
-**Current focus:** Phase 18 — File Tree Enhancements
+**Current focus:** Phase 18 — file-tree-enhancements
 
 ## Current Position
 
-Phase: 18 (File Tree Enhancements) — EXECUTING
-Plan: 1 of 5
+Phase: 18 (file-tree-enhancements) — EXECUTING
+Plan: 1 of 9
 Status: Executing Phase 18
-Last activity: 2026-04-16 -- Phase 18 execution started
+Last activity: 2026-04-17 -- Phase 18 execution started
 
 **Code review fixes pending (non-blocking):**
 
