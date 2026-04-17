@@ -228,15 +228,31 @@ async function handleRevertAll(): Promise<void> {
   const project = getActiveProject();
   if (!project) return;
   isReverting.value = true;
+  const failures: string[] = [];
+  let successCount = 0;
   try {
+    // UAT Test 18 fix (2026-04-16): per-file try/catch so a single failure does
+    // not abort the batch. Earlier code awaited each revertFile sequentially with
+    // no catch, so the first untracked-file failure stopped the loop.
     for (const file of changedFiles.value) {
-      await revertFile(project.path, file.path);
+      try {
+        await revertFile(project.path, file.path);
+        successCount++;
+      } catch (err) {
+        const errMsg = err instanceof GitError ? err.details || err.code : String(err);
+        addLogEntry('error', `Failed to revert ${file.name}`, errMsg);
+        failures.push(file.name);
+      }
     }
     await refreshGitFiles();
-  } catch (err) {
-    const errMsg = err instanceof GitError ? err.details || err.code : String(err);
-    addLogEntry('error', 'Failed to revert all files', errMsg);
-    showToast({ type: 'error', message: 'Failed to revert all files', hint: 'See error log in GIT tab' });
+    if (failures.length > 0) {
+      const totalAttempted = successCount + failures.length;
+      showToast({
+        type: 'error',
+        message: `Reverted ${successCount} of ${totalAttempted} files`,
+        hint: `Failed: ${failures.slice(0, 3).join(', ')}${failures.length > 3 ? `, +${failures.length - 3} more` : ''}. See error log in GIT tab.`,
+      });
+    }
   } finally {
     isReverting.value = false;
   }
