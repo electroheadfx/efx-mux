@@ -456,4 +456,150 @@ mod tests {
         let state = AppState::default();
         assert_eq!(state.version, 1);
     }
+
+    // -- save_state HMR-wipe guard tests ---------------------------------------
+    //
+    // These tests share the HOME env var to sandbox state.json under a temp
+    // directory. The HOME_LOCK Mutex serializes execution so parallel test
+    // threads don't clobber each other's HOME setting.
+
+    use std::sync::Mutex;
+    static HOME_LOCK: Mutex<()> = Mutex::new(());
+
+    fn with_temp_home<F: FnOnce()>(test_name: &str, test: F) {
+        let _guard = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let tmp = std::env::temp_dir().join(format!(
+            "efxmux-test-{}-{}",
+            std::process::id(),
+            test_name
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let prev = std::env::var("HOME").ok();
+        std::env::set_var("HOME", &tmp);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(test));
+        // Restore HOME
+        match prev {
+            Some(v) => std::env::set_var("HOME", v),
+            None => std::env::remove_var("HOME"),
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
+        if let Err(e) = result {
+            std::panic::resume_unwind(e);
+        }
+    }
+
+    fn seed_state_with_one_project() -> AppState {
+        AppState {
+            project: ProjectState {
+                active: Some("/p1".into()),
+                projects: vec![ProjectEntry {
+                    path: "/p1".into(),
+                    name: "P1".into(),
+                    agent: "claude".into(),
+                    gsd_file: None,
+                    server_cmd: None,
+                    server_url: None,
+                }],
+            },
+            ..AppState::default()
+        }
+    }
+
+    #[test]
+    fn save_state_guard_refuses_wipe() {
+        with_temp_home("refuses_wipe", || {
+            // Pre-write a state.json containing one project.
+            let seeded = seed_state_with_one_project();
+            save_state_sync(&seeded).expect("seed write should succeed");
+
+            // Build an empty incoming state (simulating HMR remount).
+            let incoming = AppState::default();
+
+            // Guard must detect this as a wipe attempt.
+            assert!(would_wipe_projects(&incoming), "guard should report wipe");
+
+            // guarded_save returns Ok(()) but does NOT actually write.
+            guarded_save(&incoming).expect("guarded_save should return Ok even when refusing");
+
+            // Reload from disk: the seeded project must survive.
+            let after = load_state_sync();
+            assert_eq!(
+                after.project.projects.len(),
+                1,
+                "seeded project must survive HMR-wipe attempt"
+            );
+            assert_eq!(after.project.projects[0].path, "/p1");
+        });
+    }
+
+    #[test]
+    fn save_state_guard_allows_empty_to_empty() {
+        with_temp_home("empty_to_empty", || {
+            // Seed disk with empty projects (default state).
+            let empty_seed = AppState::default();
+            save_state_sync(&empty_seed).expect("seed write should succeed");
+
+            // Disk is empty, incoming is empty -> not a wipe.
+            assert!(
+                !would_wipe_projects(&AppState::default()),
+                "empty disk + empty incoming should not be flagged as wipe"
+            );
+
+            guarded_save(&AppState::default()).expect("guarded_save should succeed");
+
+            // Reload: still empty, file exists.
+            let after = load_state_sync();
+            assert_eq!(after.project.projects.len(), 0);
+            assert!(state_path().exists(), "state file should exist after save");
+        });
+    }
+
+    #[test]
+    fn save_state_guard_allows_non_empty_write() {
+        with_temp_home("non_empty_write", || {
+            // Seed disk with one project.
+            let seeded = seed_state_with_one_project();
+            save_state_sync(&seeded).expect("seed write should succeed");
+
+            // Build incoming with two projects.
+            let incoming = AppState {
+                project: ProjectState {
+                    active: Some("/p2".into()),
+                    projects: vec![
+                        ProjectEntry {
+                            path: "/p1".into(),
+                            name: "P1".into(),
+                            agent: "claude".into(),
+                            gsd_file: None,
+                            server_cmd: None,
+                            server_url: None,
+                        },
+                        ProjectEntry {
+                            path: "/p2".into(),
+                            name: "P2".into(),
+                            agent: "opencode".into(),
+                            gsd_file: None,
+                            server_cmd: None,
+                            server_url: None,
+                        },
+                    ],
+                },
+                ..AppState::default()
+            };
+
+            // Non-empty incoming should never be flagged as wipe.
+            assert!(
+                !would_wipe_projects(&incoming),
+                "non-empty incoming must not be flagged as wipe"
+            );
+
+            guarded_save(&incoming).expect("guarded_save should succeed");
+
+            // Reload: 2 projects on disk now.
+            let after = load_state_sync();
+            assert_eq!(after.project.projects.len(), 2);
+            assert_eq!(after.project.active.as_deref(), Some("/p2"));
+        });
+    }
 }
