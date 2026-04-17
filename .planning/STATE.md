@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 Phase: 19
 Plan: Not started
 Status: Ready to execute
-Last activity: 2026-04-17 - Completed quick task 260417-hgw: Auto-open new file in tab + expand parent folder on create
+Last activity: 2026-04-17 - Completed quick task 260417-iat: Add keyboard shortcut to delete folder in file tree
 
 **Code review fixes pending (non-blocking):**
 
@@ -109,6 +109,7 @@ None.
 | 260417-f6e | FileTree tab respects active tab context on app startup (no auto-select when terminal/git active, reveals editor file when editor active) | 2026-04-17 |
 | 260417-hgw | Auto-open new file in tab + expand parent folder on create | 2026-04-17 |
 | 260417-i0z | Save only active tab's file on Cmd+S (not all open editor tabs) | 2026-04-17 |
+| 260417-iat | Add keyboard shortcut to delete folder in file tree | 2026-04-17 |
 
 ## Session Continuity
 
