@@ -1468,20 +1468,24 @@ describe('create-then-open behaviors (quick-260417-hgw)', () => {
     await new Promise(r => setTimeout(r, 80));
     await forceTreeMode();
 
-    // Select the 'src' folder row (index 0 in MOCK_ENTRIES) by clicking it once.
-    // A single click in tree mode calls toggleTreeNode — so we need to click, wait
-    // for the expand, then click again to collapse so we can test the 'collapsed'
-    // starting state. Or simpler: keyboard-navigate (ArrowDown) from -1 to land on
-    // row 0 without toggling.
-    const fileList = document.querySelector('[tabindex="0"]') as HTMLElement;
-    expect(fileList).not.toBeNull();
-    fireEvent.keyDown(fileList, { key: 'ArrowDown' });
-    await new Promise(r => setTimeout(r, 20));
-    // Precondition: 'src' row is selected but NOT expanded (no 'existing.ts' in DOM).
+    // Select the 'src' folder row (index 0 in MOCK_ENTRIES). In tree mode a click
+    // on a folder row both sets selectedIndex AND toggles expansion. To land on
+    // 'selected-but-collapsed', click twice: 1st click selects + expands, 2nd
+    // click re-selects + collapses (selectedIndex still points at src=0).
+    const srcRow = document.querySelector('[data-file-tree-index="0"]') as HTMLElement;
+    expect(srcRow).not.toBeNull();
+    fireEvent.click(srcRow);
+    await new Promise(r => setTimeout(r, 80));
+    // After first click 'src' is expanded — existing.ts is visible.
+    expect(document.body.textContent).toContain('existing.ts');
+    // Second click collapses (selectedIndex stays at 0 = src).
+    fireEvent.click(srcRow);
+    await new Promise(r => setTimeout(r, 80));
+    // Precondition: 'src' row is selected but NOT expanded.
     expect(document.body.textContent).not.toContain('existing.ts');
 
     // Click header [+] -> New File. The production code must expand 'src' before
-    // rendering the InlineCreateRow, so 'existing.ts' becomes visible.
+    // rendering the InlineCreateRow, so 'existing.ts' becomes visible again.
     const plusBtn = document.querySelector('[title="New file or folder"]') as HTMLElement;
     fireEvent.click(plusBtn);
     await new Promise(r => setTimeout(r, 20));

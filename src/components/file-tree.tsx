@@ -703,7 +703,10 @@ interface InlineCreateRowProps {
   parentDir: string;
   kind: 'file' | 'folder';
   depth: number;
-  onDone: () => void;
+  // quick-260417-hgw: onDone is called with `created` on successful commit so
+  // the callsite can open the file in an editor tab + reveal it in the tree.
+  // Cancel / Escape paths call onDone() with no argument.
+  onDone: (created?: { path: string; name: string; kind: 'file' | 'folder' }) => void;
 }
 
 function InlineCreateRow({ parentDir, kind, depth, onDone }: InlineCreateRowProps) {
@@ -729,16 +732,30 @@ function InlineCreateRow({ parentDir, kind, depth, onDone }: InlineCreateRowProp
     const err = validate(name);
     if (err) { setError(err); return; }
     committedRef.current = true;
-    const target = `${parentDir}/${name.trim()}`;
+    const createdName = name.trim();
+    const target = `${parentDir}/${createdName}`;
     try {
+      // quick-260417-hgw: defensive pre-create expand in tree mode. The row-context-menu
+      // flow (buildRowMenuItems) already pre-expands, and openHeaderCreateMenu pre-expands
+      // via ensureTargetExpanded; this guards against any future creation entry point that
+      // forgets to do so. No-op in flat mode and for already-expanded folders.
+      if (viewMode.value === 'tree') {
+        const parentNode = flattenedTree.value.find(
+          n => n.entry.is_dir && n.entry.path === parentDir
+        );
+        if (parentNode && !parentNode.expanded) {
+          await toggleTreeNode(parentNode);
+        }
+      }
+
       if (kind === 'file') await createFile(target);
       else await createFolder(target);
-      onDone();
+      onDone({ path: target, name: createdName, kind });
     } catch (e) {
       committedRef.current = false;
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.toLowerCase().includes('already exists') || msg.toLowerCase().includes('exists')) {
-        setError(`'${name.trim()}' already exists`);
+        setError(`'${createdName}' already exists`);
       } else {
         setError(msg);
       }
@@ -1107,23 +1124,41 @@ export function FileTree() {
     e.preventDefault();
     e.stopPropagation();
     const target = resolveHeaderCreateTarget();
+
+    // quick-260417-hgw: parity with buildRowMenuItems. If the target directory is a
+    // collapsed folder currently visible in the tree, expand it BEFORE the
+    // InlineCreateRow is mounted, so the new row renders directly beneath it.
+    // No-op in flat mode and for already-expanded folders (no collapse).
+    async function ensureTargetExpanded(): Promise<void> {
+      if (viewMode.value !== 'tree') return;
+      const node = flattenedTree.value.find(
+        n => n.entry.is_dir && n.entry.path === target
+      );
+      if (node && !node.expanded) {
+        await toggleTreeNode(node);
+      }
+    }
+
+    const startCreate = (kind: 'file' | 'folder') => {
+      void ensureTargetExpanded().then(() => {
+        // afterIndex is re-computed post-expand so the InlineCreateRow lands
+        // directly under the target folder (children are now flattened in).
+        const afterIdx = flattenedTree.value.findIndex(
+          n => n.entry.path === target
+        );
+        activeCreateRow.value = {
+          parentDir: target,
+          kind,
+          // Fall back to the pre-expand selectedIndex if the target isn't in
+          // the flattened tree (flat mode, or target is project root).
+          afterIndex: afterIdx >= 0 ? afterIdx : selectedIndex.value,
+        };
+      });
+    };
+
     const items: ContextMenuItem[] = [
-      {
-        label: 'New File',
-        icon: FilePlus,
-        action: () => {
-          const afterIdx = selectedIndex.value;
-          activeCreateRow.value = { parentDir: target, kind: 'file', afterIndex: afterIdx };
-        },
-      },
-      {
-        label: 'New Folder',
-        icon: FolderPlus,
-        action: () => {
-          const afterIdx = selectedIndex.value;
-          activeCreateRow.value = { parentDir: target, kind: 'folder', afterIndex: afterIdx };
-        },
-      },
+      { label: 'New File',   icon: FilePlus,   action: () => startCreate('file') },
+      { label: 'New Folder', icon: FolderPlus, action: () => startCreate('folder') },
     ];
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     headerMenu.value = { x: rect.left, y: rect.bottom + 2, items };
@@ -1515,7 +1550,22 @@ export function FileTree() {
                       parentDir={cr.parentDir}
                       kind={cr.kind}
                       depth={0}
-                      onDone={() => { activeCreateRow.value = null; }}
+                      onDone={(created) => {
+                        activeCreateRow.value = null;
+                        if (!created) return; // cancel / Escape path
+                        // quick-260417-hgw: open file in tab (for files only) and reveal
+                        // in tree. Tree refresh from git-status-changed is synchronous-
+                        // within-microtasks, so rAF is sufficient to let
+                        // refreshTreePreservingState finish before we re-anchor selectedIndex.
+                        if (created.kind === 'file') {
+                          document.dispatchEvent(new CustomEvent('file-opened', {
+                            detail: { path: created.path, name: created.name }
+                          }));
+                        }
+                        requestAnimationFrame(() => {
+                          void revealFileInTree(created.path);
+                        });
+                      }}
                     />
                   )}
                 </>
@@ -1592,7 +1642,22 @@ export function FileTree() {
                       parentDir={cr.parentDir}
                       kind={cr.kind}
                       depth={node.depth + (node.entry.is_dir ? 1 : 0)}
-                      onDone={() => { activeCreateRow.value = null; }}
+                      onDone={(created) => {
+                        activeCreateRow.value = null;
+                        if (!created) return; // cancel / Escape path
+                        // quick-260417-hgw: open file in tab (for files only) and reveal
+                        // in tree. rAF lets refreshTreePreservingState finish (triggered
+                        // by the createFile -> emit 'git-status-changed' chain) before
+                        // we re-anchor selectedIndex via revealFileInTree.
+                        if (created.kind === 'file') {
+                          document.dispatchEvent(new CustomEvent('file-opened', {
+                            detail: { path: created.path, name: created.name }
+                          }));
+                        }
+                        requestAnimationFrame(() => {
+                          void revealFileInTree(created.path);
+                        });
+                      }}
                     />
                   )}
                 </>
