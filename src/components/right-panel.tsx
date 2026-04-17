@@ -9,7 +9,7 @@ import { rightTopTab, rightBottomTab, loadAppState, activeProjectName, projects 
 import { getTheme, registerTerminal } from '../theme/theme-manager';
 import { colors } from '../tokens';
 import { TabBar } from './tab-bar';
-import { GSDViewer } from './gsd-viewer';
+import { GSDPane } from './gsd-pane';
 import { FileTree } from './file-tree';
 
 const RIGHT_TOP_TABS = ['File Tree', 'GSD'];
@@ -108,7 +108,7 @@ export function RightPanel() {
         />
         <div class="right-top-content flex-1 min-h-0 overflow-hidden relative p-1">
           <div style={{ height: '100%', display: rightTopTab.value === 'GSD' ? 'block' : 'none' }}>
-            <GSDViewer />
+            <GSDPane />
           </div>
           <div style={{ height: '100%', display: rightTopTab.value === 'File Tree' ? 'block' : 'none' }}>
             <FileTree />
