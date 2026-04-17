@@ -114,6 +114,9 @@ importers:
       '@testing-library/preact':
         specifier: ^3.2.4
         version: 3.2.4(preact@10.29.1)
+      '@types/mdast':
+        specifier: 4.0.4
+        version: 4.0.4
       '@vitest/coverage-v8':
         specifier: ^4.1.4
         version: 4.1.4(vitest@4.1.4)
