@@ -1202,7 +1202,11 @@ function renderTab(
         data-sticky-tab-id={tab.id}
         title={label}
         onClick={() => onClick(tab)}
-        class={`unified-tab sticky-tab ${isActive ? 'active' : ''}`}
+        // Fix #2 (20-05-B): block WKWebView text-selection initiated by a
+        // drag attempt on a sticky tab. preventDefault on mousedown stops
+        // the browser from starting a text-selection range.
+        onMouseDown={(e: MouseEvent) => { e.preventDefault(); }}
+        class={`unified-tab sticky-tab select-none ${isActive ? 'active' : ''}`}
         style={{
           padding: '8px 12px',
           fontSize: '11px',
@@ -1215,11 +1219,12 @@ function renderTab(
           gap: '4px',
           cursor: 'pointer',
           userSelect: 'none',
+          WebkitUserSelect: 'none',
           flexShrink: 0,
         }}
       >
-        <Icon size={14} style={{ color: iconColor, flexShrink: 0 }} />
-        <span>{label}</span>
+        <Icon size={14} style={{ color: iconColor, flexShrink: 0, pointerEvents: 'none' }} />
+        <span style={{ userSelect: 'none', WebkitUserSelect: 'none', pointerEvents: 'none' }}>{label}</span>
         {/* No close button — sticky tabs are uncloseable (D-03). */}
         {/* No onDblClick — sticky tabs cannot be renamed (D-03). */}
       </div>

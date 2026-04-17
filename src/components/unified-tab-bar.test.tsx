@@ -191,6 +191,37 @@ describe('UnifiedTabBar scope prop (Phase 20, Plan 02)', () => {
     });
   });
 
+  // ─── Fix #2: sticky tab text selection blocked during drag attempt ──────
+
+  describe('Fix #2 sticky tabs block text selection on drag attempt', () => {
+    it('sticky File Tree tab has userSelect:none and WebkitUserSelect:none', () => {
+      const { container } = render(<UnifiedTabBar scope="right" />);
+      const el = container.querySelector('[data-sticky-tab-id="file-tree"]') as HTMLElement;
+      expect(el).not.toBeNull();
+      // Inline style set by the renderer
+      expect(el.style.userSelect).toBe('none');
+      expect(el.style.webkitUserSelect).toBe('none');
+    });
+
+    it('sticky GSD tab has userSelect:none and WebkitUserSelect:none', () => {
+      const { container } = render(<UnifiedTabBar scope="right" />);
+      const el = container.querySelector('[data-sticky-tab-id="gsd"]') as HTMLElement;
+      expect(el).not.toBeNull();
+      expect(el.style.userSelect).toBe('none');
+      expect(el.style.webkitUserSelect).toBe('none');
+    });
+
+    it('mousedown on sticky tab calls preventDefault (blocks text-select drag)', () => {
+      const { container } = render(<UnifiedTabBar scope="right" />);
+      const el = container.querySelector('[data-sticky-tab-id="file-tree"]') as HTMLElement;
+      expect(el).not.toBeNull();
+      const ev = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      const defaultPrevented = !el.dispatchEvent(ev);
+      // dispatchEvent returns false when preventDefault was called
+      expect(defaultPrevented || ev.defaultPrevented).toBe(true);
+    });
+  });
+
   // ─── Fix #1: dropdown flip when near viewport right edge ──────────────────
 
   describe('Fix #1 plus-menu dropdown flips when near viewport right edge', () => {
