@@ -64,6 +64,27 @@ pub struct GitFileEntry {
     pub status: String, // "M", "S", "U"
 }
 
+/// Extract a display name from a relative git path.
+///
+/// libgit2's status iterator can return entries with a trailing `/` for
+/// untracked entries that are themselves directories — most commonly
+/// nested git repositories such as git worktrees, where libgit2 reports
+/// the directory as a single opaque entry instead of recursing into it.
+///
+/// A naive `path.split('/').last()` returns `""` for those entries, which
+/// surfaced in the UI as "blank filename" rows in the git panel
+/// (debug session: git-blank-filenames). This helper strips the trailing
+/// slash before extracting the basename so the directory name is shown.
+fn extract_display_name(rel_path: &str) -> String {
+    let trimmed = rel_path.trim_end_matches('/');
+    trimmed
+        .rsplit('/')
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or(rel_path)
+        .to_string()
+}
+
 /// Synchronous inner implementation of get_git_files for testing.
 pub fn get_git_files_impl(path: &str) -> Result<Vec<GitFileEntry>, String> {
     let repo = Repository::open(path).map_err(|e| e.to_string())?;
@@ -78,8 +99,12 @@ pub fn get_git_files_impl(path: &str) -> Result<Vec<GitFileEntry>, String> {
     for entry in statuses.iter() {
         let flags = entry.status();
         let rel_path = entry.path().unwrap_or("").to_string();
-        let name = rel_path.split('/').last().unwrap_or(&rel_path).to_string();
-        let full_path = format!("{}/{}", path, rel_path);
+        // libgit2 may return a trailing '/' for nested-repo / worktree dirs
+        // that it does not recurse into. Strip it so the filename render is
+        // not blank and downstream stage/diff calls receive a clean path.
+        let trimmed_rel = rel_path.trim_end_matches('/').to_string();
+        let name = extract_display_name(&rel_path);
+        let full_path = format!("{}/{}", path, trimmed_rel);
         let status = if flags.intersects(
             git2::Status::INDEX_MODIFIED
                 | git2::Status::INDEX_NEW
@@ -294,5 +319,83 @@ mod tests {
         assert_eq!(file_statuses.get("staged.txt").map(|s| *s), Some("S"));
         assert_eq!(file_statuses.get("modified.txt").map(|s| *s), Some("M"));
         assert_eq!(file_statuses.get("untracked.txt").map(|s| *s), Some("U"));
+    }
+
+    // ─── extract_display_name unit tests ────────────────────────────────────
+
+    #[test]
+    fn extract_display_name_handles_plain_file() {
+        assert_eq!(extract_display_name("foo.txt"), "foo.txt");
+    }
+
+    #[test]
+    fn extract_display_name_handles_nested_file() {
+        assert_eq!(extract_display_name("src/lib/foo.txt"), "foo.txt");
+    }
+
+    #[test]
+    fn extract_display_name_handles_trailing_slash_dir() {
+        // Reproduces the git-blank-filenames bug: libgit2 returns nested-repo
+        // dirs with a trailing '/' which previously caused blank UI rows.
+        assert_eq!(
+            extract_display_name(".claude/worktrees/agent-a515d87e/"),
+            "agent-a515d87e"
+        );
+    }
+
+    #[test]
+    fn extract_display_name_handles_top_level_dir_with_slash() {
+        assert_eq!(extract_display_name("worktrees/"), "worktrees");
+    }
+
+    #[test]
+    fn extract_display_name_handles_empty_string() {
+        // Defensive — should never happen, but should not panic.
+        assert_eq!(extract_display_name(""), "");
+    }
+
+    // ─── nested-repo regression test ────────────────────────────────────────
+
+    /// Regression test for git-blank-filenames: when an untracked directory
+    /// is itself a git repository (such as a git worktree), libgit2 reports
+    /// it as a single entry with a trailing slash and does not recurse into
+    /// it. Previously this produced a `GitFileEntry` with an empty `name`
+    /// field, which rendered as a blank row in the git panel.
+    #[test]
+    fn get_git_files_handles_untracked_nested_repo_dir() {
+        let (outer_dir, outer_path) = setup_git_repo();
+
+        // Create an untracked subdir that is itself a git repo (mimics a
+        // git worktree / nested repo). libgit2 will report this as a single
+        // untracked entry with a trailing slash.
+        let nested_dir = outer_dir.path().join("nested-repo");
+        std::fs::create_dir(&nested_dir).unwrap();
+        run_git(&nested_dir, &["init"]);
+        run_git(&nested_dir, &["config", "user.email", "n@n.com"]);
+        run_git(&nested_dir, &["config", "user.name", "Nested"]);
+        // Add at least one file so the nested repo is non-empty
+        std::fs::write(nested_dir.join("inner.txt"), "x").unwrap();
+
+        let files = get_git_files_impl(&outer_path).unwrap();
+        let nested_entry = files
+            .iter()
+            .find(|f| f.path.contains("nested-repo"))
+            .expect("nested-repo dir should appear as a git entry");
+
+        assert!(
+            !nested_entry.name.is_empty(),
+            "name must not be blank for nested-repo dir, got: {:?}",
+            nested_entry
+        );
+        assert_eq!(
+            nested_entry.name, "nested-repo",
+            "name should be the directory's basename"
+        );
+        assert!(
+            !nested_entry.path.ends_with('/'),
+            "path should not have a trailing slash, got: {:?}",
+            nested_entry.path
+        );
+        assert_eq!(nested_entry.status, "U");
     }
 }
