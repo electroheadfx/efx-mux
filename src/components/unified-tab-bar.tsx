@@ -277,7 +277,7 @@ export function renameEditorTab(tabId: string, newName: string): void {
  * Persist the current editorTabs to state.json under the active project's key.
  * Saves only filePath and fileName (not content -- file content is re-read from disk on restore).
  */
-function persistEditorTabs(): void {
+export function persistEditorTabs(): void {
   const activeName = activeProjectName.value;
   const tabs = editorTabs.value.map(t => ({
     filePath: t.filePath,
@@ -358,6 +358,14 @@ export function suppressEditorPersist(on: boolean): void { _suppressPersist = on
 
 // Watch editorTabs changes and persist
 editorTabs.subscribe(() => {
+  if (!_suppressPersist) persistEditorTabs();
+});
+
+// quick-260417-f6e: also persist when the active tab changes (clicking between
+// already-open editor tabs mutates activeUnifiedTabId but NOT editorTabs, so
+// the prior editorTabs-only subscription missed every focus change — next boot
+// restored whichever tab was last ADDED instead of last FOCUSED).
+activeUnifiedTabId.subscribe(() => {
   if (!_suppressPersist) persistEditorTabs();
 });
 

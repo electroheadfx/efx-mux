@@ -32,7 +32,7 @@ import {
   getProjects, getActiveProject, projects, activeProjectName
 } from './state-manager';
 import { openProjectModal } from './components/project-modal';
-import { openEditorTab, openEditorTabPinned, restoreEditorTabs, activeUnifiedTabId, closeUnifiedTab, suppressEditorPersist } from './components/unified-tab-bar';
+import { openEditorTab, openEditorTabPinned, restoreEditorTabs, activeUnifiedTabId, closeUnifiedTab, suppressEditorPersist, persistEditorTabs } from './components/unified-tab-bar';
 import { serverPaneState, saveCurrentProjectState, restoreProjectState } from './components/server-pane';
 import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from './components/file-tree';
 import { detectAgent } from './server/server-bridge';
@@ -460,6 +460,10 @@ async function bootstrap() {
       await restoreEditorTabs(activeName);
     }
     suppressEditorPersist(false);
+    // quick-260417-f6e: flush restored focus back to state.json (subscribe fires
+    // only on changes, and the restore loop's last activeUnifiedTabId assignment
+    // happened while persist was suppressed).
+    persistEditorTabs();
 
     // Apply right-h-pct after DOM is ready
     if (appState?.layout?.['right-h-pct']) {
@@ -548,8 +552,15 @@ document.addEventListener('project-changed', async (e: Event) => {
         await initFirstTab(themeOptions, newMainSession, project.path, agentBinary ?? undefined);
       }
 
-      // Restore editor tabs for the new project
+      // Restore editor tabs for the new project.
+      // quick-260417-f6e: suppress persist during the restore loop — each
+      // open*EditorTab() mutation would otherwise overwrite activeFilePath in
+      // state.json with whatever tab was opened LAST, clobbering the saved focus.
+      suppressEditorPersist(true);
       await restoreEditorTabs(newProjectName);
+      suppressEditorPersist(false);
+      // Force one persist now that activeUnifiedTabId has been set to the saved focus
+      persistEditorTabs();
 
       // Switch right panel bash terminal (silent via Rust)
       const newRightSession = projectSessionName(newProjectName, 'right');
