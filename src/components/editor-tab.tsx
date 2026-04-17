@@ -8,7 +8,7 @@ import { createEditorState, registerEditorView, unregisterEditorView, registerSa
 import { getLanguageExtension } from '../editor/languages';
 import { writeFile, readFile } from '../services/file-service';
 import { showToast } from './toast';
-import { setEditorDirty } from './unified-tab-bar';
+import { setEditorDirty, closeEditorTabForDeletedFile } from './unified-tab-bar';
 
 // ── Props ─────────────────────────────────────────────────────────────────────────
 
@@ -102,8 +102,17 @@ export function EditorTab({ tabId, filePath, fileName, content, isActive }: Edit
           setupRef.current.setSavedContent(diskContent);
           setEditorDirty(tabId, false);
         }
-      } catch {
-        // File may have been deleted -- ignore
+      } catch (err) {
+        // Plan 18-11 (Gap G-01 secondary fix): auto-close the tab when the file
+        // has been deleted from disk. Match common FS not-found error text so
+        // permission errors / other transient failures still silently retry on
+        // the next emit. closeEditorTabForDeletedFile bypasses the unsaved-changes
+        // confirm modal because the file is gone — saving is impossible.
+        const msg = err instanceof Error ? err.message : String(err);
+        if (/no such file|not found|notfound|os error 2/i.test(msg)) {
+          closeEditorTabForDeletedFile(filePath);
+        }
+        // else: transient failure — ignore, listener will re-run on next emit.
       }
     });
     return () => {
