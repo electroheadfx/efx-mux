@@ -31,7 +31,9 @@ export const fileTreeLineHeight = signal(2);
 export const fileTreeBgColor = signal('');
 
 // View mode signal
-const viewMode = signal<'flat' | 'tree'>('tree');
+// quick-260417-iat: exported so tests can deterministically set mode without
+// depending on DOM toggle click ordering (existing export pattern: fileTreeFontSize).
+export const viewMode = signal<'flat' | 'tree'>('tree');
 
 // Local signals for component state
 interface FileEntry {
@@ -47,13 +49,17 @@ const entries = signal<FileEntry[]>([]);
 // editor tab active -> revealFileInTree() writes a real index. Row 0 was the prior
 // default, which made the tree LIE about having a file open when the user was looking
 // at a terminal.
-const selectedIndex = signal(-1);
+// quick-260417-iat: exported so folder-delete tests can assert the selection index
+// after a single-click without relying on computed-color inspection.
+export const selectedIndex = signal(-1);
 // Phase 18 quick-260416-uig (bug 3): hoveredIndex is decoupled from selectedIndex.
 // Click / keyboard / reveal -> selectedIndex (drives white filename + persistent bg).
 // Mouse hover -> hoveredIndex (drives bg tint only; filename color is unchanged).
 // -1 means "no row currently hovered".
 const hoveredIndex = signal(-1);
-const currentPath = signal('');
+// quick-260417-iat: exported so flat-mode single-click-does-not-navigate tests can
+// read the active path without relying on header-rendered text fragments.
+export const currentPath = signal('');
 const loaded = signal(false);
 
 // Phase 18 (D-01..D-26): context menu + create-row state
@@ -1517,12 +1523,30 @@ export function FileTree() {
                       WebkitUserSelect: 'none',
                     }}
                     onClick={() => {
+                      // quick-260417-iat: move keyboard focus to the scroll container so
+                      // subsequent keydowns (Delete, Backspace, Cmd+Backspace) reach
+                      // handleKeydown. The container has tabIndex=0 but clicking a nested
+                      // div doesn't auto-focus it. preventScroll avoids the container
+                      // jumping when selecting a row already in view.
+                      scrollContainerRef.current?.focus({ preventScroll: true });
                       selectedIndex.value = i;
                       if (entry.is_dir) {
-                        loadDir(entry.path);
+                        // quick-260417-iat: single-click a folder now SELECTS ONLY.
+                        // loadDir moved to onDblClick (see below) + Enter (handleFlatKeydown).
+                        // This matches Finder/VS Code/Zed conventions AND fixes the
+                        // keyboard-delete-for-folders gap: loadDir resets selectedIndex
+                        // to -1, so Delete right after a single-click targeted
+                        // entries.value[-1] = undefined.
                       } else {
                         handleFileClick(entry.path, entry.name);
                       }
+                    }}
+                    onDblClick={() => {
+                      // quick-260417-iat: double-click on a folder navigates into it,
+                      // replacing the old single-click-to-navigate behavior. Files keep
+                      // the existing single-click-to-open behavior (no onDblClick handler
+                      // needed for them).
+                      if (entry.is_dir) void loadDir(entry.path);
                     }}
                     onMouseEnter={() => { hoveredIndex.value = i; }}
                     onMouseLeave={() => { if (hoveredIndex.value === i) hoveredIndex.value = -1; }}
@@ -1601,6 +1625,12 @@ export function FileTree() {
                       WebkitUserSelect: 'none',
                     }}
                     onClick={() => {
+                      // quick-260417-iat: focus the scroll container on click so
+                      // the already-wired onKeyDown handler (Delete / Backspace /
+                      // Cmd+Backspace → triggerDeleteConfirm) fires for folders too.
+                      // Tree-mode selectedIndex is preserved by toggleTreeNode, so no
+                      // other behavior change is needed here — only the focus fix.
+                      scrollContainerRef.current?.focus({ preventScroll: true });
                       selectedIndex.value = i;
                       if (node.entry.is_dir) {
                         toggleTreeNode(node);

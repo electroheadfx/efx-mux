@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/preact';
 import { mockIPC } from '@tauri-apps/api/mocks';
-import { FileTree, fileTreeFontSize, fileTreeLineHeight, detectedEditors } from './file-tree';
+import { FileTree, fileTreeFontSize, fileTreeLineHeight, detectedEditors, viewMode, selectedIndex, currentPath } from './file-tree';
 import { ConfirmModal } from './confirm-modal';
 import { ToastContainer } from './toast';
 import { projects, activeProjectName } from '../state-manager';
@@ -158,6 +158,12 @@ describe('delete key (UAT Test 5 fix)', () => {
     // Phase 18 Plan 09: reset the capture each run so the 'Cmd+Backspace' test
     // sees a freshly-registered listener from its own render() call.
     capturedDeleteListener = null;
+    // quick-260417-iat: viewMode is module-scoped; restore the production default
+    // ('tree') before each test so our Tests A-D can opt into flat mode explicitly
+    // without poisoning later describe blocks (e.g. 'tree state preservation'
+    // which relies on default=tree mode hydration).
+    viewMode.value = 'tree';
+    selectedIndex.value = -1;
 
     mockIPC((cmd, _args) => {
       if (cmd === 'list_directory') return MOCK_ENTRIES;
@@ -165,6 +171,13 @@ describe('delete key (UAT Test 5 fix)', () => {
       if (cmd === 'delete_file') return null;
       return null;
     });
+  });
+
+  afterEach(() => {
+    // quick-260417-iat: leave the module signals in their production-default state
+    // so the next describe block (tree state preservation, etc.) starts clean.
+    viewMode.value = 'tree';
+    selectedIndex.value = -1;
   });
 
   it('pressing Delete on focused scroll container surfaces ConfirmModal with "permanently deleted" copy', async () => {
@@ -245,6 +258,124 @@ describe('delete key (UAT Test 5 fix)', () => {
 
     // Same assertion as the Delete-key test: modal surfaces with "permanently deleted".
     expect(document.body.textContent).toMatch(/permanently deleted/);
+  });
+
+  // ── quick-260417-iat: folder delete via keyboard shortcut ─────────────────
+  //
+  // The keyboard delete handlers already branch on selectedIndex and have no
+  // is_dir filter (handleFlatKeydown/handleTreeKeydown 'Delete' + Cmd+'Backspace'
+  // both read entries.value[idx] / flattenedTree.value[idx].entry). The bug was
+  // elsewhere: clicking a row did not focus the [tabindex=0] scroll container,
+  // so subsequent keydowns never fired handleKeydown. In flat mode there was a
+  // second bug: single-clicking a folder called loadDir() which resets
+  // selectedIndex to -1, so even if focus had landed the delete would target
+  // an undefined entry.
+  //
+  // These tests codify the fix as assertions BEFORE patching file-tree.tsx.
+
+  it('Test A: clicking a folder in tree mode and pressing Delete opens the Delete folder ConfirmModal', async () => {
+    // Explicitly set tree mode (default, but guard against describe leakage).
+    viewMode.value = 'tree';
+    render(
+      <>
+        <FileTree />
+        <ConfirmModal />
+      </>
+    );
+    await new Promise(r => setTimeout(r, 50));
+
+    const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(rows.length).toBeGreaterThan(0);
+
+    // Click the 'src' folder row (MOCK_ENTRIES[0]).
+    fireEvent.click(rows[0]);
+    await new Promise(r => setTimeout(r, 20));
+
+    // Fire Delete on the scroll container. After the focus fix, the container
+    // has focus (from click) so fireEvent.keyDown on it reaches handleKeydown.
+    const fileList = document.querySelector('[tabindex="0"]') as HTMLElement;
+    fireEvent.keyDown(fileList, { key: 'Delete' });
+    // Allow async count_children (folder path) + modal render to settle.
+    await new Promise(r => setTimeout(r, 80));
+
+    // Modal title must be the folder-specific template (triggerDeleteConfirm
+    // branches on entry.is_dir and renders "Delete folder {name}?").
+    expect(document.body.textContent).toMatch(/Delete folder src\?/);
+    expect(document.body.textContent).toMatch(/permanently deleted/);
+  });
+
+  it('Test B: clicking a row moves keyboard focus to the scroll container', async () => {
+    // Tree mode (default). The focus fix applies to both modes; asserting
+    // in the default mode keeps this test mode-agnostic w.r.t. describe order.
+    viewMode.value = 'tree';
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+
+    const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(rows.length).toBeGreaterThan(0);
+    const fileList = document.querySelector('[tabindex="0"]') as HTMLElement;
+    expect(fileList).not.toBeNull();
+
+    // Before the click, nothing forces focus onto the scroll container.
+    fireEvent.click(rows[0]);
+    await new Promise(r => setTimeout(r, 20));
+
+    // After the fix, the row onClick calls scrollContainerRef.current.focus(),
+    // so activeElement is now the [tabindex=0] scroll container.
+    expect(document.activeElement).toBe(fileList);
+  });
+
+  it('Test C: flat-mode folder single-click selects without auto-navigating, then Delete deletes the folder', async () => {
+    // Switch to flat mode via the exported signal.
+    viewMode.value = 'flat';
+    render(
+      <>
+        <FileTree />
+        <ConfirmModal />
+      </>
+    );
+    await new Promise(r => setTimeout(r, 50));
+
+    const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(rows.length).toBeGreaterThan(0);
+
+    // Snapshot currentPath before click; after the fix the click must NOT call
+    // loadDir so the path stays at the project root value that initial load set.
+    const pathBeforeClick = currentPath.value;
+
+    // Single-click the 'src' folder row (MOCK_ENTRIES[0]).
+    fireEvent.click(rows[0]);
+    await new Promise(r => setTimeout(r, 20));
+
+    // Selection lands on the clicked folder row (not reset to -1 by loadDir).
+    expect(selectedIndex.value).toBe(0);
+    // Path did not change — no navigation on single-click.
+    expect(currentPath.value).toBe(pathBeforeClick);
+
+    // Delete key reaches handleFlatKeydown (focus is on the container) and
+    // targets the selected folder entry — modal shows folder-specific title.
+    const fileList = document.querySelector('[tabindex="0"]') as HTMLElement;
+    fireEvent.keyDown(fileList, { key: 'Delete' });
+    await new Promise(r => setTimeout(r, 80));
+
+    expect(document.body.textContent).toMatch(/Delete folder src\?/);
+  });
+
+  it('Test D: flat-mode folder double-click still navigates into the folder', async () => {
+    viewMode.value = 'flat';
+    render(<FileTree />);
+    await new Promise(r => setTimeout(r, 50));
+
+    const rows = document.querySelectorAll<HTMLElement>('[data-file-tree-index]');
+    expect(rows.length).toBeGreaterThan(0);
+
+    // Double-click the 'src' folder row.
+    fireEvent.dblClick(rows[0]);
+    // Allow loadDir -> invoke('list_directory') -> entries+currentPath updates.
+    await new Promise(r => setTimeout(r, 80));
+
+    // Navigation happened — currentPath is now the clicked folder's path.
+    expect(currentPath.value).toBe('/tmp/proj/src');
   });
 });
 
