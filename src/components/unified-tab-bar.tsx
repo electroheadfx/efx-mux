@@ -289,9 +289,26 @@ export function persistEditorTabs(): void {
   // fires with [] before restoreEditorTabs runs (activeProjectName set triggers
   // recompute on empty _editorTabsByProject Map)
   if (tabs.length === 0) return;
-  // Save active file path (not tab ID which gets regenerated on restore)
+  // Save active file path (not tab ID which gets regenerated on restore).
+  // quick-260417-f6e: when activeUnifiedTabId points to a tab that doesn't belong
+  // to THIS project (e.g. during project switch the signal still holds the prior
+  // project's terminal/editor id before the handler restores focus), preserve
+  // the previously persisted activeFilePath instead of blanking it. Blanking
+  // would corrupt saved focus and make the next restore open the wrong file.
   const activeTab = editorTabs.value.find(t => t.id === activeUnifiedTabId.value);
-  const activeFilePath = activeTab?.filePath ?? '';
+  let activeFilePath: string;
+  if (activeTab) {
+    activeFilePath = activeTab.filePath;
+  } else {
+    const prior = activeName ? getCurrentState()?.session?.[`editor-tabs:${activeName}`] : null;
+    let priorActive = '';
+    if (prior) {
+      try {
+        priorActive = (JSON.parse(prior)?.activeFilePath as string) ?? '';
+      } catch { /* fall through */ }
+    }
+    activeFilePath = priorActive;
+  }
   const data = JSON.stringify({ tabs, activeTabId: activeUnifiedTabId.value, activeFilePath });
   const patch: Record<string, string> = { 'editor-tabs': data };
   if (activeName) {
