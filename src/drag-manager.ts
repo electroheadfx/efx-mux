@@ -87,35 +87,11 @@ export function initDragManager(): void {
     });
   }
 
-  // -- Right top <-> Right bottom horizontal handle ----------------------------
-  const rightHHandle = document.querySelector<HTMLElement>('[data-handle="right-h"]');
-  if (rightHHandle) {
-    makeDragH(rightHHandle, {
-      onDrag(clientY: number) {
-        // clientY is the Y position within the right panel.
-        // We want to set the top sub-panel's flex-basis.
-        const rightPanel = document.querySelector<HTMLElement>('.right-panel');
-        if (!rightPanel) return;
-        const rect = rightPanel.getBoundingClientRect();
-        const rawPct = ((clientY - rect.top) / rect.height) * 100;
-        // Clamp: top panel min 15%, max 85%
-        const pct = Math.min(85, Math.max(15, rawPct));
-        // Apply as flex-basis on .right-top and .right-bottom
-        const rightTop = rightPanel.querySelector<HTMLElement>('.right-top');
-        const rightBottom = rightPanel.querySelector<HTMLElement>('.right-bottom');
-        if (rightTop)    rightTop.style.flex    = `0 0 ${pct.toFixed(1)}%`;
-        if (rightBottom) rightBottom.style.flex = `0 0 ${(100 - pct).toFixed(1)}%`;
-        // Store as a data attribute for persistence
-        rightPanel.dataset.splitPct = pct.toFixed(1);
-      },
-      onEnd(_clientY: number) {
-        const rightPanel = document.querySelector<HTMLElement>('.right-panel');
-        if (!rightPanel) return;
-        const pct = parseFloat(rightPanel.dataset.splitPct || '50');
-        updateLayout({ 'right-h-pct': `${pct.toFixed(1)}` });
-      },
-    });
-  }
+  // -- Phase 20 D-01: the Right top <-> Right bottom horizontal handle block
+  //    is removed. The right panel is now a single-pane shell driven by
+  //    UnifiedTabBar scope="right"; there is no internal horizontal split, and
+  //    `right-h-pct` is no longer written to state.json (migration in
+  //    state-manager.ts silently drops any stale value).
 }
 
 // --- Vertical drag helper ----------------------------------------------------
