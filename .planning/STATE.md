@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: Workspace Evolution
 status: executing
-stopped_at: Phase 20 context gathered
-last_updated: "2026-04-17T16:53:56.295Z"
-last_activity: 2026-04-17
+stopped_at: Phase 20 UI-SPEC approved
+last_updated: "2026-04-17T20:17:29.412Z"
+last_activity: 2026-04-17 -- Phase 20 execution started
 progress:
   total_phases: 7
   completed_phases: 5
-  total_plans: 27
+  total_plans: 31
   completed_plans: 27
-  percent: 100
+  percent: 87
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** A single native macOS window that co-locates AI agent terminals alongside live GSD progress, git diff, and file tree -- all persisted across restarts via tmux.
-**Current focus:** Phase 19 — gsd-sub-tabs
+**Current focus:** Phase 20 — right-panel-multi-terminal
 
 ## Current Position
 
-Phase: 19 (gsd-sub-tabs) — EXECUTING
-Plan: 4 of 4
-Status: Ready to execute
-Last activity: 2026-04-17
+Phase: 20 (right-panel-multi-terminal) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 20
+Last activity: 2026-04-17 -- Phase 20 execution started
 
 **Code review fixes pending (non-blocking):**
 
@@ -120,8 +120,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-17T16:53:56.292Z
-Stopped at: Phase 20 context gathered
-Resume file: .planning/phases/20-right-panel-multi-terminal/20-CONTEXT.md
+Last session: 2026-04-17T17:04:44.160Z
+Stopped at: Phase 20 UI-SPEC approved
+Resume file: /Users/lmarques/Dev/efx-mux/.planning/phases/20-right-panel-multi-terminal/20-UI-SPEC.md
 
 Next: `/gsd-execute-phase 15` or `/gsd-code-review-fix 17` to fix remaining warnings
