@@ -160,6 +160,30 @@ describe('terminal-tabs scope registry', () => {
       expect(getTerminalScope('main').tabs.value[0]?.ownerScope).toBe('main');
       expect(getTerminalScope('right').tabs.value[0]?.ownerScope).toBe('right');
     });
+
+    // Fix #2 (20-05-E): right-scope Agent tabs must be labeled `Agent <name>`,
+    // mirroring initFirstTab's main-scope policy. Regression scenario: user
+    // clicked "Agent" in the right panel plus-menu and got "Terminal N" (or
+    // "Agent claude (no binary)") instead of the expected "Agent claude".
+    it('right-scope createNewTab({ isAgent: true }) labels the tab "Agent <name>"', async () => {
+      await getTerminalScope('right').createNewTab({ isAgent: true });
+      const tab = getTerminalScope('right').tabs.value[0];
+      expect(tab).toBeDefined();
+      expect(tab?.label).toBe('Agent bash');
+    });
+
+    it('main-scope createNewTab({ isAgent: true }) still labels the tab "Agent <name>" (no regression)', async () => {
+      await getTerminalScope('main').createNewTab({ isAgent: true });
+      const tab = getTerminalScope('main').tabs.value[0];
+      expect(tab).toBeDefined();
+      expect(tab?.label).toBe('Agent bash');
+    });
+
+    it('right-scope plain terminal (no isAgent) still gets "Terminal N" label', async () => {
+      await getTerminalScope('right').createNewTab();
+      const tab = getTerminalScope('right').tabs.value[0];
+      expect(tab?.label).toMatch(/^Terminal \d+$/);
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────────────

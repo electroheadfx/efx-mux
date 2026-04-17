@@ -199,13 +199,20 @@ async function createNewTabScoped(
   }
   const isAgent = wantAgent && !!agentBinary;
 
-  // Label: agent tabs get the agent name, plain tabs get "Terminal N"
+  // Label: agent tabs get the agent name, plain tabs get "Terminal N".
+  //
+  // Fix #2 (20-05-E): mirror initFirstTab's main-scope label policy —
+  // when the user requested an Agent tab (`wantAgent === true`), always
+  // label it `Agent <name>` using the project's configured agent command,
+  // regardless of whether the agent binary actually resolved. The UAT
+  // reported right-scope Agent tabs showing "Terminal N" (or, in
+  // test-without-mock conditions, "Agent claude (no binary)") — both hide
+  // the user-meaningful label. Binary resolution still gates PTY spawn
+  // (`agentBinary` below), so a missing binary becomes a runtime warning
+  // written into the terminal, not a corrupted tab label.
   let label: string;
-  if (isAgent) {
+  if (wantAgent) {
     label = agentLabel(projectInfo?.agent);
-  } else if (wantAgent && !agentBinary) {
-    // User requested agent but binary not found — label makes failure visible
-    label = `${agentLabel(projectInfo?.agent)} (no binary)`;
   } else {
     label = `Terminal ${s.counter.n}`;
   }
