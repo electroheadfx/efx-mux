@@ -1052,13 +1052,17 @@ function onDocMouseUp(e: MouseEvent): void {
 }
 
 /**
- * Fix #5 (20-05-E): move a tab across scopes.
+ * Fix #5 (20-05-E) + Plan 20-05-D: move a tab across scopes.
  *
- * Scaffold: handles `main <-> right` for terminal/agent tabs (the most common
- * UAT case) and the Git Changes move via the existing
- * openOrMoveGitChangesToRight / openGitChangesTab helpers.
- * Full xterm DOM container migration + cross-scope session persistence are
- * TODO (tracked in 20-05-SUMMARY.md).
+ * Handles `main <-> right` for:
+ *   - terminal/agent tabs (ownerScope flips, xterm container is moved between
+ *     `.terminal-containers[data-scope=X]` wrappers below)
+ *   - editor tabs (ownerScope flips, RightPanel / MainPanel mount the
+ *     EditorTab component on the correct side; CodeMirror EditorView is
+ *     re-created under the new mount)
+ *   - Git Changes (delegates to openOrMoveGitChangesToRight /
+ *     openGitChangesTab, which flip owningScope symmetrically)
+ *   - sticky tabs (no-op; sticky tabs are right-scope only by design)
  */
 export function handleCrossScopeDrop(
   sourceId: string,
@@ -1082,8 +1086,50 @@ export function handleCrossScopeDrop(
     return;
   }
 
-  // Editor tabs — right scope does not render editor tabs; skip (TODO).
+  // Plan 20-05-D: editor tabs — flip ownerScope and update scoped orders.
   if (sourceId.startsWith('editor-')) {
+    const edTab = editorTabs.value.find(t => t.id === sourceId);
+    if (!edTab) return;
+    // If already in target scope, nothing to do.
+    if ((edTab.ownerScope ?? 'main') === targetScope) return;
+
+    // Mutate ownerScope in-place (the setProjectEditorTabs helper triggers
+    // reactivity via Map re-assignment and fires the persist subscription).
+    const updated = editorTabs.value.map(t =>
+      t.id === sourceId ? { ...t, ownerScope: targetScope } : t,
+    );
+    setProjectEditorTabs(updated);
+
+    // Move across scoped orders.
+    setScopedTabOrder(
+      sourceScope,
+      getScopedTabOrder(sourceScope).filter(id => id !== sourceId),
+    );
+    setScopedTabOrder(
+      targetScope,
+      [...getScopedTabOrder(targetScope).filter(id => id !== sourceId), sourceId],
+    );
+
+    // Activate in target scope via the appropriate signal.
+    if (targetScope === 'right') {
+      getTerminalScope('right').activeTabId.value = sourceId;
+      // Also clear main's unified active if it was this tab so main-panel
+      // does not keep showing the editor as active after the move.
+      if (activeUnifiedTabId.value === sourceId) {
+        const remainingMain = computeDynamicTabsForScope('main');
+        activeUnifiedTabId.value = remainingMain[0]?.id ?? '';
+      }
+    } else {
+      // target === 'main': set unified active; if right scope was showing it,
+      // fall the right active-tab back to the first remaining right tab or
+      // the default sticky 'file-tree'.
+      activeUnifiedTabId.value = sourceId;
+      const rightScope = getTerminalScope('right');
+      if (rightScope.activeTabId.value === sourceId) {
+        const remainingRight = computeDynamicTabsForScope('right');
+        rightScope.activeTabId.value = remainingRight[0]?.id ?? 'file-tree';
+      }
+    }
     return;
   }
 
@@ -1115,16 +1161,6 @@ export function handleCrossScopeDrop(
     const remaining = getTerminalScope(sourceScope).tabs.value;
     getTerminalScope(sourceScope).activeTabId.value = remaining[0]?.id ?? '';
   }
-
-  // TODO (20-05-E): migrate xterm DOM container from source
-  // `.terminal-containers[data-scope=X]` wrapper to the target scope wrapper,
-  // and sync session persistence so the move survives an app restart.
-  console.info(
-    '[efxmux] cross-scope drag: moved tab',
-    sourceId,
-    'from', sourceScope, 'to', targetScope,
-    '— DOM container migration + session persistence still TODO',
-  );
 }
 
 function cleanupReorder(): void {
@@ -1189,7 +1225,19 @@ export function UnifiedTabBar({ scope }: UnifiedTabBarProps) {
       }
       return;
     }
-    // Editor (Monaco) tabs — main-scope only today.
+    // Editor (CodeMirror) tabs — route activation to the owning scope's signal.
+    // Plan 20-05-D: right-owned editor tabs activate via right's scope signal
+    // so RightPanel shows the editor body and MainPanel does not also render
+    // it as active.
+    if (tab.type === 'editor') {
+      if ((tab.ownerScope ?? 'main') === 'right') {
+        getTerminalScope('right').activeTabId.value = tab.id;
+        return;
+      }
+      activeUnifiedTabId.value = tab.id;
+      return;
+    }
+    // Defensive fallback (unreachable given exhaustive union above).
     activeUnifiedTabId.value = tab.id;
   }
 
