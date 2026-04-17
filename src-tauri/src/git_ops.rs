@@ -461,32 +461,64 @@ pub async fn uncommit(repo_path: String) -> Result<(), String> {
 }
 
 /// Synchronous inner implementation of revert_file for testing.
-/// Discards working tree changes for a tracked modified file using system git.
-/// For untracked files (`?` status), git checkout is a no-op which is correct --
-/// untracked files should not be silently deleted.
+///
+/// UAT Test 18 fix (2026-04-16): status-aware branching.
+/// Earlier versions ran `git checkout -- <path>` unconditionally, which exits 1
+/// for untracked files ("pathspec did not match any file(s) known to git").
+///
+/// Behavior by file status:
+///   - WT_NEW (untracked, working-tree-only): delete the file from disk.
+///   - WT_MODIFIED | WT_DELETED | WT_TYPECHANGE | WT_RENAMED: `git checkout -- <path>`.
+///   - CURRENT (no changes): Ok(()) no-op.
+///   - Other (purely INDEX_*): Ok(()) no-op (per-file revert button is not shown for
+///     staged-only files; defensive default).
 pub fn revert_file_impl(repo_path: &str, file_path: &str) -> Result<(), GitError> {
     let repo = Repository::open(repo_path).map_err(|_| GitError::NotARepo)?;
 
     // Get workdir for relative path calculation
-    let workdir = repo.workdir().ok_or(GitError::NotARepo)?;
+    let workdir = repo.workdir().ok_or(GitError::NotARepo)?.to_path_buf();
 
     // file_path can be absolute or relative to repo root
     let rel_path = if Path::new(file_path).is_absolute() {
         Path::new(file_path)
-            .strip_prefix(workdir)
+            .strip_prefix(&workdir)
             .map_err(|_| GitError::FileNotFound)?
+            .to_path_buf()
     } else {
-        Path::new(file_path)
+        Path::new(file_path).to_path_buf()
     };
+    let rel_str = rel_path.to_string_lossy().to_string();
 
-    let rel_str = rel_path.to_string_lossy();
+    // Look up the file's git status
+    let status = repo
+        .status_file(&rel_path)
+        .map_err(|e| GitError::RevertError(format!("status_file failed: {}", e)))?;
 
-    // Drop the repo handle before shelling out to avoid lock contention
+    // Drop the repo handle before any filesystem mutation or shell-out
     drop(repo);
 
-    // Shell out to system git for checkout -- same rationale as push_impl:
-    // git2's checkout_index has edge cases with submodules and permissions
-    // that system git handles correctly.
+    // Branch on working-tree status flags
+    if status.contains(git2::Status::WT_NEW) {
+        // Untracked → delete from disk
+        let abs = workdir.join(&rel_path);
+        std::fs::remove_file(&abs)
+            .map_err(|e| GitError::RevertError(format!("Failed to delete untracked file: {}", e)))?;
+        return Ok(());
+    }
+
+    let needs_checkout = status.contains(git2::Status::WT_MODIFIED)
+        || status.contains(git2::Status::WT_DELETED)
+        || status.contains(git2::Status::WT_TYPECHANGE)
+        || status.contains(git2::Status::WT_RENAMED);
+
+    if !needs_checkout {
+        // CURRENT or purely INDEX_* — nothing to do for a per-file working-tree revert.
+        return Ok(());
+    }
+
+    // Tracked working-tree change → shell out to system git for checkout (existing behavior).
+    // Same rationale as push_impl: git2's checkout_index has edge cases with submodules
+    // and permissions that system git handles correctly.
     let output = Command::new("git")
         .args(["checkout", "--", &rel_str])
         .current_dir(repo_path)
