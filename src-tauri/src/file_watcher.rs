@@ -96,13 +96,131 @@ pub fn set_project_path(path: String, app: tauri::AppHandle) {
     let project_path = PathBuf::from(&path);
     if project_path.is_dir() {
         start_md_watcher(app.clone(), project_path.clone());
-        start_git_watcher(app, project_path);
+        start_git_watcher(app.clone(), project_path.clone());
+        start_file_tree_watcher(app, project_path);
     } else {
         eprintln!(
             "[efxmux] set_project_path: not a directory: {}",
             path
         );
     }
+}
+
+// TODO(Pitfall-11): watchers leak on project switch — see PITFALLS.md lines 270-291.
+// Each call to set_project_path spawns a NEW watcher thread without killing the previous one.
+// Out of scope for Phase 21 Plan 01 (reuse existing infra per D-04). Fix in a dedicated plan.
+
+/// Start a background thread that watches `project_path` for ANY file changes
+/// (FIX-01 / D-05). Emits `file-tree-changed` with the changed path as payload
+/// so the frontend can refresh the file tree AND any open editor tabs.
+///
+/// Uses a 300ms debounce (slightly higher than md watcher's 200ms) to coalesce
+/// burst saves from external editors like Zed.
+///
+/// Filters out noise to avoid churn:
+/// - `.git/` (covered by start_git_watcher)
+/// - `.planning/` (GSD-only churn — user edits these constantly via GSD workflow)
+/// - `node_modules/`, `target/`, `dist/` (build artifacts)
+/// - `.DS_Store` (macOS metadata)
+/// - Hidden files (final component starts with `.`) EXCEPT `.env*` and `.gitignore`
+pub fn start_file_tree_watcher(app_handle: tauri::AppHandle, project_path: PathBuf) {
+    let watch_dir = project_path.clone();
+
+    std::thread::spawn(move || {
+        let handle = app_handle.clone();
+
+        let mut debouncer = match new_debouncer(
+            Duration::from_millis(300),
+            move |res: DebounceEventResult| {
+                let events = match res {
+                    Ok(events) => events,
+                    Err(e) => {
+                        eprintln!("[efxmux] File tree watcher error: {:?}", e);
+                        return;
+                    }
+                };
+
+                // Filter out noisy paths. Keep first surviving event path.
+                let surviving: Vec<_> = events
+                    .iter()
+                    .filter(|e| {
+                        let path_str = e.path.to_string_lossy();
+
+                        // Skip .git/ — covered by start_git_watcher
+                        if path_str.contains("/.git/") {
+                            return false;
+                        }
+                        // Skip GSD planning dir — high-churn, user-expected, not file-tree-relevant
+                        if path_str.contains("/.planning/") {
+                            return false;
+                        }
+                        // Skip common build/output dirs
+                        if path_str.contains("/node_modules/")
+                            || path_str.contains("/target/")
+                            || path_str.contains("/dist/")
+                        {
+                            return false;
+                        }
+                        // Skip .DS_Store files anywhere in the tree
+                        if path_str.contains("/.DS_Store") || path_str.ends_with("/.DS_Store") {
+                            return false;
+                        }
+
+                        // Skip hidden files (final component starts with `.`)
+                        // EXCEPT `.env*` and `.gitignore` which developers edit.
+                        if let Some(name) = e.path.file_name().and_then(|n| n.to_str()) {
+                            if name.starts_with('.') {
+                                let is_env = name.starts_with(".env");
+                                let is_gitignore = name == ".gitignore";
+                                if !is_env && !is_gitignore {
+                                    return false;
+                                }
+                            }
+                        }
+
+                        true
+                    })
+                    .collect();
+
+                if !surviving.is_empty() {
+                    // Emit once per debounced batch using the first surviving path
+                    // (matches md watcher's "first changed" pattern).
+                    let changed_path = surviving[0].path.to_string_lossy().to_string();
+                    if let Err(e) = handle.emit("file-tree-changed", changed_path) {
+                        eprintln!("[efxmux] Failed to emit file-tree-changed event: {}", e);
+                    }
+                }
+            },
+        ) {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!("[efxmux] Failed to create file tree watcher: {:?}", e);
+                return;
+            }
+        };
+
+        // Watch the project directory recursively — external editors can modify any file.
+        if let Err(e) = debouncer
+            .watcher()
+            .watch(&watch_dir, RecursiveMode::Recursive)
+        {
+            eprintln!(
+                "[efxmux] Failed to watch project dir for file tree {:?}: {:?}",
+                watch_dir, e
+            );
+            return;
+        }
+
+        println!(
+            "[efxmux] File tree watcher active on {:?}",
+            watch_dir
+        );
+
+        // Keep thread alive -- debouncer drops if scope exits
+        loop {
+            std::thread::sleep(Duration::from_secs(3600));
+        }
+    });
 }
 
 /// Start a background thread that watches `.git/` directory for changes.
