@@ -294,7 +294,7 @@ async function closeActiveTabScoped(scope: TerminalScope): Promise<void> {
 
   const tab = tabs[idx];
   try { await invoke('destroy_pty_session', { sessionName: tab.sessionName }); } catch (err) {
-    console.warn('[efxmux] Failed to destroy PTY session:', err);
+    console.warn('[efxmux] closeActiveTabScoped: destroy_pty_session failed', { sessionName: tab.sessionName, scope, err });
   }
   disposeTab(tab);
 
@@ -325,7 +325,7 @@ async function closeTabScoped(scope: TerminalScope, tabId: string): Promise<void
 
   const tab = tabs[idx];
   try { await invoke('destroy_pty_session', { sessionName: tab.sessionName }); } catch (err) {
-    console.warn('[efxmux] Failed to destroy PTY session:', err);
+    console.warn('[efxmux] closeTabScoped: destroy_pty_session failed', { sessionName: tab.sessionName, tabId, scope, err });
   }
   disposeTab(tab);
   s.tabs.value = tabs.filter(t => t.id !== tabId);
