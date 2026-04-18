@@ -32,7 +32,7 @@ import {
   getProjects, getActiveProject, projects, activeProjectName
 } from './state-manager';
 import { openProjectModal } from './components/project-modal';
-import { openEditorTab, openEditorTabPinned, restoreEditorTabs, activeUnifiedTabId, closeUnifiedTab, suppressEditorPersist, persistEditorTabs, gitChangesTab, restoreGitChangesTab } from './components/unified-tab-bar';
+import { openEditorTab, openEditorTabPinned, restoreEditorTabs, activeUnifiedTabId, closeUnifiedTab, suppressEditorPersist, persistEditorTabs, gitChangesTab, restoreGitChangesTab, createAndFocusMainTerminalTab } from './components/unified-tab-bar';
 import { triggerEditorSave } from './editor/setup';
 import { serverPaneState, saveCurrentProjectState, restoreProjectState } from './components/server-pane';
 import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from './components/file-tree';
@@ -236,7 +236,9 @@ async function bootstrap() {
         break;
       case key === 't' && e.ctrlKey && !e.shiftKey && !e.altKey:
         e.preventDefault(); e.stopPropagation();
-        createNewTab();
+        // quick-260418-bpm: use shared helper so the new tab is focused even
+        // when the main panel currently shows a non-terminal tab.
+        void createAndFocusMainTerminalTab();
         break;
       case key === 'w' && !e.shiftKey && !e.altKey && (e.ctrlKey || e.metaKey):
         e.preventDefault(); e.stopPropagation();

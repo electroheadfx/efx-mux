@@ -242,6 +242,38 @@ activeTabId.subscribe(id => {
 // ── Tab Actions ─────────────────────────────────────────────────────────────────
 
 /**
+ * quick-260418-bpm: create a new main-scope terminal (or agent) tab AND
+ * explicitly focus it by writing to `activeUnifiedTabId`.
+ *
+ * Background: the `activeTabId.subscribe` guard above (~line 230) intentionally
+ * blocks the subscribe-driven sync when the active unified tab is an editor or
+ * git-changes tab, to prevent unrelated terminal signal cascades (restart,
+ * tab-list reactivity, cross-scope events) from hijacking editor focus. That
+ * guard is correct for passive cascades, but it ALSO blocks the sync when the
+ * user explicitly asks for a new terminal — leaving the new tab invisible
+ * behind whatever non-terminal tab was previously active.
+ *
+ * This helper is the single write path for user-initiated main-scope tab
+ * creation (dropdown Terminal, dropdown Agent, and Ctrl+T in main.tsx). It
+ * bypasses the guard by setting `activeUnifiedTabId.value = tab.id` AFTER
+ * awaiting the creator — this is safe because the user explicitly requested
+ * the new tab, so focus-stealing is the desired behavior.
+ *
+ * The optional `creator` parameter exists for test injection only — production
+ * callers omit it and get the real top-level `createNewTab`.
+ */
+export async function createAndFocusMainTerminalTab(
+  options?: CreateTabOptionsShape,
+  creator: (options?: CreateTabOptionsShape) => Promise<{ id: string } | null> = createNewTab as any,
+): Promise<void> {
+  const tab = await creator(options);
+  if (tab) activeUnifiedTabId.value = tab.id;
+}
+
+/** Local shape for options; matches CreateTabOptions in terminal-tabs.tsx. */
+type CreateTabOptionsShape = { isAgent?: boolean; scope?: TerminalScope };
+
+/**
  * Open a file in an editor tab as a preview (single-click behavior).
  * D-03: one-tab-per-file policy. If already open, focus it.
  * Otherwise, replace the existing unpinned (preview) tab, or create a new one.
@@ -880,12 +912,14 @@ function buildDropdownItems(scope: TerminalScope): DropdownItem[] {
       {
         label: 'Terminal (Zsh)',
         icon: Terminal,
-        action: () => { void createNewTab(); },
+        // quick-260418-bpm: explicit focus via shared helper.
+        action: () => { void createAndFocusMainTerminalTab(); },
       },
       {
         label: 'Agent',
         icon: Bot,
-        action: () => { void createNewTab({ isAgent: true }); },
+        // quick-260418-bpm: explicit focus via shared helper.
+        action: () => { void createAndFocusMainTerminalTab({ isAgent: true }); },
       },
       {
         label: 'Git Changes',
