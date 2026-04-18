@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: Workspace Evolution
 status: executing
-stopped_at: Completed 22-02-PLAN.md
-last_updated: "2026-04-18T17:17:36.229Z"
+stopped_at: Completed 22-03-PLAN.md
+last_updated: "2026-04-18T18:06:28.726Z"
 last_activity: 2026-04-18
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 40
-  completed_plans: 42
+  completed_plans: 43
   percent: 100
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 ## Current Position
 
 Phase: 22 (dynamic-tabs-vertical-split-and-preferences-modal) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-04-18
 
@@ -65,6 +65,7 @@ Progress: [██████████] 100% (Phase 17)
 - [Phase 19]: Phase 19 Plan 03: Co-located EmptyState helper with StatusBadge in status-badge.tsx (one shared-primitives file, imported by all 5 sub-tabs). Kept PhasesTab accordion state module-level per git-changes-tab.tsx precedent -- ephemeral across sub-tab switches by design.
 - [Phase 21-bug-fix-sprint]: FIX-06 root cause: openEditorTab wrote only activeUnifiedTabId; RightPanel reads getTerminalScope('right').activeTabId separately. Introduced _activateEditorTab helper to route activation by ownerScope.
 - [Phase 21]: Plan 21-04 IN-02: approach (a) useRef refactor over approach (b) targeted disable — eliminates react-hooks/exhaustive-deps suppression in editor-tab.tsx entirely
+- [Phase 22]: Phase 22 Plan 03: StickyTabData removed — file-tree/gsd render as dynamic tabs with data-tab-id; gsdTab singleton signal + fileTreeTabs per-scope array; handleCrossScopeDrop routes all 5 tab kinds; split icon button with 3-pane cap stub
 
 ### Roadmap Evolution
 
@@ -129,11 +130,12 @@ None.
 | Phase 21 P04 | 4m21s | 4 tasks | 5 files |
 | Phase 22 P02 | 112 | 2 tasks | 3 files |
 | Phase 22 P01 | 538 | 3 tasks | 3 files |
+| Phase 22 P03 | 35 | 3 tasks | 3 files |
 
 ## Session Continuity
 
-Last session: 2026-04-18T17:10:26.530Z
-Stopped at: Completed 22-02-PLAN.md
+Last session: 2026-04-18T18:06:28.722Z
+Stopped at: Completed 22-03-PLAN.md
 Resume file: None
 
 Next: `/gsd-execute-phase 15` or `/gsd-code-review-fix 17` to fix remaining warnings
