@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 Phase: 21
 Plan: Not started
 Status: Executing Phase 20
-Last activity: 2026-04-18
+Last activity: 2026-04-18 - Completed quick task 260418-bpm: main-window new-tab focus fix
 
 **Code review fixes pending (non-blocking):**
 
@@ -115,6 +115,7 @@ None.
 | 260417-iat | Add keyboard shortcut to delete folder in file tree | 2026-04-17 |
 | 260417-je3 | Add HMR-wipe guard to save_state Tauri command (refuse overwriting non-empty projects with empty list) | 2026-04-17 |
 | 260418-b1a | Fix `[exited]` dead terminal: right-panel overlay mount + restore-loop TOCTOU race + monitor thread delay | 2026-04-18 |
+| 260418-bpm | Fix main-window new-tab focus: creating new agent/terminal from non-agent tab now focuses the new tab | 2026-04-18 |
 | Phase 19 P01 | 8min | 3 tasks | 10 files |
 | Phase 19 P02 | 3min 43s | 2 tasks | 3 files |
 | Phase 19 P03 | 8min 40s | 3 tasks | 6 files |
