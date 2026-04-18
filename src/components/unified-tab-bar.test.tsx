@@ -32,6 +32,7 @@ import {
   handleCrossScopeDrop,
   openEditorTabPinned,
   editorTabs,
+  createAndFocusMainTerminalTab,
 } from './unified-tab-bar';
 import { terminalTabs, activeTabId, getTerminalScope } from './terminal-tabs';
 
@@ -695,6 +696,112 @@ describe('UnifiedTabBar scope prop (Phase 20, Plan 02)', () => {
       // attribute-level distinction is the enforcement mechanism.
       expect(fileTreeEl?.getAttribute('data-sticky-tab-id')).toBe('file-tree');
       expect(fileTreeEl?.hasAttribute('data-tab-id')).toBe(false);
+    });
+  });
+
+  // ─── quick-260418-bpm: main-scope creation focuses the new tab ────────────
+  //
+  // Bug: when the main panel has a non-terminal tab active (editor, git-changes,
+  // sticky), clicking the `+` dropdown "Terminal (Zsh)" / "Agent" item — or
+  // pressing Ctrl+T — creates the new terminal tab but does NOT focus it. The
+  // `activeTabId.subscribe` guard at unified-tab-bar.tsx:230-240 intentionally
+  // blocks the subscribe-driven sync when the active unified tab is an editor
+  // or git-changes tab (so that unrelated terminal signal cascades cannot
+  // hijack focus). The fix is to have the creation paths explicitly set
+  // `activeUnifiedTabId.value = tab.id` AFTER awaiting createNewTab, bypassing
+  // the guard only for user-initiated creation where focus stealing IS desired.
+  //
+  // These tests drive that fix by calling the shared helper
+  // `createAndFocusMainTerminalTab` (extracted by the plan for DRY reasons
+  // across dropdown Terminal, dropdown Agent, and Ctrl+T handler in main.tsx).
+  describe('quick-260418-bpm main-scope creation explicitly focuses new tab', () => {
+    // Helper: minimal fake TerminalTab sufficient for our assertions.
+    function fakeTerminalTab(id: string, isAgent = false): any {
+      return {
+        id, sessionName: `sess-${id}`, label: isAgent ? 'Agent claude' : 'Terminal 1',
+        terminal: null, fitAddon: null, container: null,
+        ptyConnected: false, isAgent, ownerScope: 'main' as const,
+      };
+    }
+
+    it('Test 1 — Terminal (Zsh) creation focuses the new terminal tab when editor is active', async () => {
+      // Seed an editor tab active in main scope.
+      openEditorTabPinned('/tmp/proj/seed-editor.ts', 'seed-editor.ts', 'x');
+      const editorTab = editorTabs.value.find(t => t.filePath === '/tmp/proj/seed-editor.ts')!;
+      activeUnifiedTabId.value = editorTab.id;
+      expect(activeUnifiedTabId.value).toBe(editorTab.id);
+
+      // Inject a fake creator so we don't trip real PTY wiring. The creator
+      // mimics createNewTabScoped's minimum contract: set activeTabId (fires
+      // the subscribe guard), return a TerminalTab.
+      const fake = fakeTerminalTab('tab-bpm-new-1', false);
+      const creator = vi.fn(async () => {
+        terminalTabs.value = [...terminalTabs.value, fake];
+        activeTabId.value = fake.id;
+        return fake;
+      });
+
+      await createAndFocusMainTerminalTab(undefined, creator);
+
+      // Focus must now point at the new terminal tab, NOT the editor.
+      expect(creator).toHaveBeenCalledTimes(1);
+      expect(activeUnifiedTabId.value).toBe(fake.id);
+    });
+
+    it('Test 2 — Agent creation focuses the new agent tab when git-changes is active', async () => {
+      // Seed git-changes tab active in main scope.
+      openGitChangesTab();
+      const gcId = gitChangesTab.value!.id;
+      activeUnifiedTabId.value = gcId;
+      expect(activeUnifiedTabId.value).toBe(gcId);
+
+      const fake = fakeTerminalTab('tab-bpm-agent-1', true);
+      const creator = vi.fn(async (opts?: any) => {
+        expect(opts?.isAgent).toBe(true);
+        terminalTabs.value = [...terminalTabs.value, fake];
+        activeTabId.value = fake.id;
+        return fake;
+      });
+
+      await createAndFocusMainTerminalTab({ isAgent: true }, creator);
+
+      expect(creator).toHaveBeenCalledTimes(1);
+      expect(activeUnifiedTabId.value).toBe(fake.id);
+    });
+
+    it('Test 3 — guard preserved: a bare activeTabId emission while editor is active must NOT hijack focus', () => {
+      // Seed: editor active in main scope, plus a pre-existing terminal tab.
+      openEditorTabPinned('/tmp/proj/seed-guard.ts', 'seed-guard.ts', 'x');
+      const editorTab = editorTabs.value.find(t => t.filePath === '/tmp/proj/seed-guard.ts')!;
+      activeUnifiedTabId.value = editorTab.id;
+
+      const existingTerminal = fakeTerminalTab('tab-bpm-existing-1', false);
+      terminalTabs.value = [existingTerminal];
+
+      // Simulate a signal cascade (NOT a user creation action).
+      activeTabId.value = existingTerminal.id;
+
+      // Guard must hold: activeUnifiedTabId remains on the editor.
+      expect(activeUnifiedTabId.value).toBe(editorTab.id);
+    });
+
+    it('Test 4 — helper returns null-safe: no focus change if creator returns null', async () => {
+      // Seed an editor tab active in main scope.
+      openEditorTabPinned('/tmp/proj/seed-null.ts', 'seed-null.ts', 'x');
+      const editorTab = editorTabs.value.find(t => t.filePath === '/tmp/proj/seed-null.ts')!;
+      activeUnifiedTabId.value = editorTab.id;
+
+      // createNewTabScoped returns null when the container wrapper is missing
+      // (e.g., transient layout state). The helper must not set
+      // activeUnifiedTabId in that case — otherwise focus would land on an
+      // undefined/empty id and the editor would go blank.
+      const creator = vi.fn(async () => null);
+
+      await createAndFocusMainTerminalTab(undefined, creator);
+
+      expect(creator).toHaveBeenCalledTimes(1);
+      // Focus unchanged — editor remains active.
+      expect(activeUnifiedTabId.value).toBe(editorTab.id);
     });
   });
 });
