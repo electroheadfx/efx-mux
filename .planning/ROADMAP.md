@@ -207,7 +207,7 @@ Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21
 | 18. File Tree Enhancements | v0.3.0 | 12/12 | Complete    | 2026-04-17 |
 | 19. GSD Sub-Tabs | v0.3.0 | 4/4 | Complete   | 2026-04-17 |
 | 20. Right Panel Multi-Terminal | v0.3.0 | 9/4 | Complete    | 2026-04-18 |
-| 21. Bug Fix Sprint | v0.3.0 | 4/4 | Complete    | 2026-04-18 |
+| 21. Bug Fix Sprint | v0.3.0 | 4/4 | Complete   | 2026-04-18 |
 
 ---
 *Roadmap created: 2026-04-06*
