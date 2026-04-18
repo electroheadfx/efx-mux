@@ -44,7 +44,7 @@
 - [x] **Phase 17: Main Panel File Tabs** (5 plans) -- CodeMirror editor tabs with dropdown menu (completed 2026-04-15)
 - [x] **Phase 18: File Tree Enhancements** -- Delete, drag/drop, external editor integration (completed 2026-04-16)
 - [x] **Phase 19: GSD Sub-Tabs** -- 5 sub-tabs for Milestones, Phases, Progress, History, State (completed 2026-04-17)
-- [ ] **Phase 20: Right Panel Multi-Terminal** -- Plus menu for Terminal/Agent sub-TUI
+- [x] **Phase 20: Right Panel Multi-Terminal** -- Plus menu for Terminal/Agent sub-TUI (completed 2026-04-18)
 - [ ] **Phase 21: Bug Fix Sprint** -- File watcher, phantom chars, scrollbar, padding fixes
 
 ## Phase Details
@@ -160,7 +160,7 @@ Plans:
   - [x] 20-01-PLAN.md — terminal-tabs.tsx scope registry (main + right) with backward-compat exports
   - [x] 20-02-PLAN.md — unified-tab-bar.tsx scope prop + sticky tabs + scope-aware plus menu + Git Changes owningScope handoff
   - [x] 20-03-PLAN.md — state-manager legacy key migration + Rust kill_legacy_right_sessions command
-  - [ ] 20-04-PLAN.md — right-panel.tsx single-pane rewrite + main.tsx dual-scope bootstrap + human UAT
+  - [x] 20-04-PLAN.md — right-panel.tsx single-pane rewrite + main.tsx dual-scope bootstrap + human UAT
 **UI hint**: yes
 
 ### Phase 21: Bug Fix Sprint
@@ -201,7 +201,7 @@ Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21
 | 17. Main Panel File Tabs | v0.3.0 | 5/5 | Complete   | 2026-04-15 |
 | 18. File Tree Enhancements | v0.3.0 | 12/12 | Complete    | 2026-04-17 |
 | 19. GSD Sub-Tabs | v0.3.0 | 4/4 | Complete   | 2026-04-17 |
-| 20. Right Panel Multi-Terminal | v0.3.0 | 3/4 | In Progress|  |
+| 20. Right Panel Multi-Terminal | v0.3.0 | 9/4 | Complete    | 2026-04-18 |
 | 21. Bug Fix Sprint | v0.3.0 | 0/? | Not started | - |
 
 ---

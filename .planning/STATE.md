@@ -4,14 +4,14 @@ milestone: v0.3.0
 milestone_name: Workspace Evolution
 status: executing
 stopped_at: Phase 20 UI-SPEC approved
-last_updated: "2026-04-17T20:17:29.412Z"
-last_activity: 2026-04-17 -- Phase 20 execution started
+last_updated: "2026-04-18T05:44:56.145Z"
+last_activity: 2026-04-18
 progress:
   total_phases: 7
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 31
-  completed_plans: 27
-  percent: 87
+  completed_plans: 36
+  percent: 100
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 
 ## Current Position
 
-Phase: 20 (right-panel-multi-terminal) — EXECUTING
-Plan: 1 of 4
+Phase: 21
+Plan: Not started
 Status: Executing Phase 20
-Last activity: 2026-04-17 -- Phase 20 execution started
+Last activity: 2026-04-18
 
 **Code review fixes pending (non-blocking):**
 
