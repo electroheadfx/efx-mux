@@ -126,6 +126,43 @@ function makeDragV(handle: HTMLElement, { onDrag, onEnd }: DragCallbacksV): void
   });
 }
 
+/**
+ * Phase 22 D-09: register intra-zone resize handles for stacked sub-scopes.
+ * Handle elements must carry `data-handle="${zone}-intra-${i}"` where i is the
+ * index of the handle (0 = between sub-scope 0 and 1, 1 = between 1 and 2).
+ * Idempotent: re-running skips handles already initialized.
+ */
+export function attachIntraZoneHandles(zone: 'main' | 'right'): void {
+  document.querySelectorAll<HTMLElement>(`[data-handle^="${zone}-intra-"]`).forEach((handle) => {
+    if (handle.dataset.dragInit === 'true') return;
+    handle.dataset.dragInit = 'true';
+    const idxMatch = /-(\d+)$/.exec(handle.dataset.handle ?? '');
+    const idx = idxMatch ? parseInt(idxMatch[1], 10) : 0;
+
+    makeDragH(handle, {
+      onDrag(clientY: number) {
+        const panel = document.querySelector<HTMLElement>(`.${zone}-panel`);
+        if (!panel) return;
+        const rect = panel.getBoundingClientRect();
+        const pct = ((clientY - rect.top) / rect.height) * 100;
+        const clamped = Math.max(10, Math.min(90, pct));
+        document.documentElement.style.setProperty(
+          `--${zone}-split-${idx}-pct`,
+          `${clamped.toFixed(1)}%`,
+        );
+      },
+      onEnd(clientY: number) {
+        const panel = document.querySelector<HTMLElement>(`.${zone}-panel`);
+        if (!panel) return;
+        const rect = panel.getBoundingClientRect();
+        const pct = ((clientY - rect.top) / rect.height) * 100;
+        const clamped = Math.max(10, Math.min(90, pct));
+        void updateLayout({ [`${zone}-split-${idx}-pct`]: `${clamped.toFixed(1)}%` });
+      },
+    });
+  });
+}
+
 // --- Horizontal drag helper --------------------------------------------------
 /**
  * Attach horizontal (row-resize) drag to a handle element.

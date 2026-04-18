@@ -355,6 +355,80 @@ html, body {
   background-clip: content-box;
 }
 
+/* ─── Phase 22 Plan 04: Intra-zone horizontal resize handle ─── */
+.split-handle-h-intra {
+  width: 100%;
+  height: var(--handle-size, 1px);
+  min-height: var(--handle-size, 1px);
+  cursor: ns-resize;
+  background: var(--color-border);
+  background-clip: content-box;
+  flex-shrink: 0;
+  margin: calc((var(--handle-hit, 8px) - var(--handle-size, 1px)) / -2) 0;
+  padding: calc((var(--handle-hit, 8px) - var(--handle-size, 1px)) / 2) 0;
+  z-index: 10;
+  transition: background 0.1s ease;
+}
+
+.split-handle-h-intra:hover,
+.split-handle-h-intra.dragging {
+  background: var(--color-accent);
+  background-clip: content-box;
+}
+
+/* ─── Phase 22 Plan 04: Empty scope placeholder ─── */
+.scope-empty-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-family: var(--font-family-sans);
+  font-weight: 400;
+  gap: 4px;
+  user-select: none;
+}
+
+.scope-empty-placeholder .heading {
+  color: var(--color-text-bright);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ─── Phase 22 Plan 04: Drop target affordance ─── */
+[data-tablist-scope].drop-target {
+  outline: 1px solid var(--color-accent);
+  outline-offset: -1px;
+}
+
+/* ─── Phase 22 Plan 04: Tab bar split icon button ─── */
+.tab-bar-split-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.tab-bar-split-icon:hover {
+  color: var(--color-accent);
+}
+
+.tab-bar-split-icon:disabled,
+.tab-bar-split-icon[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+  color: var(--color-text-muted);
+}
+
 /* ─── Project row hover actions ─── */
 .group:hover .project-row-actions {
   opacity: 1 !important;

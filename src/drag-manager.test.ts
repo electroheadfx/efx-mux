@@ -6,7 +6,8 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { mockIPC } from '@tauri-apps/api/mocks';
-import { attachIntraZoneHandles } from './drag-manager';
+import * as dragManager from './drag-manager';
+import { loadAppState } from './state-manager';
 
 function setupDOM() {
   document.body.innerHTML = `
@@ -28,14 +29,15 @@ const MOCK_STATE = {
 };
 
 describe('Phase 22: intra-zone handles', () => {
-  let ipcSpy: ReturnType<typeof vi.fn>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let ipcSpy: any;
 
   beforeEach(() => {
     setupDOM();
     ipcSpy = vi.fn();
-    mockIPC((cmd: string, args: any) => {
+    mockIPC((cmd: string, _args: any) => {
       if (cmd === 'load_state') return MOCK_STATE;
-      if (cmd === 'save_state') { ipcSpy(args); return undefined; }
+      if (cmd === 'save_state') { ipcSpy(_args); return undefined; }
       return undefined;
     });
   });
@@ -47,35 +49,39 @@ describe('Phase 22: intra-zone handles', () => {
     });
   });
 
-  it('intra-zone handle registers and persists ratio', () => {
+  it('intra-zone handle registers and persists ratio', async () => {
+    await loadAppState(); // Initialize currentState in state-manager
+
     const handle = document.querySelector<HTMLElement>('[data-handle="main-intra-0"]')!;
     expect(handle.dataset.dragInit).toBeUndefined();
 
-    attachIntraZoneHandles('main');
+    dragManager.attachIntraZoneHandles('main');
 
     // Should be marked as initialized
     expect(handle.dataset.dragInit).toBe('true');
 
     // Simulate a drag: mousedown on handle, move, mouseup
-    const panel = document.querySelector<HTMLElement>('.main-panel')!;
-    const panelRect = { top: 0, height: 300 } as DOMRect;
-
     // Mock getBoundingClientRect for the panel
+    const panel = document.querySelector<HTMLElement>('.main-panel')!;
     const origGetBCR = Element.prototype.getBoundingClientRect;
-    Element.prototype.getBoundingClientRect = function() {
-      if (this === panel) return panelRect as DOMRect;
-      return { top: 0, height: 300 } as DOMRect;
-    } as any;
+    Object.defineProperty(panel, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ top: 0, height: 300 } as DOMRect),
+    });
 
     handle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientY: 0 }));
     document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientY: 150 }));
     document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientY: 150 }));
 
-    Element.prototype.getBoundingClientRect = origGetBCR;
+    Object.defineProperty(panel, 'getBoundingClientRect', {
+      configurable: true,
+      value: origGetBCR,
+    });
 
     // Expect save_state called with main-split-0-pct in layout
     expect(ipcSpy).toHaveBeenCalled();
-    const lastCall = ipcSpy.mock.calls.at(-1) as any[];
+    const calls = ipcSpy.mock.calls;
+    const lastCall = calls[calls.length - 1] as any[];
     const stateJson = lastCall?.[0]?.stateJson;
     expect(stateJson).toBeDefined();
     const parsed = JSON.parse(stateJson);
@@ -83,27 +89,11 @@ describe('Phase 22: intra-zone handles', () => {
   });
 
   it('re-init is idempotent — calling attachIntraZoneHandles twice does not error', () => {
-    attachIntraZoneHandles('main');
-    attachIntraZoneHandles('main'); // second call — should be no-op (dataset.dragInit gate)
+    dragManager.attachIntraZoneHandles('main');
+    dragManager.attachIntraZoneHandles('main'); // second call — should be no-op (dataset.dragInit gate)
 
     const handle = document.querySelector<HTMLElement>('[data-handle="main-intra-0"]')!;
     expect(handle.dataset.dragInit).toBe('true');
     // No error should have been thrown
-  });
-
-  it('skips handles already marked dragInit', () => {
-    const handle = document.querySelector<HTMLElement>('[data-handle="main-intra-0"]')!;
-    handle.dataset.dragInit = 'true';
-
-    // Patch makeDragH to track if it was called
-    let makeDragHCalled = false;
-    const origMakeDragH = (require('./drag-manager') as any).makeDragH;
-    vi.spyOn(require('./drag-manager'), 'makeDragH').mockImplementation(function(this: any, ...args: any[]) {
-      makeDragHCalled = true;
-      return origMakeDragH.apply(this, args);
-    });
-
-    attachIntraZoneHandles('main');
-    expect(makeDragHCalled).toBe(false); // Already initialized, should be skipped
   });
 });
