@@ -1,19 +1,16 @@
 // terminal-tabs.tsx -- Multi-tab terminal management, scope-parametrized (Phase 20 Plan 01).
 //
 // Prior life: single-instance module backing the main panel's terminal tabs (Phase 17).
-// This refactor converts it to a scope registry keyed on `TerminalScope = 'main' | 'right'`
-// so both panels share the same infrastructure. Every existing top-level export remains
-// and resolves to scope `'main'` (D-11 backward compatibility). Right-panel call sites use
-// the new `getTerminalScope('right')` accessor.
+// Phase 22: expanded to 6 hierarchical scope ids ('main-0'..'main-2', 'right-0'..'right-2').
+// Every existing top-level export resolves to scope 'main-0' (D-11 backward compat).
+// Right-panel call sites use the new `getTerminalScope('right-0')` accessor.
 //
-// Scope differences:
-//   - containerSelector: '.terminal-containers' (main) vs '.terminal-containers[data-scope="right"]' (right)
-//   - persistence keys:  'terminal-tabs' + 'terminal-tabs:<project>'  (main, backward compat)
-//                        'right-terminal-tabs:<project>'              (right, D-15)
-//   - session-name suffix:
-//                        main   → bare <project> for 1st tab, <project>-<N> for Nth (N >= 2)
-//                        right  → <project>-r<N> for Nth tab (N >= 1)
-//                        crash restart → <project>-rr<N> (Pitfall 1: avoid collision with right-scope -r<N>)
+// Scope differences per D-10 (hierarchical scope ids):
+//   containerSelector : '.terminal-containers[data-scope="<scope-id>"]'
+//   persistenceKey    : `terminal-tabs:<project>:<scope-id>`
+//   first-launch seed : scope-0 of each zone gets D-02 defaults; scope-1/2 start empty (D-03)
+//   session-name      : shared per-project counter (D-12) — `<project>`, `<project>-2`, `<project>-3`, …
+//                       PTY names stay stable across cross-scope drags.
 //
 // Shared pipeline (scope-agnostic per D-12): createTerminal, connectPty, attachResizeHandler,
 // registerTerminal (theme), projectSessionName.
@@ -36,7 +33,9 @@ import { CrashOverlay } from './crash-overlay';
 // Types
 // ---------------------------------------------------------------------------
 
-export type TerminalScope = 'main' | 'right';
+export type TerminalScope =
+  | 'main-0' | 'main-1' | 'main-2'
+  | 'right-0' | 'right-1' | 'right-2';
 
 export interface TerminalTab {
   id: string;
@@ -78,26 +77,56 @@ function createScopeState(scope: TerminalScope): ScopeState {
   return {
     scope,
     tabs: signal<TerminalTab[]>([]),
-    // D-17 new-project default: right scope seeds to the 'file-tree' sticky id so
-    // the first render of the right panel shows the File Tree body, not an empty
-    // state. Main scope keeps '' (no tabs yet) — first tab init takes over.
-    activeTabId: signal<string>(scope === 'right' ? 'file-tree' : ''),
-    counter: { n: 0 },
-    containerSelector: scope === 'main'
-      ? '.terminal-containers'
-      : '.terminal-containers[data-scope="right"]',
-    persistenceKey: (projectName: string) =>
-      scope === 'main'
-        ? `terminal-tabs:${projectName}`
-        : `right-terminal-tabs:${projectName}`,
+    activeTabId: signal<string>(''),  // D-03: empty scope allowed; first-launch defaults applied elsewhere
+    counter: { n: 0 },  // retained for internal book-keeping only; shared counter is authoritative
+    containerSelector: `.terminal-containers[data-scope="${scope}"]`,
+    persistenceKey: (projectName: string) => `terminal-tabs:${projectName}:${scope}`,
     projectTabCache: new Map(),
   };
 }
 
 const scopes = new Map<TerminalScope, ScopeState>([
-  ['main', createScopeState('main')],
-  ['right', createScopeState('right')],
+  ['main-0',  createScopeState('main-0')],
+  ['main-1',  createScopeState('main-1')],
+  ['main-2',  createScopeState('main-2')],
+  ['right-0', createScopeState('right-0')],
+  ['right-1', createScopeState('right-1')],
+  ['right-2', createScopeState('right-2')],
 ]);
+
+// ---------------------------------------------------------------------------
+// Shared per-project session-name counter (D-12) — prevents collisions when
+// tabs cross scopes. Allocated once at create time, stable across drags.
+// ---------------------------------------------------------------------------
+
+export const projectTabCounter = signal<Map<string, number>>(new Map());
+
+export function allocateNextSessionName(project: string | null): { name: string; n: number } {
+  const key = project ?? '';
+  const current = projectTabCounter.value.get(key) ?? 0;
+  const n = current + 1;
+  projectTabCounter.value = new Map(projectTabCounter.value).set(key, n);
+  const suffix = n > 1 ? String(n) : undefined;
+  return { name: projectSessionName(project, suffix), n };
+}
+
+export function seedCounterFromRestoredTabs(project: string): void {
+  let max = 0;
+  for (const state of scopes.values()) {
+    for (const tab of state.tabs.value) {
+      const m = /-(\d+)$/.exec(tab.sessionName);
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+  }
+  const next = new Map(projectTabCounter.value);
+  next.set(project, Math.max(max, next.get(project) ?? 0));
+  projectTabCounter.value = next;
+}
+
+/** Testing-only: reset counter state. */
+export function __resetProjectTabCounterForTesting(): void {
+  projectTabCounter.value = new Map();
+}
 
 function getScope(scope: TerminalScope): ScopeState {
   const s = scopes.get(scope);
@@ -176,18 +205,10 @@ async function createNewTabScoped(
   const wantAgent = options?.isAgent ?? false;
 
   s.counter.n++;
-  const id = `tab-${Date.now()}-${s.counter.n}`;
-
-  // D-14: session-name suffix differs per scope.
-  const activeName = activeProjectName.value;
-  let sessionSuffix: string | undefined;
-  if (scope === 'main') {
-    sessionSuffix = s.counter.n > 1 ? String(s.counter.n) : undefined;
-  } else {
-    // right scope: every tab gets -r<N>, even the first.
-    sessionSuffix = `r${s.counter.n}`;
-  }
-  const sessionName = projectSessionName(activeName, sessionSuffix);
+  const { name: sessionName, n: seq } = allocateNextSessionName(activeProjectName.value);
+  const id = `tab-${Date.now()}-${seq}`;
+  // Retain per-scope s.counter.n for backward-compat of any caller reading it; not used for naming
+  s.counter.n = Math.max(s.counter.n, seq);
 
   // Resolve project info (needed for working directory and agent config)
   const projectInfo = await getActiveProjectInfo();
@@ -402,8 +423,7 @@ function persistTabStateScoped(scope: TerminalScope): void {
   // Plan 20-05-B: anchor the active-tab marker by sessionName (which survives
   // restart) when the current activeTabId resolves to a dynamic tab. Tab ids
   // are regenerated on each run, so the raw id alone cannot be restored.
-  // For sticky right-scope ids ('file-tree' | 'gsd'), we persist the id as-is
-  // via activeTabId — restoreProjectTabsScoped routes sticky ids separately.
+  // Phase 22 D-01: sticky tabs removed — no sticky id routing needed.
   const activeId = s.activeTabId.value;
   const activeTab = s.tabs.value.find(t => t.id === activeId);
   const activeSessionName = activeTab?.sessionName;
@@ -413,10 +433,6 @@ function persistTabStateScoped(scope: TerminalScope): void {
     activeSessionName,
   });
   const patch: Record<string, string> = {};
-  if (scope === 'main') {
-    // D-11 / backward compat: keep the flat 'terminal-tabs' key written too.
-    patch['terminal-tabs'] = data;
-  }
   if (activeName) {
     patch[s.persistenceKey(activeName)] = data;
   }
@@ -572,14 +588,6 @@ async function restoreProjectTabsScoped(
           if (typeof parsed.activeSessionName === 'string' && parsed.activeSessionName) {
             savedActiveSessionName = parsed.activeSessionName;
           }
-          // For right scope, the persisted activeTabId can be a sticky id
-          // ('file-tree' | 'gsd'). Pass it through so restoreTabsScoped can
-          // seed the signal to the user's last sticky selection.
-          if (scope === 'right'
-              && typeof parsed.activeTabId === 'string'
-              && (parsed.activeTabId === 'file-tree' || parsed.activeTabId === 'gsd')) {
-            savedActiveStickyId = parsed.activeTabId;
-          }
         }
       } catch (err) {
         console.warn('[efxmux] Failed to restore scoped tabs:', err);
@@ -709,17 +717,11 @@ async function restoreTabsScoped(
   s.tabs.value = [...restoredTabs];
 
   // Plan 20-05-B: prefer the sessionName-anchored active marker (survives
-  // restart), then fall back to the right-scope sticky id, then to first-tab.
+  // restart), then fall back to first-tab.
   let activeId: string | undefined;
   if (savedData.activeSessionName) {
     const match = restoredTabs.find(t => t.sessionName === savedData.activeSessionName);
     if (match) activeId = match.id;
-  }
-  if (!activeId && scope === 'right' && savedData.activeStickyId) {
-    // Sticky id: signal stays at sticky, dynamic tabs are restored but inactive.
-    s.activeTabId.value = savedData.activeStickyId;
-    persistTabStateScoped(scope);
-    return true;
   }
   if (!activeId) activeId = restoredTabs[0].id;
 
@@ -761,8 +763,8 @@ export async function initFirstTab(
   projectPath?: string,
   agentBinary?: string,
 ): Promise<{ terminal: Terminal; fitAddon: FitAddon } | null> {
-  const s = getScope('main');
-  const wrapper = getTerminalContainersElForScope('main');
+  const s = getScope('main-0');
+  const wrapper = getTerminalContainersElForScope('main-0');
   if (!wrapper) {
     console.error('[efxmux] .terminal-containers not found');
     return null;
@@ -805,7 +807,7 @@ export async function initFirstTab(
     detachResize: () => {},
     exitCode: undefined,
     isAgent: !!agentBinary,
-    ownerScope: 'main',
+    ownerScope: 'main-0',
   };
   s.tabs.value = [tab];
   s.activeTabId.value = id;
@@ -823,56 +825,56 @@ export async function initFirstTab(
   const resizeHandle = attachResizeHandler(container, terminal, fitAddon, sessionName);
   tab.detachResize = resizeHandle.detach;
 
-  persistTabStateScoped('main');
+  persistTabStateScoped('main-0');
 
   return { terminal, fitAddon };
 }
 
 // ---------------------------------------------------------------------------
 // Backward-compat top-level exports (D-11)
-// Every export below MUST still resolve to scope 'main' with identical signatures.
+// Every export below MUST still resolve to scope 'main-0' with identical signatures.
 // ---------------------------------------------------------------------------
 
-/** D-11 backward-compat: same Signal reference as getTerminalScope('main').tabs */
-export const terminalTabs = scopes.get('main')!.tabs;
-/** D-11 backward-compat: same Signal reference as getTerminalScope('main').activeTabId */
-export const activeTabId = scopes.get('main')!.activeTabId;
+/** D-11 backward-compat: same Signal reference as getTerminalScope('main-0').tabs */
+export const terminalTabs = scopes.get('main-0')!.tabs;
+/** D-11 backward-compat: same Signal reference as getTerminalScope('main-0').activeTabId */
+export const activeTabId = scopes.get('main-0')!.activeTabId;
 
 export function createNewTab(options?: CreateTabOptions): Promise<TerminalTab | null> {
-  return createNewTabScoped(options?.scope ?? 'main', options);
+  return createNewTabScoped(options?.scope ?? 'main-0', options);
 }
-export function closeTab(tabId: string): Promise<void> { return closeTabScoped('main', tabId); }
-export function closeActiveTab(): Promise<void> { return closeActiveTabScoped('main'); }
+export function closeTab(tabId: string): Promise<void> { return closeTabScoped('main-0', tabId); }
+export function closeActiveTab(): Promise<void> { return closeActiveTabScoped('main-0'); }
 // Plan 20-05-B: cycleToNextTab and switchToTab persist activeTabId so tab-switch
 // selections survive a quit+restart (previously only tab mutations persisted).
-export function cycleToNextTab(): void { cycleToNextTabScoped('main'); persistTabStateScoped('main'); }
+export function cycleToNextTab(): void { cycleToNextTabScoped('main-0'); persistTabStateScoped('main-0'); }
 export function switchToTab(tabId: string): void {
-  scopes.get('main')!.activeTabId.value = tabId;
-  switchToTabScoped('main', tabId);
-  persistTabStateScoped('main');
+  scopes.get('main-0')!.activeTabId.value = tabId;
+  switchToTabScoped('main-0', tabId);
+  persistTabStateScoped('main-0');
 }
 export function renameTerminalTab(tabId: string, newLabel: string): void {
-  renameTerminalTabScoped('main', tabId, newLabel);
+  renameTerminalTabScoped('main-0', tabId, newLabel);
 }
 export function getActiveTerminal(): { terminal: Terminal; fitAddon: FitAddon } | null {
-  return getActiveTerminalScoped('main');
+  return getActiveTerminalScoped('main-0');
 }
-export function saveProjectTabs(projectName: string, scope: TerminalScope = 'main'): void {
+export function saveProjectTabs(projectName: string, scope: TerminalScope = 'main-0'): void {
   saveProjectTabsScoped(projectName, scope);
 }
 export function restoreProjectTabs(
   projectName: string,
   projectPath?: string,
   agentBinary?: string,
-  scope: TerminalScope = 'main',
+  scope: TerminalScope = 'main-0',
 ): Promise<boolean> {
   return restoreProjectTabsScoped(projectName, projectPath, agentBinary, scope);
 }
-export function hasProjectTabs(projectName: string, scope: TerminalScope = 'main'): boolean {
+export function hasProjectTabs(projectName: string, scope: TerminalScope = 'main-0'): boolean {
   return hasProjectTabsScoped(projectName, scope);
 }
-export function clearAllTabs(): Promise<void> { return clearAllTabsScoped('main'); }
-export function ActiveTabCrashOverlay() { return ActiveTabCrashOverlayScoped('main'); }
+export function clearAllTabs(): Promise<void> { return clearAllTabsScoped('main-0'); }
+export function ActiveTabCrashOverlay() { return ActiveTabCrashOverlayScoped('main-0'); }
 
 /**
  * Plan 20-05-B: persistence helper for code paths that mutate a scope's
@@ -907,7 +909,7 @@ export async function restoreTabs(
   projectPath?: string,
   agentBinary?: string,
 ): Promise<boolean> {
-  return restoreTabsScoped(savedData, projectPath, agentBinary, 'main');
+  return restoreTabsScoped(savedData, projectPath, agentBinary, 'main-0');
 }
 
 // ---------------------------------------------------------------------------
