@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: Workspace Evolution
 status: executing
-stopped_at: Completed 22-04-PLAN.md
-last_updated: "2026-04-18T21:38:04.058Z"
-last_activity: 2026-04-18 -- Phase 22 execution started
+stopped_at: Completed 22-10-PLAN.md
+last_updated: "2026-04-18T22:19:41.534Z"
+last_activity: 2026-04-18
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 49
-  completed_plans: 44
-  percent: 90
+  completed_plans: 47
+  percent: 96
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 ## Current Position
 
 Phase: 22 (dynamic-tabs-vertical-split-and-preferences-modal) — EXECUTING
-Plan: 1 of 14
-Status: Executing Phase 22
-Last activity: 2026-04-18 -- Phase 22 execution started
+Plan: 2 of 14
+Status: Ready to execute
+Last activity: 2026-04-18
 
 **Code review fixes pending (non-blocking):**
 
@@ -70,6 +70,8 @@ Progress: [██████████] 100% (Phase 17)
 - [Phase 22]: Shared sub-scope state in sub-scope-pane.tsx to avoid circular imports between main-panel and right-panel
 - [Phase 22]: SubScopePane: always-mount bodies with display:none toggle preserves xterm WebGL + CodeMirror state
 - [Phase 22]: unified-tab-bar uses local type-adapter wrappers (main-0→main mapping) rather than changing its existing zone type contract
+- [Phase 22]: Plan 22-10: Fill-gap-at-end convention for closeSubScope — scope ids monotonic + tabs always migrate to scope-0, so current.slice(0,-1) is correct regardless of which index was clicked (no renumbering needed)
+- [Phase 22]: Plan 22-10: _activateEditorTab writes scope.activeTabId for BOTH main and right scopes — SubScopePane reads scope-local activeTabId, so main-scope path previously left new tabs active-but-invisible (UAT test 18a fix)
 
 ### Roadmap Evolution
 
@@ -135,11 +137,12 @@ None.
 | Phase 22 P02 | 112 | 2 tasks | 3 files |
 | Phase 22 P01 | 538 | 3 tasks | 3 files |
 | Phase 22 P03 | 35 | 3 tasks | 3 files |
+| Phase 22 P10 | ~12min | 2 tasks | 5 files |
 
 ## Session Continuity
 
-Last session: 2026-04-18T18:38:10.829Z
-Stopped at: Completed 22-04-PLAN.md
+Last session: 2026-04-18T22:19:41.531Z
+Stopped at: Completed 22-10-PLAN.md
 Resume file: None
 
 Next: `/gsd-execute-phase 15` or `/gsd-code-review-fix 17` to fix remaining warnings

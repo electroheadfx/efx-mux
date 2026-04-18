@@ -208,14 +208,14 @@ Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21 -> 22
 | 19. GSD Sub-Tabs | v0.3.0 | 4/4 | Complete   | 2026-04-17 |
 | 20. Right Panel Multi-Terminal | v0.3.0 | 9/4 | Complete    | 2026-04-18 |
 | 21. Bug Fix Sprint | v0.3.0 | 4/4 | Complete   | 2026-04-18 |
-| 22. Dynamic tabs, vertical split, and preferences modal | v0.3.0 | 6/14 | In Progress|  |
+| 22. Dynamic tabs, vertical split, and preferences modal | v0.3.0 | 7/14 | In Progress|  |
 
 ### Phase 22: Dynamic tabs, vertical split, and preferences modal
 
 **Goal:** Dynamic tabs with fixed titles + vertical split + titlebar Preferences button — File Tree / GSD / Git Changes render as uniform dynamic tabs (closeable, drag-reorderable, add-via-`+`); main + right zones support 1-3 stacked sub-panes via a split icon with intra-zone resize; all tab kinds drag freely between any two scopes; PTY session names stay stable across drags via a shared per-project counter; Preferences opens via a new titlebar gear icon while Cmd+, is unchanged.
 **Requirements**: TABS-01, SPLIT-01, SPLIT-02, SPLIT-03, SPLIT-04, PREF-01
 **Depends on:** Phase 21
-**Plans:** 6/14 plans executed
+**Plans:** 7/14 plans executed
 
 **Scope (user intent):**
 - **Uniform dynamic tabs** — make GSD and Git Changes behave like other tabs: not open on first launch, reorderable by drag, addable via `+` button, closeable. Persist across quit: each window stores active tab, tab order, and tab titles. GSD and Git Changes tabs are non-renameable (fixed titles).
