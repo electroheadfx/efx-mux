@@ -252,6 +252,7 @@ describe('state-manager', () => {
     });
   });
 
+  // Phase 20 right-scope persistence (D-15/D-16)
   describe('Phase 20 right-scope persistence (D-15/D-16)', () => {
     beforeEach(async () => {
       mockIPC((cmd) => {
@@ -290,6 +291,81 @@ describe('state-manager', () => {
       const parsed = JSON.parse(state.session['git-changes-tab:myproj']);
       expect(parsed.id).toBe('git-changes-42');
       expect(parsed.owningScope).toBe('right');
+    });
+  });
+
+  // Phase 22 D-10/D-06: legacy terminal-tabs key migration + sticky-ID drop
+  describe('Phase 22 migration (D-10/D-06)', () => {
+    beforeEach(async () => {
+      projects.value = [];
+      activeProjectName.value = null;
+      mockIPC(() => { throw new Error('reset'); });
+    });
+
+    it('migrates legacy terminal-tabs keys to scope-suffixed variants', async () => {
+      const mockState: AppState = {
+        version: 1,
+        layout: {},
+        theme: { mode: 'dark' },
+        session: {
+          'terminal-tabs:foo': JSON.stringify({ tabs: [], activeTabId: 'file-tree' }),
+          'right-terminal-tabs:foo': JSON.stringify({ tabs: [], activeTabId: 'gsd' }),
+        },
+        project: { active: 'foo', projects: [{ path: '/foo', name: 'foo', agent: 'claude' }] },
+        panels: {},
+      };
+      mockIPC((cmd) => {
+        if (cmd === 'load_state') return mockState;
+        if (cmd === 'save_state') return undefined;
+      });
+      await loadAppState();
+      const after = getCurrentState()!;
+      expect(after.session['terminal-tabs:foo:main-0']).toBeDefined();
+      expect(after.session['terminal-tabs:foo:right-0']).toBeDefined();
+      expect(after.session['terminal-tabs:foo']).toBeUndefined();
+      expect(after.session['right-terminal-tabs:foo']).toBeUndefined();
+      const mainParsed = JSON.parse(after.session['terminal-tabs:foo:main-0']);
+      const rightParsed = JSON.parse(after.session['terminal-tabs:foo:right-0']);
+      expect(mainParsed.activeTabId).toBe('');
+      expect(rightParsed.activeTabId).toBe('');
+    });
+
+    it('is idempotent — running load twice leaves session unchanged', async () => {
+      const mockState: AppState = {
+        version: 1,
+        layout: {},
+        theme: { mode: 'dark' },
+        session: {
+          'terminal-tabs:bar': JSON.stringify({ tabs: [], activeTabId: 'file-tree' }),
+        },
+        project: { active: 'bar', projects: [{ path: '/bar', name: 'bar', agent: 'claude' }] },
+        panels: {},
+      };
+      mockIPC((cmd) => {
+        if (cmd === 'load_state') return mockState;
+        if (cmd === 'save_state') return undefined;
+      });
+      // First load
+      await loadAppState();
+      const afterFirst = getCurrentState()!;
+      // Simulate second load by seeding session with the already-migrated state
+      // then calling loadAppState again with the post-first-load state
+      const migratedState: AppState = {
+        ...mockState,
+        session: {
+          'terminal-tabs:bar:main-0': JSON.stringify({ tabs: [], activeTabId: '' }),
+        },
+      };
+      mockIPC((cmd) => {
+        if (cmd === 'load_state') return migratedState;
+        if (cmd === 'save_state') return undefined;
+      });
+      await loadAppState();
+      const afterSecond = getCurrentState()!;
+      // After second load the session should still contain only the migrated key
+      expect(afterSecond.session['terminal-tabs:bar']).toBeUndefined();
+      expect(afterSecond.session['terminal-tabs:bar:main-0']).toBeDefined();
+      expect(afterSecond.session['terminal-tabs:bar:right-0']).toBeUndefined(); // no right legacy key was present
     });
   });
 });

@@ -29,6 +29,8 @@ let spawnCalls: SpawnCall[] = [];
 let lastSavedState: any = null;
 // Seed state returned by load_state; tests can mutate .session to seed persistence keys.
 let seedState: any;
+// Track reset for terminal-tabs test-specific helpers
+let resetTestHelpers = false;
 
 function makeSeedState() {
   return {
@@ -41,10 +43,13 @@ function makeSeedState() {
   };
 }
 
+// Override beforeEach AFTER imports to add Phase 22 test helpers
+const _origBeforeEach = beforeEach;
 beforeEach(async () => {
   spawnCalls = [];
   lastSavedState = null;
   seedState = makeSeedState();
+  resetTestHelpers = false;
 
   mockIPC((cmd, args: any) => {
     if (cmd === 'spawn_terminal') {
@@ -73,16 +78,27 @@ beforeEach(async () => {
   await loadAppState();
 
   // Reset scope registries between tests
-  getTerminalScope('main').tabs.value = [];
-  getTerminalScope('main').activeTabId.value = '';
-  getTerminalScope('right').tabs.value = [];
-  getTerminalScope('right').activeTabId.value = '';
+  // Phase 22: reset all 6 scopes (main-0/1/2 + right-0/1/2)
+  for (const scope of ['main-0', 'main-1', 'main-2', 'right-0', 'right-1', 'right-2'] as const) {
+    try {
+      const s = getTerminalScope(scope);
+      s.tabs.value = [];
+      s.activeTabId.value = '';
+    } catch { /* scope may not exist yet in Phase 20 code */ }
+  }
   __resetScopeCountersForTesting();
+  // Also reset the shared project tab counter (Phase 22 D-12)
+  const { __resetProjectTabCounterForTesting } = await import('./terminal-tabs');
+  __resetProjectTabCounterForTesting();
 
   // Seed DOM containers for both scopes so createNewTabScoped finds its container.
   document.body.innerHTML = `
-    <div class="terminal-containers"></div>
-    <div class="terminal-containers" data-scope="right"></div>
+    <div class="terminal-containers" data-scope="main-0"></div>
+    <div class="terminal-containers" data-scope="main-1"></div>
+    <div class="terminal-containers" data-scope="main-2"></div>
+    <div class="terminal-containers" data-scope="right-0"></div>
+    <div class="terminal-containers" data-scope="right-1"></div>
+    <div class="terminal-containers" data-scope="right-2"></div>
   `;
 });
 
@@ -457,6 +473,81 @@ describe('terminal-tabs scope registry', () => {
       const foundInMain = getTerminalScope('main').tabs.value.find(t => t.sessionName === 'testproj-r1');
       expect(foundInRight).toBeTruthy();
       expect(foundInMain).toBeUndefined();
+    });
+  });
+
+  // Phase 22 D-12: shared per-project counter + sessionName stability on drag
+  describe('Phase 22 D-12 shared counter + session stability', () => {
+    it('shared counter unique names', async () => {
+      const { allocateNextSessionName } = await import('./terminal-tabs');
+      // Import resets already — counter starts fresh per test
+      const names: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        const { name } = allocateNextSessionName('testproj');
+        names.push(name);
+      }
+      // First call: bare project name (no suffix)
+      // Subsequent: project-2, project-3, project-4, project-5
+      expect(names).toEqual(['testproj', 'testproj-2', 'testproj-3', 'testproj-4', 'testproj-5']);
+    });
+
+    it('sessionName stable on drag — no PTY commands dispatched on ownerScope change', async () => {
+      const { allocateNextSessionName } = await import('./terminal-tabs');
+
+      // Create a tab in main-0 scope
+      const { createNewTab } = await import('./terminal-tabs');
+      const tab = await createNewTab({ scope: 'main-0' });
+      expect(tab).toBeTruthy();
+      const originalSessionName = tab!.sessionName;
+
+      // Capture any IPC calls that would rename/destroy/spawn
+      const ipcCalls: string[] = [];
+      mockIPC((cmd, args: any) => {
+        if (['destroy_pty_session', 'spawn_terminal', 'tmux_rename_session'].includes(cmd as string)) {
+          ipcCalls.push(cmd as string);
+        }
+        if (cmd === 'spawn_terminal') {
+          spawnCalls.push({
+            sessionName: args?.sessionName,
+            agent: args?.agent ?? null,
+            cwd: args?.cwd,
+          });
+        }
+        return null;
+      });
+
+      // Simulate ownerScope change — mutate the tab's ownerScope directly
+      // In Phase 22, ownerScope is just metadata; sessionName stays the same.
+      tab!.ownerScope = 'main-1';
+      // Trigger reactivity
+      getTerminalScope('main-0').tabs.value = [...getTerminalScope('main-0').tabs.value];
+
+      // No IPC calls should have been made for destroy/spawn/rename
+      expect(ipcCalls).toHaveLength(0);
+      // Session name is unchanged
+      expect(tab!.sessionName).toBe(originalSessionName);
+    });
+
+    it('legacy -rN restore seeds counter correctly', async () => {
+      // Seed a legacy right-terminal-tabs entry with sessionName 'testproj-r1'
+      seedState.session['right-terminal-tabs:testproj'] = JSON.stringify({
+        tabs: [{ sessionName: 'testproj-r1', label: 'Right A', isAgent: false }],
+        activeTabId: '',
+      });
+      const { loadAppState } = await import('../state-manager');
+      await loadAppState();
+
+      const { allocateNextSessionName, seedCounterFromRestoredTabs } = await import('./terminal-tabs');
+
+      // Seed the counter from restored tabs
+      seedCounterFromRestoredTabs('testproj');
+
+      // Creating a new tab should give 'testproj-2' (counter advanced past the -r1 suffix)
+      // NOT 'testproj-r2' — new tabs use bare suffix scheme
+      const { name, n } = allocateNextSessionName('testproj');
+      expect(n).toBeGreaterThanOrEqual(2);
+      // The -r1 suffix from legacy should have seeded the counter but new allocation uses bare scheme
+      expect(name).toMatch(/^testproj(-\d+)?$/);
     });
   });
 });
