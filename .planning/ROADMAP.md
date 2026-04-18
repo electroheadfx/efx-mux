@@ -175,7 +175,7 @@ Plans:
 **Plans**: 4 plans
 Plans:
   - [ ] 21-01-PLAN.md — FIX-01: file-tree-changed event + incremental refresh + dirty-aware editor reload
-  - [ ] 21-02-PLAN.md — FIX-05: Open-in-external-editor regression diagnosis + fix
+  - [x] 21-02-PLAN.md — FIX-05: Open-in-external-editor regression diagnosis + fix
   - [ ] 21-03-PLAN.md — FIX-06: CLAUDE.md tab-open chain diagnosis + fix
   - [ ] 21-04-PLAN.md — Code-review debt bundle (WR-01, WR-02, WR-03 verify, IN-02) + REQUIREMENTS/ROADMAP scope reconciliation
 
@@ -207,7 +207,7 @@ Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21
 | 18. File Tree Enhancements | v0.3.0 | 12/12 | Complete    | 2026-04-17 |
 | 19. GSD Sub-Tabs | v0.3.0 | 4/4 | Complete   | 2026-04-17 |
 | 20. Right Panel Multi-Terminal | v0.3.0 | 9/4 | Complete    | 2026-04-18 |
-| 21. Bug Fix Sprint | v0.3.0 | 0/4 | Planning    | - |
+| 21. Bug Fix Sprint | v0.3.0 | 1/4 | In Progress|  |
 
 ---
 *Roadmap created: 2026-04-06*

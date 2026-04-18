@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: Workspace Evolution
 status: executing
-stopped_at: Phase 21 context gathered
-last_updated: "2026-04-18T08:17:47.845Z"
-last_activity: 2026-04-18 -- Phase 21 planning complete
+stopped_at: Completed 21-02-PLAN.md (FIX-05 Open-In external editor regression)
+last_updated: "2026-04-18T11:08:09.016Z"
+last_activity: 2026-04-18 -- Phase 21 execution started
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 35
-  completed_plans: 36
+  completed_plans: 37
   percent: 100
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** A single native macOS window that co-locates AI agent terminals alongside live GSD progress, git diff, and file tree -- all persisted across restarts via tmux.
-**Current focus:** Phase 20 — right-panel-multi-terminal
+**Current focus:** Phase 21 — bug-fix-sprint
 
 ## Current Position
 
-Phase: 21
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-04-18 -- Phase 21 planning complete
+Phase: 21 (bug-fix-sprint) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 21
+Last activity: 2026-04-18 -- Phase 21 execution started
 
 **Code review fixes pending (non-blocking):**
 
@@ -122,8 +122,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-18T07:49:45.988Z
-Stopped at: Phase 21 context gathered
-Resume file: .planning/phases/21-bug-fix-sprint/21-CONTEXT.md
+Last session: 2026-04-18T11:08:09.014Z
+Stopped at: Completed 21-02-PLAN.md (FIX-05 Open-In external editor regression)
+Resume file: None
 
 Next: `/gsd-execute-phase 15` or `/gsd-code-review-fix 17` to fix remaining warnings
