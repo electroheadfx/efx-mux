@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: Workspace Evolution
 status: executing
-stopped_at: Completed 21-04-PLAN.md
-last_updated: "2026-04-18T11:28:33.819Z"
+stopped_at: Phase 22 context gathered
+last_updated: "2026-04-18T15:43:40.921Z"
 last_activity: 2026-04-18
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 7
   total_plans: 35
   completed_plans: 40
@@ -65,6 +65,10 @@ Progress: [██████████] 100% (Phase 17)
 - [Phase 19]: Phase 19 Plan 03: Co-located EmptyState helper with StatusBadge in status-badge.tsx (one shared-primitives file, imported by all 5 sub-tabs). Kept PhasesTab accordion state module-level per git-changes-tab.tsx precedent -- ephemeral across sub-tab switches by design.
 - [Phase 21-bug-fix-sprint]: FIX-06 root cause: openEditorTab wrote only activeUnifiedTabId; RightPanel reads getTerminalScope('right').activeTabId separately. Introduced _activateEditorTab helper to route activation by ownerScope.
 - [Phase 21]: Plan 21-04 IN-02: approach (a) useRef refactor over approach (b) targeted disable — eliminates react-hooks/exhaustive-deps suppression in editor-tab.tsx entirely
+
+### Roadmap Evolution
+
+- Phase 22 added: Dynamic tabs, vertical split, and preferences modal (2026-04-18)
 
 ### Pending Todos
 
@@ -126,8 +130,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-18T11:28:33.816Z
-Stopped at: Completed 21-04-PLAN.md
-Resume file: None
+Last session: 2026-04-18T15:43:40.917Z
+Stopped at: Phase 22 context gathered
+Resume file: .planning/phases/22-dynamic-tabs-vertical-split-and-preferences-modal/22-CONTEXT.md
 
 Next: `/gsd-execute-phase 15` or `/gsd-code-review-fix 17` to fix remaining warnings
