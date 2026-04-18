@@ -1420,6 +1420,20 @@ function onDocMouseMove(e: MouseEvent): void {
       break;
     }
   }
+
+  // Phase 22 D-14: drop affordance on target tab bar wrapper.
+  // Clear previous drop-target classes first.
+  document.querySelectorAll('[data-tablist-scope].drop-target').forEach(el => {
+    el.classList.remove('drop-target');
+  });
+  // Find the hovered tab bar wrapper and add drop-target if crossing scope boundary.
+  const hoveredScopeWrapper = (e.target as HTMLElement | null)?.closest?.('[data-tablist-scope]') as HTMLElement | null;
+  if (hoveredScopeWrapper) {
+    const hoveredScope = hoveredScopeWrapper.dataset.tablistScope as TerminalScope | undefined;
+    if (hoveredScope && hoveredScope !== reorder.sourceScope) {
+      hoveredScopeWrapper.classList.add('drop-target');
+    }
+  }
 }
 
 function onDocMouseUp(e: MouseEvent): void {
@@ -1622,6 +1636,10 @@ function cleanupReorder(): void {
   document.querySelectorAll<HTMLElement>('[data-tab-id]').forEach(el => {
     el.style.borderLeft = '';
     el.style.borderRight = '';
+  });
+  // Phase 22 D-14: clear any lingering drop-target classes.
+  document.querySelectorAll('[data-tablist-scope].drop-target').forEach(el => {
+    el.classList.remove('drop-target');
   });
   reorder.sourceId = null;
   reorder.sourceEl = null;
