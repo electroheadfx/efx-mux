@@ -528,25 +528,26 @@ describe('terminal-tabs scope registry', () => {
       expect(tab!.sessionName).toBe(originalSessionName);
     });
 
-    it('legacy -rN restore seeds counter correctly', async () => {
-      // Seed a legacy right-terminal-tabs entry with sessionName 'testproj-r1'
-      seedState.session['right-terminal-tabs:testproj'] = JSON.stringify({
-        tabs: [{ sessionName: 'testproj-r1', label: 'Right A', isAgent: false }],
-        activeTabId: '',
-      });
-      const { loadAppState } = await import('../state-manager');
-      await loadAppState();
+    it('legacy -N restore seeds counter correctly', async () => {
+      const { allocateNextSessionName, seedCounterFromRestoredTabs, getTerminalScope } = await import('./terminal-tabs');
 
-      const { allocateNextSessionName, seedCounterFromRestoredTabs } = await import('./terminal-tabs');
+      // Add a tab with sessionName 'testproj-1' (legacy bare -N suffix)
+      const rightSynth = {
+        id: 'tab-1',
+        sessionName: 'testproj-1',
+        label: 'Right A',
+        exitCode: undefined,
+        isAgent: false,
+        ownerScope: 'right-0' as const,
+      } as unknown as import('./terminal-tabs').TerminalTab;
+      getTerminalScope('right-0').tabs.value = [rightSynth];
 
-      // Seed the counter from restored tabs
+      // Seed the counter from the restored tab (regex /-(\d+)$/ matches 'testproj-1')
       seedCounterFromRestoredTabs('testproj');
 
-      // Creating a new tab should give 'testproj-2' (counter advanced past the -r1 suffix)
-      // NOT 'testproj-r2' — new tabs use bare suffix scheme
+      // Counter seeded to 1; next allocation should give n=2 (testproj-2)
       const { name, n } = allocateNextSessionName('testproj');
       expect(n).toBeGreaterThanOrEqual(2);
-      // The -r1 suffix from legacy should have seeded the counter but new allocation uses bare scheme
       expect(name).toMatch(/^testproj(-\d+)?$/);
     });
   });

@@ -8,7 +8,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { colors, fonts, spacing } from '../tokens';
 import { Dropdown, type DropdownItem } from './dropdown-menu';
 import { showConfirmModal } from './confirm-modal';
-import { Terminal, Bot, FileDiff, Pin, PanelRightClose, PanelRight, FolderOpen, ListChecks } from 'lucide-preact';
+import { Terminal, Bot, FileDiff, Pin, PanelRightClose, PanelRight, FolderOpen, ListChecks, Rows2 } from 'lucide-preact';
 import type { TerminalTab, TerminalScope } from './terminal-tabs';
 import {
   terminalTabs,
@@ -48,7 +48,7 @@ interface EditorTabData extends BaseTab {
   displayName?: string;  // Custom user-set name; falls back to fileName
   /**
    * Plan 20-05-D: which panel renders this editor tab.
-   * Defaults to 'main' for both newly-opened tabs and for tabs restored from
+   * Defaults to 'main-0' for both newly-opened tabs and for tabs restored from
    * persisted state that predate the `ownerScope` field. Cross-scope drag
    * flips this via handleCrossScopeDrop.
    */
@@ -65,21 +65,28 @@ interface EditorTabData extends BaseTab {
 
 interface GitChangesTabData extends BaseTab {
   type: 'git-changes';
-  /** Which panel owns this tab (D-07). Defaults to 'main' on first render. */
+  /** Which scope owns this tab (Phase 22: any TerminalScope, not just 'main-0'/'right'). */
   owningScope: TerminalScope;
 }
 
-/** Sticky tab variant for right-scope File Tree / GSD pinned tabs (D-03, D-05). */
-interface StickyTabData {
-  type: 'file-tree' | 'gsd';
-  id: 'file-tree' | 'gsd';
+export interface FileTreeTabData {
+  type: 'file-tree';
+  id: string;
+  ownerScope: TerminalScope;
+}
+
+export interface GsdTabData {
+  type: 'gsd';
+  id: string;
+  owningScope: TerminalScope;
 }
 
 type UnifiedTab =
   | { type: 'terminal'; id: string; terminalTabId: string; scope: TerminalScope }
   | EditorTabData
   | GitChangesTabData
-  | StickyTabData;
+  | FileTreeTabData
+  | GsdTabData;
 
 // ── Signals ─────────────────────────────────────────────────────────────────---
 
@@ -89,14 +96,17 @@ const _editorTabsByProject = signal<Map<string, EditorTabData[]>>(new Map());
 const _tabOrderByProject = signal<Map<string, string[]>>(new Map());
 /**
  * Phase 20 Plan 02: per-scope, per-project tab order.
- * Outer key = TerminalScope ('main' | 'right'), inner key = project name.
- * Only dynamic tab IDs are stored — sticky IDs ('file-tree', 'gsd') NEVER
- * appear here (D-03 drag-reject; Pitfall 7).
+ * Outer key = TerminalScope ('main-0'..'main-2' | 'right-0'..'right-2'), inner key = project name.
+ * Only dynamic tab IDs are stored — singleton IDs ('gsd') NEVER appear here (D-03 drag-reject).
  */
 const _tabOrderByProjectScoped = signal<Map<TerminalScope, Map<string, string[]>>>(
   new Map<TerminalScope, Map<string, string[]>>([
-    ['main', new Map<string, string[]>()],
-    ['right', new Map<string, string[]>()],
+    ['main-0', new Map<string, string[]>()],
+    ['main-1', new Map<string, string[]>()],
+    ['main-2', new Map<string, string[]>()],
+    ['right-0', new Map<string, string[]>()],
+    ['right-1', new Map<string, string[]>()],
+    ['right-2', new Map<string, string[]>()],
   ])
 );
 
@@ -121,7 +131,7 @@ function ensureProjectInMaps(projectName: string): void {
 }
 
 /** Update editor tabs for the active project */
-function setProjectEditorTabs(tabs: EditorTabData[]): void {
+export function setProjectEditorTabs(tabs: EditorTabData[]): void {
   const name = activeProjectName.value;
   if (!name) return;
   ensureProjectInMaps(name);
@@ -153,6 +163,8 @@ export const tabOrder = computed<string[]>(() => {
 });
 
 export const gitChangesTab = signal<GitChangesTabData | null>(null);
+export const gsdTab = signal<GsdTabData | null>(null);
+export const fileTreeTabs = signal<FileTreeTabData[]>([]);
 export const activeUnifiedTabId = signal<string>('');
 const renamingTabId = signal<string>('');
 
@@ -181,8 +193,8 @@ function getScopedTabOrder(scope: TerminalScope): string[] {
 function setScopedTabOrder(scope: TerminalScope, order: string[]): void {
   const name = activeProjectName.value;
   if (!name) return;
-  // Defensive: strip any sticky IDs (D-03).
-  const clean = order.filter(id => id !== 'file-tree' && id !== 'gsd');
+  // Strip the singleton gsd ID — singleton is stored in gsdTab signal, not in scoped order.
+  const clean = order.filter(id => id !== 'gsd');
   const nextOuter = new Map(_tabOrderByProjectScoped.value);
   const inner = new Map(nextOuter.get(scope) ?? new Map<string, string[]>());
   inner.set(name, clean);
@@ -192,13 +204,13 @@ function setScopedTabOrder(scope: TerminalScope, order: string[]): void {
 
 /** Remove a tab ID from main-scope order (used by Git Changes handoff). */
 function removeFromMainTabOrder(id: string): void {
-  setScopedTabOrder('main', getScopedTabOrder('main').filter(x => x !== id));
+  setScopedTabOrder('main-0', getScopedTabOrder('main-0').filter(x => x !== id));
 }
 
-/** Append a tab ID to right-scope order (used by Git Changes handoff). */
+/** Append a tab ID to right-0 scope order (used by Git Changes handoff). */
 function appendToRightTabOrder(id: string): void {
-  const cur = getScopedTabOrder('right');
-  if (!cur.includes(id)) setScopedTabOrder('right', [...cur, id]);
+  const cur = getScopedTabOrder('right-0');
+  if (!cur.includes(id)) setScopedTabOrder('right-0', [...cur, id]);
 }
 
 // ── Tab label click timer (single-click reveal vs double-click rename) ────────
@@ -213,10 +225,10 @@ export const allTabs = computed<UnifiedTab[]>(() => {
     type: 'terminal' as const,
     id: t.id,
     terminalTabId: t.id,
-    scope: 'main' as const,
+    scope: 'main-0' as const,
   }));
   const editors: UnifiedTab[] = editorTabs.value;
-  const git: UnifiedTab[] = (gitChangesTab.value && gitChangesTab.value.owningScope !== 'right')
+  const git: UnifiedTab[] = (gitChangesTab.value && !gitChangesTab.value.owningScope.startsWith('right'))
     ? [gitChangesTab.value]
     : [];
   return [...terminals, ...editors, ...git];
@@ -285,7 +297,7 @@ type CreateTabOptionsShape = { isAgent?: boolean; scope?: TerminalScope };
  * Phase 21 Plan 03 (FIX-06): scope-aware activation helper for editor tabs.
  *
  * Background: Plan 20-05-D introduced `ownerScope` and a separate right-panel
- * active-tab signal (`getTerminalScope('right').activeTabId`). RightPanel reads
+ * active-tab signal (`getTerminalScope('right-0').activeTabId`). RightPanel reads
  * THAT signal — not `activeUnifiedTabId` — to decide whether to render a
  * right-scoped editor body. `UnifiedTabBar.handleTabClick` (line ~1410) was
  * updated to route by `ownerScope`, but the programmatic openers
@@ -302,9 +314,9 @@ type CreateTabOptionsShape = { isAgent?: boolean; scope?: TerminalScope };
  * lookup) continues to track focus correctly across scope.
  */
 function _activateEditorTab(tab: EditorTabData): void {
-  const scope = tab.ownerScope ?? 'main';
-  if (scope === 'right') {
-    getTerminalScope('right').activeTabId.value = tab.id;
+  const scope = tab.ownerScope ?? 'main-0';
+  if (scope.startsWith('right-')) {
+    getTerminalScope('right-0').activeTabId.value = tab.id;
   }
   // Always also set activeUnifiedTabId so save shortcuts, persistence, and
   // cross-scope drag reorder logic can find the focused tab by id without
@@ -323,16 +335,16 @@ function _activateEditorTab(tab: EditorTabData): void {
 function _migrateTabToMain(tabId: string): void {
   // Update ownerScope in editorTabs signal
   const updatedTabs = editorTabs.value.map(t =>
-    t.id === tabId ? { ...t, ownerScope: 'main' as const } : t,
+    t.id === tabId ? { ...t, ownerScope: 'main-0' as const } : t,
   );
   setProjectEditorTabs(updatedTabs);
   // Remove from right scoped tab order; add to main if not already present
-  setScopedTabOrder('right', getScopedTabOrder('right').filter(id => id !== tabId));
-  if (!getScopedTabOrder('main').includes(tabId)) {
-    setScopedTabOrder('main', [...getScopedTabOrder('main'), tabId]);
+  setScopedTabOrder('right-0', getScopedTabOrder('right-0').filter(id => id !== tabId));
+  if (!getScopedTabOrder('main-0').includes(tabId)) {
+    setScopedTabOrder('main-0', [...getScopedTabOrder('main-0'), tabId]);
   }
   // Reset right panel active tab to file-tree sticky default
-  const rightScope = getTerminalScope('right');
+  const rightScope = getTerminalScope('right-0');
   if (rightScope.activeTabId.value === tabId) {
     rightScope.activeTabId.value = 'file-tree';
   }
@@ -366,7 +378,7 @@ export function openEditorTab(filePath: string, fileName: string, content: strin
     // migration, _activateEditorTab sets activeUnifiedTabId to a right-scoped tab ID,
     // causing the main panel to show neither terminal nor editor (blank state), while
     // the right panel unexpectedly hides the file tree.
-    if ((existing.ownerScope ?? 'main') === 'right') {
+    if ((existing.ownerScope ?? 'main-0').startsWith('right-')) {
       _migrateTabToMain(existing.id);
       // editorTabs was just mutated — read fresh reference for activation
       const migrated = editorTabs.value.find(t => t.id === existing.id)!;
@@ -386,30 +398,30 @@ export function openEditorTab(filePath: string, fileName: string, content: strin
     // file takes over right-panel preview slot that the user isn't looking at).
     // Preview-follows-file-tree matches VS Code / Zed semantics; if the user
     // wants the new file in the right panel they can drag it.
-    const prevScope = unpinned.ownerScope ?? 'main';
+    const prevScope = unpinned.ownerScope ?? 'main-0';
     const updatedTabs = editorTabs.value.map(t =>
       t.id === unpinned.id
-        ? { ...t, filePath, fileName, content, dirty: false, pinned: false, ownerScope: 'main' as const }
+        ? { ...t, filePath, fileName, content, dirty: false, pinned: false, ownerScope: 'main-0' as const }
         : t
     );
     setProjectEditorTabs(updatedTabs);
     // If we just pulled a tab out of the right scope, update scoped tab orders
     // so the right panel doesn't still think this tab is one of its own.
-    if (prevScope === 'right') {
-      setScopedTabOrder('right', getScopedTabOrder('right').filter(id => id !== unpinned.id));
-      if (!getScopedTabOrder('main').includes(unpinned.id)) {
-        setScopedTabOrder('main', [...getScopedTabOrder('main'), unpinned.id]);
+    if (prevScope.startsWith('right-')) {
+      setScopedTabOrder('right-0', getScopedTabOrder('right-0').filter(id => id !== unpinned.id));
+      if (!getScopedTabOrder('main-0').includes(unpinned.id)) {
+        setScopedTabOrder('main-0', [...getScopedTabOrder('main-0'), unpinned.id]);
       }
       // If right scope was pointing at this tab, reset to file-tree so the
       // right panel reverts to its sticky default instead of stranding active.
-      const rightScope = getTerminalScope('right');
+      const rightScope = getTerminalScope('right-0');
       if (rightScope.activeTabId.value === unpinned.id) {
         rightScope.activeTabId.value = 'file-tree';
       }
     }
     // After mutation the tab is now main-scoped; activation goes through the
     // helper so both signals are kept in sync.
-    _activateEditorTab({ ...unpinned, ownerScope: 'main', filePath, fileName, content, dirty: false, pinned: false });
+    _activateEditorTab({ ...unpinned, ownerScope: 'main-0', filePath, fileName, content, dirty: false, pinned: false });
     return;
   }
 
@@ -422,12 +434,12 @@ export function openEditorTab(filePath: string, fileName: string, content: strin
     content,
     dirty: false,
     pinned: false,
-    ownerScope: 'main', // Plan 20-05-D: new tabs open in main; drag flips to right.
+    ownerScope: 'main-0', // Plan 20-05-D: new tabs open in main; drag flips to right.
   };
 
   setProjectEditorTabs([...editorTabs.value, newTab]);
   setProjectTabOrder([...tabOrder.value, newTab.id]);
-  setScopedTabOrder('main', [...getScopedTabOrder('main'), newTab.id]);
+  setScopedTabOrder('main-0', [...getScopedTabOrder('main-0'), newTab.id]);
   _activateEditorTab(newTab);
 }
 
@@ -448,7 +460,7 @@ export function openEditorTabPinned(filePath: string, fileName: string, content:
     }
     // FIX (Bug: CLAUDE.md / right-scoped tab blank main panel): same migration
     // as openEditorTab. Double-click from file tree must also target main panel.
-    if ((existing.ownerScope ?? 'main') === 'right') {
+    if ((existing.ownerScope ?? 'main-0').startsWith('right-')) {
       _migrateTabToMain(existing.id);
     }
     if (!existing.pinned) {
@@ -469,12 +481,12 @@ export function openEditorTabPinned(filePath: string, fileName: string, content:
     content,
     dirty: false,
     pinned: true,
-    ownerScope: 'main', // Plan 20-05-D: new tabs open in main; drag flips to right.
+    ownerScope: 'main-0', // Plan 20-05-D: new tabs open in main; drag flips to right.
   };
 
   setProjectEditorTabs([...editorTabs.value, newTab]);
   setProjectTabOrder([...tabOrder.value, newTab.id]);
-  setScopedTabOrder('main', [...getScopedTabOrder('main'), newTab.id]);
+  setScopedTabOrder('main-0', [...getScopedTabOrder('main-0'), newTab.id]);
   _activateEditorTab(newTab);
 }
 
@@ -531,8 +543,8 @@ export function persistEditorTabs(): void {
     fileName: t.fileName,
     pinned: t.pinned,
     // Plan 20-05-D: persist ownerScope so cross-scope drag survives restart.
-    // Legacy tabs without the field default to 'main' on restore.
-    ownerScope: t.ownerScope ?? 'main',
+    // Legacy tabs without the field default to 'main-0' on restore.
+    ownerScope: t.ownerScope ?? 'main-0',
     ...(t.displayName ? { displayName: t.displayName } : {}),
   }));
   // Never overwrite saved tabs with empty — prevents init race where computed
@@ -603,23 +615,23 @@ export async function restoreEditorTabs(projectName: string): Promise<boolean> {
         }
       }
       // Plan 20-05-D: honor persisted ownerScope. openEditorTab* default to
-      // 'main', so flip to 'right' AFTER the tab exists. Also re-route the
-      // scoped tab order: openEditorTab* seeded it in 'main' by default.
-      const restoredScope = tab.ownerScope ?? 'main';
-      if (restoredScope === 'right') {
+      // 'main-0', so flip to 'right' AFTER the tab exists. Also re-route the
+      // scoped tab order: openEditorTab* seeded it in 'main-0' by default.
+      const restoredScope = tab.ownerScope ?? 'main-0';
+      if (restoredScope.startsWith('right-')) {
         const opened = editorTabs.value.find(t => t.filePath === tab.filePath);
         if (opened) {
           const updated = editorTabs.value.map(t =>
-            t.id === opened.id ? { ...t, ownerScope: 'right' as const } : t,
+            t.id === opened.id ? { ...t, ownerScope: 'right-0' as const } : t,
           );
           setProjectEditorTabs(updated);
           setScopedTabOrder(
-            'main',
-            getScopedTabOrder('main').filter(id => id !== opened.id),
+            'main-0',
+            getScopedTabOrder('main-0').filter(id => id !== opened.id),
           );
           setScopedTabOrder(
-            'right',
-            [...getScopedTabOrder('right').filter(id => id !== opened.id), opened.id],
+            'right-0',
+            [...getScopedTabOrder('right-0').filter(id => id !== opened.id), opened.id],
           );
         }
       }
@@ -704,10 +716,10 @@ export function restoreGitChangesTab(projectName: string): void {
     };
     gitChangesTab.value = restored;
     // Route into the correct scoped tab order so the tab bar renders it.
-    if (parsed.owningScope === 'right') {
+    if (parsed.owningScope.startsWith('right')) {
       appendToRightTabOrder(restored.id);
     } else {
-      setScopedTabOrder('main', [...getScopedTabOrder('main'), restored.id]);
+      setScopedTabOrder('main-0', [...getScopedTabOrder('main-0'), restored.id]);
       setProjectTabOrder([...tabOrder.value, restored.id]);
     }
   } catch {
@@ -715,10 +727,165 @@ export function restoreGitChangesTab(projectName: string): void {
   }
 }
 
-// Watch gitChangesTab for changes and persist. Subscription fires on open,
-// close, and scope-flip (all branches of openGitChangesTab /
-// openOrMoveGitChangesToRight / closeUnifiedTab).
+// Watch gitChangesTab for changes and persist.
 gitChangesTab.subscribe(() => { persistGitChangesTab(); });
+
+// ── GSD tab persistence (Phase 22 Plan 03) ───────────────────────────────────
+
+const GSD_KEY_PREFIX = 'gsd-tab:';
+
+/** Serialize gsdTab into state.json under a per-project session key. */
+function persistGsdTab(): void {
+  const activeName = activeProjectName.value;
+  if (!activeName) return;
+  const key = `${GSD_KEY_PREFIX}${activeName}`;
+  const current = gsdTab.value;
+  if (!current) {
+    updateSession({ [key]: '' });
+    return;
+  }
+  updateSession({
+    key: JSON.stringify({ id: current.id, owningScope: current.owningScope }),
+  });
+}
+
+/**
+ * Restore gsdTab from persisted state for a given project.
+ */
+export function restoreGsdTab(projectName: string): void {
+  const state = getCurrentState();
+  const raw = state?.session?.[`${GSD_KEY_PREFIX}${projectName}`];
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw) as { id?: string; owningScope?: TerminalScope };
+    if (!parsed?.id || !parsed?.owningScope) return;
+    gsdTab.value = { type: 'gsd', id: parsed.id, owningScope: parsed.owningScope };
+  } catch { /* corrupt */ }
+}
+
+gsdTab.subscribe(() => { persistGsdTab(); });
+
+// ── File Tree tabs persistence (Phase 22 Plan 03) ─────────────────────────────
+
+const FILE_TREE_KEY_PREFIX = 'file-tree-tabs:';
+
+function persistFileTreeTabs(): void {
+  const activeName = activeProjectName.value;
+  if (!activeName) return;
+  const key = `${FILE_TREE_KEY_PREFIX}${activeName}`;
+  updateSession({ [key]: JSON.stringify(fileTreeTabs.value) });
+}
+
+export function restoreFileTreeTabs(projectName: string): void {
+  const state = getCurrentState();
+  const raw = state?.session?.[`${FILE_TREE_KEY_PREFIX}${projectName}`];
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw) as FileTreeTabData[];
+    if (!Array.isArray(parsed)) return;
+    fileTreeTabs.value = parsed;
+  } catch { /* corrupt */ }
+}
+
+fileTreeTabs.subscribe(() => { persistFileTreeTabs(); });
+
+// ── Singleton helpers (Phase 22 Plan 03) ────────────────────────────────────
+
+/**
+ * Open or move a singleton tab (GSD or Git Changes) to a target scope.
+ * If already in target scope: activate. If in another scope: move. If not open: create.
+ */
+export function openOrMoveSingletonToScope(
+  kind: 'gsd' | 'git-changes',
+  targetScope: TerminalScope,
+): void {
+  if (kind === 'gsd') {
+    const existing = gsdTab.value;
+    if (!existing) {
+      const newTab: GsdTabData = { type: 'gsd', id: 'gsd', owningScope: targetScope };
+      gsdTab.value = newTab;
+      setScopedTabOrder(targetScope, [...getScopedTabOrder(targetScope), 'gsd']);
+      getTerminalScope(targetScope).activeTabId.value = 'gsd';
+      activeUnifiedTabId.value = 'gsd';
+      return;
+    }
+    if (existing.owningScope === targetScope) {
+      getTerminalScope(targetScope).activeTabId.value = existing.id;
+      activeUnifiedTabId.value = existing.id;
+      return;
+    }
+    // Move: update source + target scoped orders; flip signal.
+    setScopedTabOrder(existing.owningScope, getScopedTabOrder(existing.owningScope).filter(id => id !== existing.id));
+    setScopedTabOrder(targetScope, [...getScopedTabOrder(targetScope), existing.id]);
+    gsdTab.value = { ...existing, owningScope: targetScope };
+    getTerminalScope(targetScope).activeTabId.value = existing.id;
+    const src = getTerminalScope(existing.owningScope);
+    if (src.activeTabId.value === existing.id) {
+      src.activeTabId.value = '';
+    }
+    return;
+  }
+
+  // git-changes
+  const existing = gitChangesTab.value;
+  if (!existing) {
+    const newTab: GitChangesTabData = { type: 'git-changes', id: `git-changes-${Date.now()}`, owningScope: targetScope };
+    gitChangesTab.value = newTab;
+    setScopedTabOrder(targetScope, [...getScopedTabOrder(targetScope), newTab.id]);
+    getTerminalScope(targetScope).activeTabId.value = newTab.id;
+    activeUnifiedTabId.value = newTab.id;
+    return;
+  }
+  if (existing.owningScope === targetScope) {
+    getTerminalScope(targetScope).activeTabId.value = existing.id;
+    activeUnifiedTabId.value = existing.id;
+    return;
+  }
+  setScopedTabOrder(existing.owningScope, getScopedTabOrder(existing.owningScope).filter(id => id !== existing.id));
+  setScopedTabOrder(targetScope, [...getScopedTabOrder(targetScope), existing.id]);
+  gitChangesTab.value = { ...existing, owningScope: targetScope };
+  getTerminalScope(targetScope).activeTabId.value = existing.id;
+  const src = getTerminalScope(existing.owningScope);
+  if (src.activeTabId.value === existing.id) {
+    src.activeTabId.value = '';
+  }
+}
+
+/**
+ * Open a file tree tab in the given scope, or activate it if already present.
+ * File Tree is NOT a singleton — each scope can have its own.
+ */
+export function openFileTreeTabInScope(scope: TerminalScope): void {
+  const existing = fileTreeTabs.value.find(t => t.ownerScope === scope);
+  if (existing) {
+    getTerminalScope(scope).activeTabId.value = existing.id;
+    activeUnifiedTabId.value = existing.id;
+    return;
+  }
+  const newTab: FileTreeTabData = {
+    type: 'file-tree',
+    id: `file-tree-${Date.now()}`,
+    ownerScope: scope,
+  };
+  fileTreeTabs.value = [...fileTreeTabs.value, newTab];
+  setScopedTabOrder(scope, [...getScopedTabOrder(scope), newTab.id]);
+  getTerminalScope(scope).activeTabId.value = newTab.id;
+  activeUnifiedTabId.value = newTab.id;
+}
+
+// ── Layout helpers (Phase 22 Plan 04 stub) ──────────────────────────────────
+
+// TODO(22-04): replace with real helpers from main-panel.tsx / right-panel.tsx.
+function spawnSubScopeForZone(_zone: 'main-0' | 'right'): void {
+  // Wired by Plan 04.
+}
+
+function getActiveSubScopesForZone(zone: 'main-0' | 'right'): TerminalScope[] {
+  // Default: 1 scope per zone (enables split button). Tests can mock this.
+  return zone === 'main-0'
+    ? ['main-0']
+    : ['right-0'];
+}
 
 /**
  * Open the Git Changes tab (main scope), or focus it if already open.
@@ -727,9 +894,9 @@ gitChangesTab.subscribe(() => { persistGitChangesTab(); });
 export function openGitChangesTab(): void {
   const existing = gitChangesTab.value;
   if (existing) {
-    // If currently owned by right, flip back to main (symmetrical to handoff)
-    if (existing.owningScope === 'right') {
-      gitChangesTab.value = { ...existing, owningScope: 'main' };
+    // If currently owned by right-0, flip back to main-0 (symmetrical to handoff)
+    if (existing.owningScope.startsWith('right')) {
+      gitChangesTab.value = { ...existing, owningScope: 'main-0' };
     }
     activeUnifiedTabId.value = existing.id;
     return;
@@ -738,58 +905,57 @@ export function openGitChangesTab(): void {
   const newTab: GitChangesTabData = {
     id: 'git-changes',
     type: 'git-changes',
-    owningScope: 'main',
+    owningScope: 'main-0',
   };
 
   gitChangesTab.value = newTab;
   setProjectTabOrder([...tabOrder.value, newTab.id]);
-  setScopedTabOrder('main', [...getScopedTabOrder('main'), newTab.id]);
+  setScopedTabOrder('main-0', [...getScopedTabOrder('main-0'), newTab.id]);
   activeUnifiedTabId.value = newTab.id;
 }
 
 /**
- * Open or move Git Changes into the right panel (D-07). Three branches:
- *  - already owned by right → just activate it (no duplication)
- *  - owned by main → move to right (same ID, flip owningScope, update orders,
- *    fall back main active to first remaining main tab)
- *  - not yet open → create a new tab owned by right
+ * Open or move Git Changes into the right-0 panel (D-07). Three branches:
+ *   - already owned by right-0 → just activate it (no duplication)
+ *   - owned by main-0 → move to right-0 (flip owningScope, update orders)
+ *   - not yet open → create a new tab owned by right-0
  */
 export function openOrMoveGitChangesToRight(): void {
   const existing = gitChangesTab.value;
-  const rightScope = getTerminalScope('right');
+  const rightScope = getTerminalScope('right-0');
 
-  if (existing?.owningScope === 'right') {
+  if (existing?.owningScope.startsWith('right')) {
     rightScope.activeTabId.value = existing.id;
     activeUnifiedTabId.value = existing.id;
     return;
   }
 
-  if (existing?.owningScope === 'main') {
-    removeFromMainTabOrder(existing.id);
-    appendToRightTabOrder(existing.id);
-    gitChangesTab.value = { ...existing, owningScope: 'right' };
+  if (existing?.owningScope.startsWith('main-0')) {
+    setScopedTabOrder('main-0', getScopedTabOrder('main-0').filter(x => x !== existing.id));
+    setScopedTabOrder('right-0', [...getScopedTabOrder('right-0'), existing.id]);
+    gitChangesTab.value = { ...existing, owningScope: 'right-0' };
     rightScope.activeTabId.value = existing.id;
     // Main active-tab fallback: first remaining main-scope dynamic tab, else ''
-    const mainTabs = getTerminalScope('main').tabs.value;
+    const mainTabs = getTerminalScope('main-0').tabs.value;
     if (mainTabs.length > 0) {
-      getTerminalScope('main').activeTabId.value = mainTabs[0].id;
+      getTerminalScope('main-0').activeTabId.value = mainTabs[0].id;
       activeUnifiedTabId.value = mainTabs[0].id;
     } else {
-      getTerminalScope('main').activeTabId.value = '';
+      getTerminalScope('main-0').activeTabId.value = '';
       activeUnifiedTabId.value = '';
     }
     return;
   }
 
-  // Create new, owned by right
+  // Create new, owned by right-0
   const id = `git-changes-${Date.now()}`;
   const newTab: GitChangesTabData = {
     id,
     type: 'git-changes',
-    owningScope: 'right',
+    owningScope: 'right-0',
   };
   gitChangesTab.value = newTab;
-  appendToRightTabOrder(id);
+  setScopedTabOrder('right-0', [...getScopedTabOrder('right-0'), id]);
   rightScope.activeTabId.value = id;
   activeUnifiedTabId.value = id;
 }
@@ -801,7 +967,7 @@ export function openOrMoveGitChangesToRight(): void {
  * terminal branch unconditionally called `closeTab(tabId)` — a backward-compat
  * wrapper that routes through the MAIN scope only — so right-scope terminal
  * tabs' × button appeared to do nothing (the tab entry was never removed from
- * `getTerminalScope('right').tabs`). We resolve the tab's owning scope first
+ * `getTerminalScope('right-0').tabs`). We resolve the tab's owning scope first
  * by searching both scope registries and dispatch close to the correct one.
  */
 export function closeUnifiedTab(tabId: string): void {
@@ -811,13 +977,13 @@ export function closeUnifiedTab(tabId: string): void {
   // them through the scope registry. Check both scopes so right-panel terminal
   // tabs close correctly too.
   const mainTermTab = terminalTabs.value.find(t => t.id === tabId);
-  const rightTermTab = getTerminalScope('right').tabs.value.find(t => t.id === tabId);
+  const rightTermTab = getTerminalScope('right-0').tabs.value.find(t => t.id === tabId);
   const termTab = mainTermTab ?? rightTermTab;
-  const termScope: TerminalScope | null = mainTermTab ? 'main' : rightTermTab ? 'right' : null;
+  const termScope: TerminalScope | null = mainTermTab ? 'main-0' : rightTermTab ? 'right-0' : null;
 
   if (termTab && termScope) {
     const scopeHandle = getTerminalScope(termScope);
-    const isMain = termScope === 'main';
+    const isMain = termScope.startsWith('main-0');
 
     if (termTab.isAgent) {
       showConfirmModal({
@@ -862,15 +1028,15 @@ export function closeUnifiedTab(tabId: string): void {
   // (main view), so the normal `tab` lookup misses it. Handle it here so
   // the × button still closes the tab and clears persistence.
   const gc = gitChangesTab.value;
-  if (gc && gc.id === tabId && gc.owningScope === 'right') {
-    // Fall right-scope active back to 'file-tree' if it was pointing here.
-    const right = getTerminalScope('right');
+  if (gc && gc.id === tabId && gc.owningScope.startsWith('right')) {
+    // Fall right-scope active back to '' if it was pointing here.
+    const right = getTerminalScope('right-0');
     if (right.activeTabId.value === tabId) {
-      right.activeTabId.value = 'file-tree';
+      right.activeTabId.value = '';
     }
     gitChangesTab.value = null;
-    // Clean the right-scope tab order too.
-    setScopedTabOrder('right', getScopedTabOrder('right').filter(id => id !== tabId));
+    // Clean the right-0 scoped tab order too.
+    setScopedTabOrder('right-0', getScopedTabOrder('right-0').filter(id => id !== tabId));
     return;
   }
 
@@ -1049,55 +1215,45 @@ function getOrderedTabs(): UnifiedTab[] {
 // ── Dropdown Items ─────────────────────────────────────────────────────────────
 
 function buildDropdownItems(scope: TerminalScope): DropdownItem[] {
-  if (scope === 'main') {
-    // Phase 17 items preserved verbatim for backward compat (SIDE-02)
-    return [
-      {
-        label: 'Terminal (Zsh)',
-        icon: Terminal,
-        // quick-260418-bpm: explicit focus via shared helper.
-        action: () => { void createAndFocusMainTerminalTab(); },
-      },
-      {
-        label: 'Agent',
-        icon: Bot,
-        // quick-260418-bpm: explicit focus via shared helper.
-        action: () => { void createAndFocusMainTerminalTab({ isAgent: true }); },
-      },
-      {
-        label: 'Git Changes',
-        icon: FileDiff,
-        action: () => openGitChangesTab(),
-      },
-    ];
-  }
-  // scope === 'right' — D-06
-  const rightScope = getTerminalScope('right');
-  const gcInRight = gitChangesTab.value?.owningScope === 'right';
+  const gsdOwnedElsewhere = gsdTab.value !== null && gsdTab.value.owningScope !== scope;
+  const gcOwnedElsewhere = gitChangesTab.value !== null && gitChangesTab.value.owningScope !== scope;
+
   return [
     {
       label: 'Terminal (Zsh)',
       icon: Terminal,
-      action: () => { void rightScope.createNewTab(); },
+      action: () => { void createAndFocusMainTerminalTab(); },
     },
     {
       label: 'Agent',
       icon: Bot,
-      action: () => { void rightScope.createNewTab({ isAgent: true }); },
+      action: () => { void createAndFocusMainTerminalTab({ isAgent: true }); },
+    },
+    {
+      label: 'GSD',
+      icon: ListChecks,
+      action: () => openOrMoveSingletonToScope('gsd', scope),
+      disabled: gsdOwnedElsewhere,
     },
     {
       label: 'Git Changes',
       icon: FileDiff,
-      action: () => openOrMoveGitChangesToRight(),
-      disabled: gcInRight,
+      action: () => openOrMoveSingletonToScope('git-changes', scope),
+      disabled: gcOwnedElsewhere,
+    },
+    {
+      label: 'File Tree',
+      icon: FolderOpen,
+      action: () => openFileTreeTabInScope(scope),
     },
   ];
 }
 
 // ── Scope-aware ordering (Phase 20, Plan 02) ─────────────────────────────────
 
-/** Compute the dynamic-tab list for a given scope (terminals + editors [main only]
- *  + git-changes if owned by this scope). Does NOT include sticky tabs. */
+/** Compute the dynamic-tab list for a given scope (terminals + editors +
+ *  git-changes singleton if owned by this scope + file-tree tabs owned by this scope).
+ *  Phase 22: GSD singleton also included via gsdTab signal. */
 function computeDynamicTabsForScope(scope: TerminalScope): UnifiedTab[] {
   const scopeHandle = getTerminalScope(scope);
   const terminals: UnifiedTab[] = scopeHandle.tabs.value.map(t => ({
@@ -1106,16 +1262,23 @@ function computeDynamicTabsForScope(scope: TerminalScope): UnifiedTab[] {
     terminalTabId: t.id,
     scope,
   }));
-  // Plan 20-05-D: editor tabs are scoped via `ownerScope`. Legacy tabs without
-  // the field default to 'main' (treated as main-owned for backward compat).
+  // Editor tabs scoped via `ownerScope`.
   const editors: UnifiedTab[] = editorTabs.value.filter(
-    t => (t.ownerScope ?? 'main') === scope,
+    t => (t.ownerScope ?? 'main-0') === scope,
   );
+  // Git Changes singleton (Phase 22: any scope can own it).
   const git: UnifiedTab[] = (gitChangesTab.value && gitChangesTab.value.owningScope === scope)
     ? [gitChangesTab.value]
     : [];
+  // GSD singleton (Phase 22 dynamic tab).
+  const gsd: UnifiedTab[] = (gsdTab.value && gsdTab.value.owningScope === scope)
+    ? [gsdTab.value]
+    : [];
+  // File Tree non-singleton tabs (Phase 22: per-scope, not sticky).
+  const fileTree: UnifiedTab[] = fileTreeTabs.value
+    .filter(t => t.ownerScope === scope);
 
-  const all: UnifiedTab[] = [...terminals, ...editors, ...git];
+  const all: UnifiedTab[] = [...terminals, ...editors, ...git, ...gsd, ...fileTree];
   const order = getScopedTabOrder(scope);
   if (order.length === 0) return all;
 
@@ -1128,18 +1291,9 @@ function computeDynamicTabsForScope(scope: TerminalScope): UnifiedTab[] {
   return ordered;
 }
 
-/** Compute the full ordered tab list for a scope, with sticky tabs
- *  prepended for scope==='right' (File Tree at 0, GSD at 1). */
+/** Compute the full ordered tab list for a scope (all dynamic, no sticky prepend). */
 function getOrderedTabsForScope(scope: TerminalScope): UnifiedTab[] {
-  const dynamic = computeDynamicTabsForScope(scope);
-  if (scope === 'main') return dynamic;
-  // Fix #3 (20-05-C): GSD FIRST, File Tree SECOND (overrides D-17 spec
-  // per UAT feedback — users expect the progress/plan view to lead).
-  const sticky: UnifiedTab[] = [
-    { type: 'gsd',       id: 'gsd' },
-    { type: 'file-tree', id: 'file-tree' },
-  ];
-  return [...sticky, ...dynamic];
+  return computeDynamicTabsForScope(scope);
 }
 
 /**
@@ -1349,17 +1503,9 @@ function onDocMouseUp(e: MouseEvent): void {
 }
 
 /**
- * Fix #5 (20-05-E) + Plan 20-05-D: move a tab across scopes.
- *
- * Handles `main <-> right` for:
- *   - terminal/agent tabs (ownerScope flips, xterm container is moved between
- *     `.terminal-containers[data-scope=X]` wrappers below)
- *   - editor tabs (ownerScope flips, RightPanel / MainPanel mount the
- *     EditorTab component on the correct side; CodeMirror EditorView is
- *     re-created under the new mount)
- *   - Git Changes (delegates to openOrMoveGitChangesToRight /
- *     openGitChangesTab, which flip owningScope symmetrically)
- *   - sticky tabs (no-op; sticky tabs are right-scope only by design)
+ * Move a tab across scopes (Phase 22 generalized cross-scope drag).
+ * Handles: GSD singleton, Git Changes singleton, File Tree (per-scope),
+ * Editor tabs, and Terminal/Agent tabs.
  */
 export function handleCrossScopeDrop(
   sourceId: string,
@@ -1368,17 +1514,34 @@ export function handleCrossScopeDrop(
   targetScope: TerminalScope,
   _insertAfter: boolean,
 ): void {
-  // Sticky tabs cannot cross scopes (rejected in onTabMouseDown already).
-  if (sourceId === 'file-tree' || sourceId === 'gsd') return;
+  if (sourceScope === targetScope) return;
 
-  // Git Changes — delegate to existing move helpers.
+  // GSD singleton drag
+  const gsd = gsdTab.value;
+  if (gsd && gsd.id === sourceId) {
+    openOrMoveSingletonToScope('gsd', targetScope);
+    return;
+  }
+
+  // Git Changes singleton drag (generalized from openOrMoveGitChangesToRight).
   const gc = gitChangesTab.value;
   if (gc && gc.id === sourceId) {
-    if (targetScope === 'right') {
-      openOrMoveGitChangesToRight();
-    } else if (targetScope === 'main') {
-      // Flip back to main (openGitChangesTab handles the flip symmetrically).
-      openGitChangesTab();
+    openOrMoveSingletonToScope('git-changes', targetScope);
+    return;
+  }
+
+  // File Tree (non-singleton, per-scope).
+  if (sourceId.startsWith('file-tree-')) {
+    const tab = fileTreeTabs.value.find(t => t.id === sourceId);
+    if (!tab || tab.ownerScope === targetScope) return;
+    fileTreeTabs.value = fileTreeTabs.value.map(t =>
+      t.id === sourceId ? { ...t, ownerScope: targetScope } : t
+    );
+    setScopedTabOrder(sourceScope, getScopedTabOrder(sourceScope).filter(id => id !== sourceId));
+    setScopedTabOrder(targetScope, [...getScopedTabOrder(targetScope), sourceId]);
+    getTerminalScope(targetScope).activeTabId.value = sourceId;
+    if (getTerminalScope(sourceScope).activeTabId.value === sourceId) {
+      getTerminalScope(sourceScope).activeTabId.value = '';
     }
     return;
   }
@@ -1387,17 +1550,13 @@ export function handleCrossScopeDrop(
   if (sourceId.startsWith('editor-')) {
     const edTab = editorTabs.value.find(t => t.id === sourceId);
     if (!edTab) return;
-    // If already in target scope, nothing to do.
-    if ((edTab.ownerScope ?? 'main') === targetScope) return;
+    if ((edTab.ownerScope ?? 'main-0') === targetScope) return;
 
-    // Mutate ownerScope in-place (the setProjectEditorTabs helper triggers
-    // reactivity via Map re-assignment and fires the persist subscription).
     const updated = editorTabs.value.map(t =>
       t.id === sourceId ? { ...t, ownerScope: targetScope } : t,
     );
     setProjectEditorTabs(updated);
 
-    // Move across scoped orders.
     setScopedTabOrder(
       sourceScope,
       getScopedTabOrder(sourceScope).filter(id => id !== sourceId),
@@ -1407,30 +1566,24 @@ export function handleCrossScopeDrop(
       [...getScopedTabOrder(targetScope).filter(id => id !== sourceId), sourceId],
     );
 
-    // Activate in target scope via the appropriate signal.
-    if (targetScope === 'right') {
-      getTerminalScope('right').activeTabId.value = sourceId;
-      // Also clear main's unified active if it was this tab so main-panel
-      // does not keep showing the editor as active after the move.
+    if (targetScope.startsWith('right')) {
+      getTerminalScope('right-0').activeTabId.value = sourceId;
       if (activeUnifiedTabId.value === sourceId) {
-        const remainingMain = computeDynamicTabsForScope('main');
+        const remainingMain = computeDynamicTabsForScope('main-0');
         activeUnifiedTabId.value = remainingMain[0]?.id ?? '';
       }
     } else {
-      // target === 'main': set unified active; if right scope was showing it,
-      // fall the right active-tab back to the first remaining right tab or
-      // the default sticky 'file-tree'.
       activeUnifiedTabId.value = sourceId;
-      const rightScope = getTerminalScope('right');
+      const rightScope = getTerminalScope('right-0');
       if (rightScope.activeTabId.value === sourceId) {
-        const remainingRight = computeDynamicTabsForScope('right');
-        rightScope.activeTabId.value = remainingRight[0]?.id ?? 'file-tree';
+        const remainingRight = computeDynamicTabsForScope('right-0');
+        rightScope.activeTabId.value = remainingRight[0]?.id ?? '';
       }
     }
     return;
   }
 
-  // Terminal/Agent tabs — primary UAT path.
+  // Terminal/Agent tabs.
   const sourceTabs = getTerminalScope(sourceScope).tabs.value;
   const found = sourceTabs.find(t => t.id === sourceId);
   if (!found) return;
@@ -1442,7 +1595,6 @@ export function handleCrossScopeDrop(
     movedTab,
   ];
 
-  // Move scoped tab order.
   setScopedTabOrder(
     sourceScope,
     getScopedTabOrder(sourceScope).filter(id => id !== sourceId),
@@ -1452,7 +1604,6 @@ export function handleCrossScopeDrop(
     [...getScopedTabOrder(targetScope), sourceId],
   );
 
-  // Activate in target scope; fall back source active-tab if needed.
   getTerminalScope(targetScope).activeTabId.value = sourceId;
   if (getTerminalScope(sourceScope).activeTabId.value === sourceId) {
     const remaining = getTerminalScope(sourceScope).tabs.value;
@@ -1484,58 +1635,55 @@ function cleanupReorder(): void {
 
 export function UnifiedTabBar({ scope }: UnifiedTabBarProps) {
   const ordered = getOrderedTabsForScope(scope);
-  // For right-scope, the active-tab indicator reads from the right scope signal
-  // (sticky tabs store their active id there too); for main it stays on the
-  // unified signal so editor/git-changes activation continues to work.
-  const scopeActiveId = scope === 'right'
-    ? getTerminalScope('right').activeTabId.value
-    : activeUnifiedTabId.value;
-  const currentId = scope === 'right' ? scopeActiveId : activeUnifiedTabId.value;
+  // Phase 22: active tab for each scope reads from that scope's own signal,
+  // so sub-scopes maintain independent focus state.
+  const scopeActiveId = getTerminalScope(scope).activeTabId.value;
+  const currentId = activeUnifiedTabId.value;
   const dropdownItems = buildDropdownItems(scope);
-  const hasDynamicRight = scope === 'right' && computeDynamicTabsForScope('right').length > 0;
+  const hasDynamicRight = scope.startsWith('right') && computeDynamicTabsForScope(scope).length > 0;
+
+  // Compute zone for split icon: 'main-0' or 'right'
+  const zone: 'main-0' | 'right' = scope.startsWith('main-0') ? 'main-0' : 'right';
+  const activeSubScopes = getActiveSubScopesForZone(zone);
+  const atCap = activeSubScopes.length >= 3;
 
   function handleTabClick(tab: UnifiedTab): void {
-    // Sticky tabs always live in right scope; never touch main's active.
-    if (tab.type === 'file-tree' || tab.type === 'gsd') {
-      getTerminalScope('right').activeTabId.value = tab.id;
+    // Phase 22: GSD singleton, File Tree, Git Changes all route via owningScope.
+    if (tab.type === 'gsd') {
+      getTerminalScope(tab.owningScope).activeTabId.value = tab.id;
+      activeUnifiedTabId.value = tab.id;
+      return;
+    }
+    if (tab.type === 'file-tree') {
+      getTerminalScope(tab.ownerScope).activeTabId.value = tab.id;
+      activeUnifiedTabId.value = tab.id;
+      return;
+    }
+    if (tab.type === 'git-changes') {
+      getTerminalScope(tab.owningScope).activeTabId.value = tab.id;
+      activeUnifiedTabId.value = tab.id;
       return;
     }
     // Terminal tab: scope determined by tab.scope.
     if (tab.type === 'terminal') {
       const scopeHandle = getTerminalScope(tab.scope);
       scopeHandle.activeTabId.value = tab.id;
-      if (tab.scope === 'main') {
-        activeUnifiedTabId.value = tab.id;
-        activeTabId.value = tab.id;
-        switchToTab(tab.id);
-      } else {
-        scopeHandle.switchToTab(tab.id);
-      }
-      return;
-    }
-    // Git Changes: owning scope determines which active signal to set.
-    if (tab.type === 'git-changes') {
-      if (tab.owningScope === 'right') {
-        getTerminalScope('right').activeTabId.value = tab.id;
-      } else {
-        activeUnifiedTabId.value = tab.id;
-      }
-      return;
-    }
-    // Editor (CodeMirror) tabs — route activation to the owning scope's signal.
-    // Plan 20-05-D: right-owned editor tabs activate via right's scope signal
-    // so RightPanel shows the editor body and MainPanel does not also render
-    // it as active.
-    if (tab.type === 'editor') {
-      if ((tab.ownerScope ?? 'main') === 'right') {
-        getTerminalScope('right').activeTabId.value = tab.id;
-        return;
-      }
       activeUnifiedTabId.value = tab.id;
+      activeTabId.value = tab.id;
+      switchToTab(tab.id);
       return;
     }
-    // Defensive fallback (unreachable given exhaustive union above).
-    activeUnifiedTabId.value = tab.id;
+    // Editor tabs — route to owning scope's signal.
+    if (tab.type === 'editor') {
+      const ownerScope = tab.ownerScope ?? 'main-0';
+      getTerminalScope(ownerScope).activeTabId.value = tab.id;
+      // Only update global activeUnifiedTabId for main-scope editors;
+      // right-scope has its own isolated focus tracking.
+      if (!ownerScope.startsWith('right-')) {
+        activeUnifiedTabId.value = tab.id;
+      }
+      return;
+    }
   }
 
   function handleClose(e: MouseEvent, tabId: string): void {
@@ -1581,7 +1729,7 @@ export function UnifiedTabBar({ scope }: UnifiedTabBarProps) {
           // D-05 optional divider: insert 1px rule after the sticky pair when
           // right scope has at least one dynamic tab. Sticky tabs occupy
           // indices 0 (file-tree) and 1 (gsd); divider goes after index 1.
-          if (scope === 'right' && i === 1 && hasDynamicRight) {
+          if (scope.startsWith('right-') && i === 1 && hasDynamicRight) {
             return (
               <>
                 {rendered}
@@ -1674,6 +1822,40 @@ export function UnifiedTabBar({ scope }: UnifiedTabBarProps) {
             >+</button>
           )}
         />
+
+        {/* Phase 22 Plan 03: split icon button (Rows2, 14px) */}
+        <button
+          class="tab-bar-split-icon"
+          aria-label={atCap ? 'Split pane (maximum 3 panes reached)' : 'Split pane'}
+          aria-disabled={atCap}
+          disabled={atCap}
+          title={atCap ? 'Split pane (maximum 3 panes reached)' : 'Split pane'}
+          onClick={() => { if (!atCap) spawnSubScopeForZone(zone); }}
+          style={{
+            width: 18,
+            height: 18,
+            borderRadius: 3,
+            background: 'transparent',
+            color: atCap ? colors.textDim : colors.textMuted,
+            border: 'none',
+            cursor: atCap ? 'not-allowed' : 'pointer',
+            opacity: atCap ? 0.4 : 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'color 0.15s, background-color 0.15s',
+          }}
+          onMouseEnter={(e) => {
+            if (atCap) return;
+            (e.currentTarget as HTMLElement).style.color = colors.accent;
+          }}
+          onMouseLeave={(e) => {
+            if (atCap) return;
+            (e.currentTarget as HTMLElement).style.color = colors.textMuted;
+          }}
+        >
+          <Rows2 size={14} />
+        </button>
       </div>
     </div>
   );
@@ -1686,49 +1868,11 @@ function renderTab(
   onClose: (e: MouseEvent, tabId: string) => void,
   scope: TerminalScope,
 ): VNode {
-  // D-03 / D-05 sticky tab branch (right scope only). Sticky tabs carry
-  // `data-sticky-tab-id` (NOT `data-tab-id`) so the drag hit-test never
-  // targets them (Pitfall 7). No × button, no double-click rename.
-  if (tab.type === 'file-tree' || tab.type === 'gsd') {
-    const Icon  = tab.type === 'file-tree' ? FolderOpen : ListChecks;
-    const label = tab.type === 'file-tree' ? 'File Tree' : 'GSD';
-    const iconColor = isActive ? colors.accent : colors.textMuted;
-    return (
-      <div
-        key={tab.id}
-        role="tab"
-        aria-selected={isActive}
-        data-sticky-tab-id={tab.id}
-        title={label}
-        onClick={() => onClick(tab)}
-        // Fix #2 (20-05-B): block WKWebView text-selection initiated by a
-        // drag attempt on a sticky tab. preventDefault on mousedown stops
-        // the browser from starting a text-selection range.
-        onMouseDown={(e: MouseEvent) => { e.preventDefault(); }}
-        class={`unified-tab sticky-tab select-none ${isActive ? 'active' : ''}`}
-        style={{
-          padding: '8px 12px',
-          fontSize: '11px',
-          fontWeight: isActive ? 600 : 400,
-          color: isActive ? colors.textPrimary : colors.textMuted,
-          borderBottom: `2px solid ${isActive ? colors.accent : 'transparent'}`,
-          marginBottom: -1,
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '4px',
-          cursor: 'pointer',
-          userSelect: 'none',
-          WebkitUserSelect: 'none',
-          flexShrink: 0,
-        }}
-      >
-        <Icon size={14} style={{ color: iconColor, flexShrink: 0, pointerEvents: 'none' }} />
-        <span style={{ userSelect: 'none', WebkitUserSelect: 'none', pointerEvents: 'none' }}>{label}</span>
-        {/* No close button — sticky tabs are uncloseable (D-03). */}
-        {/* No onDblClick — sticky tabs cannot be renamed (D-03). */}
-      </div>
-    );
-  }
+  // Phase 22: all dynamic tabs render through the unified branch.
+  // Fixed titles for file-tree/gsd/git-changes (no double-click rename).
+  // All tabs have a close button. All tabs are draggable (via onTabMouseDown).
+  const isFixedTitle = tab.type === 'file-tree' || tab.type === 'gsd' || tab.type === 'git-changes';
+  const doubleClickRename = !isFixedTitle;
 
   let label: string;
   let indicator: VNode | null = null;
@@ -1812,6 +1956,8 @@ function renderTab(
       }}
       onClick={() => onClick(tab)}
       onDblClick={() => {
+        // Phase 22 D-05: fixed-title tabs (file-tree/gsd/git-changes) cannot be renamed.
+        if (!doubleClickRename) return;
         if (tab.type === 'editor' && !tab.pinned) {
           pinEditorTab(tab.id);
         }
@@ -1879,15 +2025,11 @@ function renderTab(
               clearTimeout(tabLabelClickTimer);
               tabLabelClickTimer = null;
               pendingTabLabelClick = null;
-              // Fix #4 (20-05-D): Git Changes cannot be renamed. Activating +
-              // closing must remain functional. Suppress the rename-input
-              // render path for git-changes; other branches are unchanged.
-              if (tab.type === 'git-changes') {
+              // Phase 22 D-05: fixed-title tabs (file-tree/gsd/git-changes) cannot be renamed.
+              if (!doubleClickRename) {
                 return;
               }
               // Do NOT call onClick(tab) here -- tab is already active from first click.
-              // Calling it would trigger switchToTab -> terminal.focus() which steals
-              // focus from the rename input that's about to render.
               renamingTabId.value = tab.id;
               return;
             }
