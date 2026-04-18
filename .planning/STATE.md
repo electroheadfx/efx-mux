@@ -4,12 +4,12 @@ milestone: v0.3.0
 milestone_name: Workspace Evolution
 status: executing
 stopped_at: Phase 21 context gathered
-last_updated: "2026-04-18T07:49:45.991Z"
-last_activity: "2026-04-18 - Completed quick task 260418-bpm: main-window new-tab focus fix"
+last_updated: "2026-04-18T08:17:47.845Z"
+last_activity: 2026-04-18 -- Phase 21 planning complete
 progress:
   total_phases: 7
   completed_phases: 6
-  total_plans: 31
+  total_plans: 35
   completed_plans: 36
   percent: 100
 ---
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 
 Phase: 21
 Plan: Not started
-Status: Executing Phase 20
-Last activity: 2026-04-18 - Completed quick task 260418-bpm: main-window new-tab focus fix
+Status: Ready to execute
+Last activity: 2026-04-18 -- Phase 21 planning complete
 
 **Code review fixes pending (non-blocking):**
 
