@@ -38,6 +38,7 @@ import { serverPaneState, saveCurrentProjectState, restoreProjectState } from '.
 import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor, defaultExternalEditor } from './components/file-tree';
 import { detectAgent } from './server/server-bridge';
 import { projectSessionName } from './utils/session-name';
+import { Settings } from 'lucide-preact';
 
 // Module-level state for terminal session tracking
 // *PtyKey = original PTY spawn session (for write_pty)
@@ -81,9 +82,10 @@ function App() {
           minHeight: 28,
           paddingLeft: 78,
           paddingRight: 12,
+          gap: 8,
         }}
         onMouseDown={(e) => {
-          if ((e.target as HTMLElement).closest('.titlebar-add-btn')) return;
+          if ((e.target as HTMLElement).closest('.titlebar-add-btn, .titlebar-prefs-btn')) return;
           e.preventDefault();
           getCurrentWindow().startDragging();
         }}
@@ -96,6 +98,16 @@ function App() {
         >
           +
         </button>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
+          <button
+            class="titlebar-prefs-btn"
+            title="Preferences (Cmd+,)"
+            aria-label="Open Preferences"
+            onClick={() => { togglePreferences(); }}
+          >
+            <Settings size={14} />
+          </button>
+        </div>
       </div>
       <div class="flex flex-1 overflow-hidden">
         <Sidebar />
