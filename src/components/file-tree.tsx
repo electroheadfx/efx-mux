@@ -1118,9 +1118,13 @@ export function FileTree() {
   }
 
   async function launchOrToast(app: string, path: string): Promise<void> {
+    console.log('[FIX-05] launchOrToast called:', { app, path, hasPath: !!path });
     try {
+      const t0 = performance.now();
       await launchExternalEditor(app, path);
-    } catch {
+      console.log('[FIX-05] launchExternalEditor returned successfully in', performance.now() - t0, 'ms', { app, path });
+    } catch (err) {
+      console.error('[FIX-05] launchExternalEditor THREW:', err, { app, path });
       showToast({
         type: 'error',
         message: `Could not launch ${app}`,
@@ -1192,12 +1196,21 @@ export function FileTree() {
   }
 
   function openHeaderOpenInMenu(e: MouseEvent): void {
+    console.log('[FIX-05] openHeaderOpenInMenu click');
     e.preventDefault();
     e.stopPropagation();
     const project = getActiveProject();
-    if (!project?.path) return;
+    console.log('[FIX-05] header: getActiveProject =>', project);
+    if (!project?.path) {
+      console.warn('[FIX-05] header: no project.path — early return');
+      return;
+    }
     const children = buildOpenInChildren(project.path);
-    if (children.length === 0) return;
+    console.log('[FIX-05] header: buildOpenInChildren count =', children.length, 'detectedEditors =', detectedEditors.value);
+    if (children.length === 0) {
+      console.warn('[FIX-05] header: no children — early return');
+      return;
+    }
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     // Render detected-editor children inline as the top-level menu items (simpler than nesting)
     headerMenu.value = { x: rect.left, y: rect.bottom + 2, items: children };
