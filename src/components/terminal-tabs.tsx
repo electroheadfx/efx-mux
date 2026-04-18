@@ -884,7 +884,12 @@ export function ActiveTabCrashOverlay() { return ActiveTabCrashOverlayScoped('ma
  * mutation to flush the change to state.json so it survives restart.
  */
 export function persistActiveTabIdForScope(scope: TerminalScope): void {
-  persistTabStateScoped(scope);
+  // Phase 22 gap-closure (22-06): defensive remap matching getTerminalScope().
+  const remapped: TerminalScope =
+    (scope as string) === 'right' ? ('right-0' as TerminalScope)
+    : (scope as string) === 'main' ? ('main-0' as TerminalScope)
+    : scope;
+  persistTabStateScoped(remapped);
 }
 
 /**
@@ -917,7 +922,16 @@ export async function restoreTabs(
 // ---------------------------------------------------------------------------
 
 export function getTerminalScope(scope: TerminalScope) {
-  const s = getScope(scope);
+  // Phase 22 gap-closure (22-06): defensive remap for any callsite still
+  // passing the pre-Phase-22 legacy ids 'main'/'right'. This lets us fix
+  // the most-load-bearing callsite (main.tsx restore loop) atomically with
+  // the iterative migration of the rest of the codebase.
+  const remapped: TerminalScope =
+    (scope as string) === 'right' ? ('right-0' as TerminalScope)
+    : (scope as string) === 'main' ? ('main-0' as TerminalScope)
+    : scope;
+  const s = getScope(remapped);
+  scope = remapped;
   return {
     tabs: s.tabs,
     activeTabId: s.activeTabId,

@@ -102,6 +102,27 @@ beforeEach(async () => {
   `;
 });
 
+describe("Phase 22 gap-closure: legacy scope-id remap (22-06)", () => {
+  it("getTerminalScope remaps legacy 'right' id to 'right-0' instead of throwing", () => {
+    const right0 = getTerminalScope('right-0');
+    const right  = getTerminalScope('right' as any);
+    expect(right.tabs).toBe(right0.tabs);
+    expect(right.activeTabId).toBe(right0.activeTabId);
+  });
+
+  it("getTerminalScope remaps legacy 'main' id to 'main-0' instead of throwing", () => {
+    const main0 = getTerminalScope('main-0');
+    const main  = getTerminalScope('main' as any);
+    expect(main.tabs).toBe(main0.tabs);
+    expect(main.activeTabId).toBe(main0.activeTabId);
+  });
+
+  it("getTerminalScope still throws for genuinely unknown scope ids", () => {
+    expect(() => getTerminalScope('totally-bogus' as any))
+      .toThrow(/unknown terminal scope: totally-bogus/);
+  });
+});
+
 describe('terminal-tabs scope registry', () => {
   // ─────────────────────────────────────────────────────────────────────────────
   describe('D-11 backward-compat exports', () => {
