@@ -873,18 +873,19 @@ export function openFileTreeTabInScope(scope: TerminalScope): void {
   activeUnifiedTabId.value = newTab.id;
 }
 
-// ── Layout helpers (Phase 22 Plan 04 stub) ──────────────────────────────────
+// ── Layout helpers (Phase 22 Plan 04) ─────────────────────────────────────────
 
-// TODO(22-04): replace with real helpers from main-panel.tsx / right-panel.tsx.
-function spawnSubScopeForZone(_zone: 'main-0' | 'right'): void {
-  // Wired by Plan 04.
+// Import real implementations from main-panel (re-exported from sub-scope-pane)
+import { spawnSubScopeForZone as realSpawnSubScope, getActiveSubScopesForZone as realGetActiveSubScopesForZone } from './main-panel';
+
+/** Map 'main-0' → 'main' for spawnSubScopeForZone, pass 'right' through */
+function spawnSubScopeForZone(zone: 'main-0' | 'right'): void {
+  return realSpawnSubScope(zone === 'main-0' ? 'main' : zone);
 }
 
+/** Map 'main-0' → 'main' for getActiveSubScopesForZone, pass 'right' through */
 function getActiveSubScopesForZone(zone: 'main-0' | 'right'): TerminalScope[] {
-  // Default: 1 scope per zone (enables split button). Tests can mock this.
-  return zone === 'main-0'
-    ? ['main-0']
-    : ['right-0'];
+  return realGetActiveSubScopesForZone(zone === 'main-0' ? 'main' : zone);
 }
 
 /**

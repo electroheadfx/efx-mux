@@ -1,74 +1,51 @@
-// main-panel.tsx -- Main panel with unified tab system
-// Phase 17: Uses UnifiedTabBar, EditorTab, GitChangesTab.
-// Only the active tab's content is visible; others are hidden (not unmounted).
+// main-panel.tsx — Phase 22 Plan 04: N-sub-scope layout
+//
+// Re-exports shared state helpers from sub-scope-pane.tsx for backward compat.
+// MainPanel renders N sub-scopes with SubScopePane + intra-zone handles.
 
-import { UnifiedTabBar, activeUnifiedTabId, editorTabs, gitChangesTab, allTabs } from './unified-tab-bar';
-import { EditorTab } from './editor-tab';
-import { GitChangesTab } from './git-changes-tab';
-import { ActiveTabCrashOverlay } from './terminal-tabs';
-import { AgentHeader } from './agent-header';
-import { ServerPane, serverPaneState } from './server-pane';
+import { colors } from '../tokens';
+import {
+  SubScopePane,
+  activeMainSubScopes,
+  getActiveSubScopesForZone,
+  spawnSubScopeForZone,
+  __resetActiveSubScopesForTesting,
+  restoreActiveSubScopes,
+} from './sub-scope-pane';
+import { ServerPane } from './server-pane';
+import { useEffect } from 'preact/hooks';
 
-// ── Component ────────────────────────────────────────────────────────────────
+// Re-export shared helpers so callers can import from main-panel
+export { getActiveSubScopesForZone, spawnSubScopeForZone, __resetActiveSubScopesForTesting, restoreActiveSubScopes };
 
 export function MainPanel() {
-  const currentTabId = activeUnifiedTabId.value;
-  const currentTab = allTabs.value.find(t => t.id === currentTabId);
-  const isTerminalActive = !currentTab || currentTab.type === 'terminal';
-  const isGitChangesActive = currentTab?.type === 'git-changes';
-  const isEditorActive = currentTab?.type === 'editor';
+  const scopes = activeMainSubScopes.value;
+
+  // Re-register handles whenever scope count changes (new handles appear)
+  useEffect(() => {
+    import('../drag-manager').then(dm => dm.attachIntraZoneHandles('main'));
+  }, [scopes.length]);
 
   return (
-    <main class="main-panel relative" aria-label="Main panel">
-      <UnifiedTabBar scope="main" />
-
-      {/* Terminal area -- always mounted, display toggled */}
-      <div
-        class="flex-1 bg-bg-terminal overflow-hidden relative min-h-[100px]"
-        style={{
-          display: isTerminalActive ? 'flex' : 'none',
-          flexDirection: 'column',
-          flex: 1,
-        }}
-      >
-        <AgentHeader />
-        <div class="terminal-containers absolute inset-0" />
-        <ActiveTabCrashOverlay />
-      </div>
-
-      {/* Editor tabs -- main scope only; right-panel mounts its own.
-          Plan 20-05-D: `ownerScope` filters editor tabs between panels so
-          each EditorTab component (and its CodeMirror EditorView) has exactly
-          one mount point. */}
-      {editorTabs.value
-        .filter(tab => (tab.ownerScope ?? 'main') === 'main')
-        .map(tab => (
-          <EditorTab
-            key={tab.id}
-            tabId={tab.id}
-            filePath={tab.filePath}
-            fileName={tab.fileName}
-            content={tab.content}
-            isActive={tab.id === currentTabId}
-          />
-        ))}
-
-      {/* Git changes tab -- display toggled */}
-      {gitChangesTab.value && (
-        <div style={{ display: isGitChangesActive ? 'flex' : 'none', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-          <GitChangesTab />
+    <main
+      class="main-panel relative flex flex-col"
+      aria-label="Main panel"
+      style={{ backgroundColor: colors.bgBase, flex: 1, overflow: 'hidden' }}
+    >
+      {scopes.map((scope, i) => (
+        <div key={scope} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <SubScopePane scope={scope} zone="main" />
+          {i < scopes.length - 1 && (
+            <div
+              class="split-handle-h-intra"
+              data-handle={`main-intra-${i}`}
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label="Resize split pane"
+            />
+          )}
         </div>
-      )}
-
-      {serverPaneState.value === 'expanded' && (
-        <div
-          class="split-handle-h"
-          data-handle="main-h"
-          role="separator"
-          aria-orientation="horizontal"
-          aria-label="Resize server pane"
-        />
-      )}
+      ))}
       <ServerPane />
     </main>
   );

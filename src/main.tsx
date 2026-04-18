@@ -15,7 +15,7 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import './styles/app.css';
 
 import { Sidebar } from './components/sidebar';
-import { MainPanel } from './components/main-panel';
+import { MainPanel, restoreActiveSubScopes } from './components/main-panel';
 import { RightPanel } from './components/right-panel';
 import { ProjectModal } from './components/project-modal';
 import { FuzzySearch } from './components/fuzzy-search';
@@ -32,7 +32,7 @@ import {
   getProjects, getActiveProject, projects, activeProjectName
 } from './state-manager';
 import { openProjectModal } from './components/project-modal';
-import { openEditorTab, openEditorTabPinned, restoreEditorTabs, activeUnifiedTabId, closeUnifiedTab, suppressEditorPersist, persistEditorTabs, gitChangesTab, restoreGitChangesTab, createAndFocusMainTerminalTab } from './components/unified-tab-bar';
+import { openEditorTab, openEditorTabPinned, restoreEditorTabs, activeUnifiedTabId, closeUnifiedTab, suppressEditorPersist, persistEditorTabs, gitChangesTab, restoreGitChangesTab, createAndFocusMainTerminalTab, openFileTreeTabInScope, openOrMoveSingletonToScope, restoreFileTreeTabs, restoreGsdTab, fileTreeTabs, gsdTab } from './components/unified-tab-bar';
 import { triggerEditorSave } from './editor/setup';
 import { serverPaneState, saveCurrentProjectState, restoreProjectState } from './components/server-pane';
 import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor, defaultExternalEditor } from './components/file-tree';
@@ -147,6 +147,9 @@ async function bootstrap() {
     fileTreeBgColor.value = String(layout['file-tree-bg-color'] ?? '');
     defaultExternalEditor.value = String(layout['default-external-editor'] ?? '');
   }
+
+  // Phase 22 Plan 04 D-02: restore persisted active sub-scope lists and split ratios
+  restoreActiveSubScopes();
 
   // Wire beforeunload
   initBeforeUnload();
@@ -511,6 +514,14 @@ async function bootstrap() {
         || rightTabs.some(t => t.id === rightActive);
       if (!resolvable) {
         rightScope.activeTabId.value = 'file-tree';
+      }
+
+      // Phase 22 Plan 04 D-02: if no gsd/file-tree tabs were restored for right-0,
+      // seed the defaults: GSD pane + File Tree as dynamic tabs in right-0.
+      const rightFileTreeExists = fileTreeTabs.value.some(t => t.ownerScope === 'right-0');
+      if (!rightFileTreeExists && !gsdTab.value) {
+        openFileTreeTabInScope('right-0');
+        openOrMoveSingletonToScope('gsd', 'right-0');
       }
     }
 
