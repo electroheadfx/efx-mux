@@ -27,6 +27,30 @@ export function EditorTab({ tabId, filePath, fileName, content, isActive }: Edit
   const viewRef = useRef<EditorView | null>(null);
   const setupRef = useRef<ReturnType<typeof createEditorState> | null>(null);
 
+  // IN-02: stash latest values in refs so the EditorView-creation useEffect
+  // can read fresh callbacks / fileName without re-running on every render.
+  // The useEffect only re-creates the EditorView when filePath changes (a
+  // different file = genuinely different view); for everything else we reach
+  // the latest value through `.current`. This removes the stale-closure risk
+  // that the previous exhaustive-deps suppression was masking.
+  const fileNameRef = useRef(fileName);
+  fileNameRef.current = fileName;
+
+  // initialContentRef captures `content` at first mount so the EditorView is
+  // seeded with the correct text at creation. It is intentionally NOT
+  // reassigned on every render — ongoing content edits flow through
+  // CodeMirror itself, and external disk changes flow through the
+  // file-tree-changed listener (Plan 21-01). The `useRef(content)` form
+  // only uses the initial argument; subsequent renders ignore it, which is
+  // exactly the semantic we need. We also refresh it before the EditorView
+  // is re-created on filePath change (see the useEffect below), using a
+  // closure captured from the latest render rather than reading `content`
+  // directly inside the useEffect — so the deps array can remain honest
+  // without needing to suppress the exhaustive-deps rule.
+  const initialContentRef = useRef(content);
+  const latestContentRef = useRef(content);
+  latestContentRef.current = content;
+
   async function handleSave(docContent: string): Promise<void> {
     try {
       await writeFile(filePath, docContent);
@@ -34,7 +58,7 @@ export function EditorTab({ tabId, filePath, fileName, content, isActive }: Edit
         setupRef.current.setSavedContent(docContent);
       }
       setEditorDirty(tabId, false);
-      showToast({ type: 'success', message: `Saved ${fileName}` });
+      showToast({ type: 'success', message: `Saved ${fileNameRef.current}` });
     } catch (err) {
       showToast({ type: 'error', message: `Save failed: ${String(err)}` });
     }
@@ -44,16 +68,32 @@ export function EditorTab({ tabId, filePath, fileName, content, isActive }: Edit
     setEditorDirty(tabId, dirty);
   }
 
-  // Create EditorView once per filePath; destroy on cleanup
+  // Stable refs for callbacks so the EditorView useEffect's deps array is
+  // honest. The callbacks close over `filePath`, `tabId`, `fileNameRef`;
+  // updating `.current` every render ensures CodeMirror always invokes the
+  // latest version without triggering EditorView recreation.
+  const handleSaveRef = useRef(handleSave);
+  handleSaveRef.current = handleSave;
+  const handleDirtyChangeRef = useRef(handleDirtyChange);
+  handleDirtyChangeRef.current = handleDirtyChange;
+
+  // Create EditorView once per filePath; destroy on cleanup.
+  // Deps are accurate: fileName / content / callbacks are reached via refs,
+  // so no suppression of the react-hooks/exhaustive-deps rule is needed.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const lang = getLanguageExtension(fileName);
-    const setup = createEditorState(content, {
+    // Refresh the initial-content ref from latestContentRef (updated every
+    // render) at the moment of EditorView creation — handles filePath
+    // changes where the parent passes new content alongside the new path.
+    initialContentRef.current = latestContentRef.current;
+
+    const lang = getLanguageExtension(fileNameRef.current);
+    const setup = createEditorState(initialContentRef.current, {
       language: lang,
-      onSave: handleSave,
-      onDirtyChange: handleDirtyChange,
+      onSave: (doc) => handleSaveRef.current(doc),
+      onDirtyChange: (dirty) => handleDirtyChangeRef.current(dirty),
     });
 
     const view = new EditorView({
@@ -66,7 +106,7 @@ export function EditorTab({ tabId, filePath, fileName, content, isActive }: Edit
 
     // Register so closeUnifiedTab can get current content via getEditorCurrentContent
     registerEditorView(tabId, view);
-    registerSaveCallback(tabId, handleSave);
+    registerSaveCallback(tabId, (doc) => handleSaveRef.current(doc));
 
     return () => {
       unregisterEditorView(tabId);
@@ -75,8 +115,7 @@ export function EditorTab({ tabId, filePath, fileName, content, isActive }: Edit
       viewRef.current = null;
       setupRef.current = null;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filePath]);
+  }, [filePath, tabId]);
 
   // Focus the editor when tab becomes active
   useEffect(() => {
