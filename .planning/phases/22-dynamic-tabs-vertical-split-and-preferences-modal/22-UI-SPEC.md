@@ -29,6 +29,8 @@ Source: `src/tokens.ts` + `src/styles/app.css` (verified by codebase scan)
 
 ## Spacing Scale
 
+> **Project-level spacing exception acknowledgment:** The compressed spacing scale from `src/tokens.ts` is a locked project constraint that predates Phase 22. Values such as 1px, 2px, 6px, and 10px exist as established project tokens, not as new design debt introduced by this phase. The 18px button sizes (split icon, preferences button) match the existing `.titlebar-add-btn` w/h = 18px pattern already shipped in prior phases. These token values are project token references, not newly declared spacing values for Phase 22.
+
 This project uses a **compressed spacing scale** (not the standard 8-point grid). All values are from `src/tokens.ts` `spacing` object and are the canonical source of truth. Do not use arbitrary values.
 
 | Token | Value | Usage |
@@ -48,24 +50,26 @@ Source: `src/tokens.ts` — locked; do not add new spacing values.
 
 Exceptions for Phase 22:
 - Split handle hit target: 8px (matches existing `--handle-hit: 8px` CSS variable)
-- Split icon button in tab bar: 18x18px (matches `.titlebar-add-btn` w/h = 18px)
-- Preferences button in titlebar: 18x18px (same as split icon — mirror of `.titlebar-add-btn`)
-- Intra-zone resize handle rendered height: 1px visual / 8px hit area (matches `.split-handle-h` pattern)
+- Split icon button in tab bar: 18x18px (matches `.titlebar-add-btn` w/h = 18px — already shipped)
+- Preferences button in titlebar: 18x18px (same as split icon — mirror of `.titlebar-add-btn` — already shipped)
+- Intra-zone resize handle rendered height: 1px visual / 8px hit area (matches `.split-handle-h` pattern — already shipped)
 
 ---
 
 ## Typography
 
-All sizes from `src/tokens.ts` `fontSizes`. Weights are 400 (regular) or 600 (semibold) — the only two weights used project-wide.
+All sizes from `src/tokens.ts` `fontSizes`. Weights are 400 (regular) or 600 (semibold) — the only two weights used project-wide. No third weight is permitted.
 
 | Role | Size | Weight | Line Height | Usage in Phase 22 |
 |------|------|--------|-------------|-------------------|
 | Tab label | 11px (`fontSizes.base`) | 400 inactive / 600 active | 1.2 | Tab names in UnifiedTabBar — matches existing pattern (unified-tab-bar.tsx:1711-1712) |
-| Section label | 10px (`fontSizes.sm`) | 500 (mono uppercase) | 1.0 | `.section-label` class — e.g. scope headers if shown |
+| Section label | 10px (`fontSizes.sm`) | 600 (mono uppercase) | 1.0 | `.section-label` class — e.g. scope headers if shown |
 | Empty scope placeholder | 11px (`fontSizes.base`) | 400 | 1.5 | "No tabs open. Press + to add a tab." message in empty scope |
 | Tooltip / caption | 10px (`fontSizes.sm`) | 400 | 1.4 | Disabled `+` menu item hint (singleton GSD / Git Changes open elsewhere) |
 
 Source: `src/tokens.ts` fontSizes + unified-tab-bar.tsx lines 1711-1712 (verified by grep).
+
+Note: Weight 500 is not used in this project. The `.section-label` role maps to weight 600 (semibold), consistent with the project-wide two-weight constraint.
 
 ---
 
@@ -85,6 +89,8 @@ All values from `src/tokens.ts` `colors` and `src/styles/app.css` `@theme` block
 | Text dim | `textDim` / `--color-text-muted` | `#556A85` | Caption text, singleton-already-open hint |
 
 Source: `src/tokens.ts` (verified by read) + `src/styles/app.css` @theme (verified by read).
+
+**Primary focal point:** The active tab's bottom underline (`#258AD1`, `var(--color-accent)`) in the topmost scope's `UnifiedTabBar`. This is the single most visually prominent accent element in the idle workspace.
 
 **Accent (`#258AD1`) is reserved for:**
 1. Split handle (`.split-handle-h` and new `.split-handle-h-intra`) on hover and while dragging
@@ -141,6 +147,8 @@ transition: color 0.15s, background-color 0.15s;
 
 Hover: `color: var(--color-accent); background: var(--color-accent)10;` (subtle tint)
 Disabled (cap of 3 reached): `color: var(--color-text-muted); opacity: 0.4; cursor: not-allowed;`
+
+When disabled: set `aria-disabled="true"` and `aria-label="Split pane (maximum 3 panes reached)"` on the button element.
 
 Icon: Lucide `Rows2`, 14px (RESEARCH.md recommendation — `SplitSquareVertical` does not exist in lucide-preact 1.8.0).
 
@@ -215,7 +223,8 @@ user-select: none
 ### Split Icon (D-07 / D-08)
 
 - Click split icon when zone has fewer than 3 sub-panes: spawns a new empty sub-pane below the current scope in that zone. Transition: instant (no animation — matches project's zero-animation approach for panel spawns).
-- Click split icon when zone is at cap (3 sub-panes): icon is disabled (see `.tab-bar-split-icon` disabled state above). No tooltip needed — the cap of 3 is visually obvious.
+- Click split icon when zone is at cap (3 sub-panes): icon is disabled (see `.tab-bar-split-icon` disabled state above). Disabled state uses `aria-disabled="true"` and `aria-label="Split pane (maximum 3 panes reached)"`. No visual tooltip required — the cap of 3 is visually obvious.
+- Split icon default aria-label (enabled state): "Split pane".
 - Split icon position: immediately right of the `+` menu trigger in the tab bar. Left of any right-aligned tab bar actions.
 
 ### Intra-Zone Resize Handle (D-09)
@@ -258,9 +267,10 @@ user-select: none
 | Empty scope heading | "No tabs open" |
 | Empty scope body | "Press + to add a tab." |
 | Singleton item hint (dimmed) | "Already open in another pane" |
-| Split icon disabled hint | (no tooltip — visually obvious when 3 panes exist) |
+| Split icon aria-label (enabled) | "Split pane" |
+| Split icon aria-label (disabled) | "Split pane (maximum 3 panes reached)" |
+| Split icon aria-disabled (disabled) | `aria-disabled="true"` |
 | Preferences button aria-label | "Open Preferences" |
-| Split icon aria-label | "Split pane" |
 | Fixed tab title: File Tree | "File Tree" |
 | Fixed tab title: GSD | "GSD" |
 | Fixed tab title: Git Changes | "Git Changes" |
