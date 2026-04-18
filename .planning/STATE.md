@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: Workspace Evolution
 status: executing
-stopped_at: Completed 22-10-PLAN.md
-last_updated: "2026-04-18T22:19:41.534Z"
+stopped_at: Completed 22-11-PLAN.md
+last_updated: "2026-04-18T22:27:08.677Z"
 last_activity: 2026-04-18
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 49
-  completed_plans: 47
-  percent: 96
+  completed_plans: 48
+  percent: 98
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 ## Current Position
 
 Phase: 22 (dynamic-tabs-vertical-split-and-preferences-modal) — EXECUTING
-Plan: 2 of 14
+Plan: 3 of 14
 Status: Ready to execute
 Last activity: 2026-04-18
 
@@ -72,6 +72,8 @@ Progress: [██████████] 100% (Phase 17)
 - [Phase 22]: unified-tab-bar uses local type-adapter wrappers (main-0→main mapping) rather than changing its existing zone type contract
 - [Phase 22]: Plan 22-10: Fill-gap-at-end convention for closeSubScope — scope ids monotonic + tabs always migrate to scope-0, so current.slice(0,-1) is correct regardless of which index was clicked (no renumbering needed)
 - [Phase 22]: Plan 22-10: _activateEditorTab writes scope.activeTabId for BOTH main and right scopes — SubScopePane reads scope-local activeTabId, so main-scope path previously left new tabs active-but-invisible (UAT test 18a fix)
+- [Phase 22]: Plan 22-11: Belt-and-braces intra-zone drag — CSS var (persistence) + direct pane.style mutation (immediate visual). Drop extra flex-1 wrapper div in main/right-panel so SubScopePane is the flex item and its inline height is respected.
+- [Phase 22]: Plan 22-11: [data-tablist-scope] is the canonical tab-bar wrapper selector; no literal .tab-bar class exists in the codebase. CSS adds border-top via [data-tablist-scope] (matches existing .drop-target pattern).
 
 ### Roadmap Evolution
 
@@ -138,11 +140,12 @@ None.
 | Phase 22 P01 | 538 | 3 tasks | 3 files |
 | Phase 22 P03 | 35 | 3 tasks | 3 files |
 | Phase 22 P10 | ~12min | 2 tasks | 5 files |
+| Phase 22 P11 | ~4m30s | 2 tasks | 6 files |
 
 ## Session Continuity
 
-Last session: 2026-04-18T22:19:41.531Z
-Stopped at: Completed 22-10-PLAN.md
+Last session: 2026-04-18T22:27:08.674Z
+Stopped at: Completed 22-11-PLAN.md
 Resume file: None
 
 Next: `/gsd-execute-phase 15` or `/gsd-code-review-fix 17` to fix remaining warnings
