@@ -53,6 +53,14 @@ interface EditorTabData extends BaseTab {
    * flips this via handleCrossScopeDrop.
    */
   ownerScope: TerminalScope;
+  /**
+   * Phase 21 Plan 01 (FIX-01 / D-07): set when the file on disk changed while
+   * the editor tab is dirty (unsaved edits). We refuse to clobber the user's
+   * work but surface a non-intrusive indicator on the tab label so the user
+   * knows something changed externally. Cleared on save, clean-reload, or
+   * when the disk content once again matches the editor's saved baseline.
+   */
+  changedOnDisk?: boolean;
 }
 
 interface GitChangesTabData extends BaseTab {
@@ -847,6 +855,22 @@ export function setEditorDirty(tabId: string, dirty: boolean): void {
   if (!tab) return;
   tab.dirty = dirty;
   // Trigger reactivity by updating through the map
+  setProjectEditorTabs([...tabs]);
+}
+
+/**
+ * Phase 21 Plan 01 (FIX-01 / D-07): mark an editor tab's on-disk-changed flag.
+ * This is independent of `dirty` — a tab can be clean+changedOnDisk (rare race:
+ * save + immediate external edit) or dirty+changedOnDisk (user has unsaved
+ * edits AND the file changed under them). The tab label renders a subtle
+ * indicator when this flag is true so the user knows the file on disk diverged
+ * from the editor buffer. Cleared after clean-reload or after save.
+ */
+export function setEditorChangedOnDisk(tabId: string, changed: boolean): void {
+  const tabs = editorTabs.value;
+  const tab = tabs.find(t => t.id === tabId);
+  if (!tab) return;
+  tab.changedOnDisk = changed;
   setProjectEditorTabs([...tabs]);
 }
 
@@ -1790,6 +1814,24 @@ function renderTab(
             flexShrink: 0,
           }}
         />
+      )}
+      {tab.type === 'editor' && tab.changedOnDisk === true && (
+        // Phase 21 Plan 01 (FIX-01 / D-07): on-disk-changed indicator. Independent
+        // of the dirty dot so the two can render side-by-side when the user has
+        // unsaved edits AND the file changed externally.
+        <span
+          title="File changed on disk since last read."
+          style={{
+            color: colors.accent,
+            fontSize: 12,
+            lineHeight: 1,
+            marginLeft: 2,
+            flexShrink: 0,
+            userSelect: 'none',
+          }}
+        >
+          {'\u27F3'}
+        </span>
       )}
       <span
         class="ml-1 flex items-center justify-center"
