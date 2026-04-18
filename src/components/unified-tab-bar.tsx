@@ -282,6 +282,37 @@ export async function createAndFocusMainTerminalTab(
 type CreateTabOptionsShape = { isAgent?: boolean; scope?: TerminalScope };
 
 /**
+ * Phase 21 Plan 03 (FIX-06): scope-aware activation helper for editor tabs.
+ *
+ * Background: Plan 20-05-D introduced `ownerScope` and a separate right-panel
+ * active-tab signal (`getTerminalScope('right').activeTabId`). RightPanel reads
+ * THAT signal — not `activeUnifiedTabId` — to decide whether to render a
+ * right-scoped editor body. `UnifiedTabBar.handleTabClick` (line ~1410) was
+ * updated to route by `ownerScope`, but the programmatic openers
+ * (`openEditorTab`, `openEditorTabPinned`) continued to write only
+ * `activeUnifiedTabId`. Consequence: if an existing tab for the clicked file
+ * has `ownerScope: 'right'`, it gets "focused" in a signal RightPanel does not
+ * read — so nothing becomes visible, the ServerPane shows at full height, and
+ * the user sees the FIX-06 symptom (D-10 screenshot).
+ *
+ * This helper is the single source of truth for activating an existing editor
+ * tab from ANY code path. Writers should prefer this over setting
+ * `activeUnifiedTabId` directly. We also write `activeUnifiedTabId` regardless
+ * so tab-persistence (which keys off it; see `persistEditorTabs` → `activeTab`
+ * lookup) continues to track focus correctly across scope.
+ */
+function _activateEditorTab(tab: EditorTabData): void {
+  const scope = tab.ownerScope ?? 'main';
+  if (scope === 'right') {
+    getTerminalScope('right').activeTabId.value = tab.id;
+  }
+  // Always also set activeUnifiedTabId so save shortcuts, persistence, and
+  // cross-scope drag reorder logic can find the focused tab by id without
+  // needing to poll both scope signals.
+  activeUnifiedTabId.value = tab.id;
+}
+
+/**
  * Open a file in an editor tab as a preview (single-click behavior).
  * D-03: one-tab-per-file policy. If already open, focus it.
  * Otherwise, replace the existing unpinned (preview) tab, or create a new one.
@@ -290,21 +321,56 @@ export function openEditorTab(filePath: string, fileName: string, content: strin
   // D-03: one-tab-per-file enforcement -- if already open, just focus it
   const existing = editorTabs.value.find(t => t.filePath === filePath);
   if (existing) {
-    activeUnifiedTabId.value = existing.id;
+    // FIX-06: refresh stale cached content so the editor body shows current
+    // disk state. EditorTab's useEffect keys on `filePath`, not `content`, so
+    // a content-only change won't remount — but the file-tree-changed and
+    // git-status-changed listeners in editor-tab.tsx handle re-reading for
+    // already-mounted editors. This refresh keeps the `editorTabs` signal
+    // consistent with what was just read from disk for downstream consumers
+    // (save baseline, persistence).
+    if (existing.content !== content) {
+      const refreshed = editorTabs.value.map(t =>
+        t.id === existing.id ? { ...t, content } : t,
+      );
+      setProjectEditorTabs(refreshed);
+    }
+    _activateEditorTab(existing);
     return;
   }
 
   // Find existing unpinned (preview) tab to replace
   const unpinned = editorTabs.value.find(t => !t.pinned);
   if (unpinned) {
-    // Replace the unpinned tab's content (keep same ID so tab position is preserved)
+    // FIX-06: force replacement to main scope. If the previous preview tab
+    // had been dragged to the right panel, preserving its scope would silently
+    // swallow subsequent file-tree previews (user clicks in file tree, new
+    // file takes over right-panel preview slot that the user isn't looking at).
+    // Preview-follows-file-tree matches VS Code / Zed semantics; if the user
+    // wants the new file in the right panel they can drag it.
+    const prevScope = unpinned.ownerScope ?? 'main';
     const updatedTabs = editorTabs.value.map(t =>
       t.id === unpinned.id
-        ? { ...t, filePath, fileName, content, dirty: false, pinned: false }
+        ? { ...t, filePath, fileName, content, dirty: false, pinned: false, ownerScope: 'main' as const }
         : t
     );
     setProjectEditorTabs(updatedTabs);
-    activeUnifiedTabId.value = unpinned.id;
+    // If we just pulled a tab out of the right scope, update scoped tab orders
+    // so the right panel doesn't still think this tab is one of its own.
+    if (prevScope === 'right') {
+      setScopedTabOrder('right', getScopedTabOrder('right').filter(id => id !== unpinned.id));
+      if (!getScopedTabOrder('main').includes(unpinned.id)) {
+        setScopedTabOrder('main', [...getScopedTabOrder('main'), unpinned.id]);
+      }
+      // If right scope was pointing at this tab, reset to file-tree so the
+      // right panel reverts to its sticky default instead of stranding active.
+      const rightScope = getTerminalScope('right');
+      if (rightScope.activeTabId.value === unpinned.id) {
+        rightScope.activeTabId.value = 'file-tree';
+      }
+    }
+    // After mutation the tab is now main-scoped; activation goes through the
+    // helper so both signals are kept in sync.
+    _activateEditorTab({ ...unpinned, ownerScope: 'main', filePath, fileName, content, dirty: false, pinned: false });
     return;
   }
 
@@ -323,7 +389,7 @@ export function openEditorTab(filePath: string, fileName: string, content: strin
   setProjectEditorTabs([...editorTabs.value, newTab]);
   setProjectTabOrder([...tabOrder.value, newTab.id]);
   setScopedTabOrder('main', [...getScopedTabOrder('main'), newTab.id]);
-  activeUnifiedTabId.value = newTab.id;
+  _activateEditorTab(newTab);
 }
 
 /**
@@ -334,10 +400,17 @@ export function openEditorTabPinned(filePath: string, fileName: string, content:
   // One-tab-per-file: if already open, pin it and focus
   const existing = editorTabs.value.find(t => t.filePath === filePath);
   if (existing) {
+    // FIX-06: refresh stale cached content (same rationale as openEditorTab).
+    if (existing.content !== content) {
+      const refreshed = editorTabs.value.map(t =>
+        t.id === existing.id ? { ...t, content } : t,
+      );
+      setProjectEditorTabs(refreshed);
+    }
     if (!existing.pinned) {
       pinEditorTab(existing.id);
     }
-    activeUnifiedTabId.value = existing.id;
+    _activateEditorTab(existing);
     return;
   }
 
@@ -356,7 +429,7 @@ export function openEditorTabPinned(filePath: string, fileName: string, content:
   setProjectEditorTabs([...editorTabs.value, newTab]);
   setProjectTabOrder([...tabOrder.value, newTab.id]);
   setScopedTabOrder('main', [...getScopedTabOrder('main'), newTab.id]);
-  activeUnifiedTabId.value = newTab.id;
+  _activateEditorTab(newTab);
 }
 
 /**
