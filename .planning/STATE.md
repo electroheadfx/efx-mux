@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: Workspace Evolution
 status: executing
-stopped_at: Completed 21-02-PLAN.md (FIX-05 Open-In external editor regression)
-last_updated: "2026-04-18T11:08:09.016Z"
-last_activity: 2026-04-18 -- Phase 21 execution started
+stopped_at: Completed 21-03-PLAN.md (FIX-06 CLAUDE.md tab-open scope routing)
+last_updated: "2026-04-18T11:18:12.318Z"
+last_activity: 2026-04-18
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 35
-  completed_plans: 37
+  completed_plans: 38
   percent: 100
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 ## Current Position
 
 Phase: 21 (bug-fix-sprint) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 21
-Last activity: 2026-04-18 -- Phase 21 execution started
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-04-18
 
 **Code review fixes pending (non-blocking):**
 
@@ -63,6 +63,7 @@ Progress: [██████████] 100% (Phase 17)
 - [Phase 19]: Phase 19 Plan 01: Added gsd_sub_tab to Rust PanelsState (not LayoutState.extra) for semantic correctness; parser stubs return typed empties with parseError='Not yet implemented' to give Plan 02 a deterministic RED state
 - [Phase 19]: Phase 19 Plan 02: Added @types/mdast@4.0.4 devDependency -- pnpm strict layout doesn't hoist transitive types, so mdast Root/Heading/List imports need the types package as a direct dep. Chose this over inline type definitions for canonical AST contract.
 - [Phase 19]: Phase 19 Plan 03: Co-located EmptyState helper with StatusBadge in status-badge.tsx (one shared-primitives file, imported by all 5 sub-tabs). Kept PhasesTab accordion state module-level per git-changes-tab.tsx precedent -- ephemeral across sub-tab switches by design.
+- [Phase 21-bug-fix-sprint]: FIX-06 root cause: openEditorTab wrote only activeUnifiedTabId; RightPanel reads getTerminalScope('right').activeTabId separately. Introduced _activateEditorTab helper to route activation by ownerScope.
 
 ### Pending Todos
 
@@ -119,11 +120,12 @@ None.
 | Phase 19 P01 | 8min | 3 tasks | 10 files |
 | Phase 19 P02 | 3min 43s | 2 tasks | 3 files |
 | Phase 19 P03 | 8min 40s | 3 tasks | 6 files |
+| Phase 21-bug-fix-sprint P03 | 7min | 2 tasks | 3 files |
 
 ## Session Continuity
 
-Last session: 2026-04-18T11:08:09.014Z
-Stopped at: Completed 21-02-PLAN.md (FIX-05 Open-In external editor regression)
+Last session: 2026-04-18T11:18:12.315Z
+Stopped at: Completed 21-03-PLAN.md (FIX-06 CLAUDE.md tab-open scope routing)
 Resume file: None
 
 Next: `/gsd-execute-phase 15` or `/gsd-code-review-fix 17` to fix remaining warnings
