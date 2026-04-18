@@ -27,7 +27,7 @@ import { ConfirmModal, showConfirmModal } from './components/confirm-modal';
 import { initDragManager } from './drag-manager';
 import { initTheme, registerTerminal, toggleThemeMode } from './theme/theme-manager';
 import { createNewTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs, saveProjectTabs, hasProjectTabs, restoreProjectTabs, getTerminalScope } from './components/terminal-tabs';
-import { getActiveSubScopesForZone } from './components/sub-scope-pane';
+import { getActiveSubScopesForZone, shouldSeedFirstLaunch, markFirstLaunchSeeded } from './components/sub-scope-pane';
 import {
   loadAppState, saveAppState, getCurrentState, initBeforeUnload, sidebarCollapsed, updateLayout, updateSession,
   getProjects, getActiveProject, projects, activeProjectName
@@ -149,8 +149,10 @@ async function bootstrap() {
     defaultExternalEditor.value = String(layout['default-external-editor'] ?? '');
   }
 
-  // Phase 22 Plan 04 D-02: restore persisted active sub-scope lists and split ratios
-  restoreActiveSubScopes();
+  // Phase 22 Plan 04 D-02 / gap-closure 22-07: restore persisted active sub-scope
+  // lists and split ratios for the active project (per-project keys). When no
+  // project is active yet, pass null so signals reset to defaults.
+  restoreActiveSubScopes(activeProjectName.value);
 
   // Wire beforeunload
   initBeforeUnload();
@@ -510,12 +512,16 @@ async function bootstrap() {
       // Right-scope D-02 first-launch defaults are seeded by sub-scope-pane.tsx
       // (covered by gap-closure plan 22-07). No fallback needed here.
 
-      // Phase 22 Plan 04 D-02: if no gsd/file-tree tabs were restored for right-0,
-      // seed the defaults: GSD pane + File Tree as dynamic tabs in right-0.
-      const rightFileTreeExists = fileTreeTabs.value.some(t => t.ownerScope === 'right-0');
-      if (!rightFileTreeExists && !gsdTab.value) {
-        openFileTreeTabInScope('right-0');
-        openOrMoveSingletonToScope('gsd', 'right-0');
+      // Phase 22 Plan 04 D-02 / gap-closure 22-07: first-launch-only seed.
+      // Gate on `first-launch:<project>` flag so deleting a tab and quitting
+      // does NOT cause the seed to recreate the default tabs on next launch.
+      if (shouldSeedFirstLaunch(activeName)) {
+        const rightFileTreeExists = fileTreeTabs.value.some(t => t.ownerScope === 'right-0');
+        if (!rightFileTreeExists && !gsdTab.value) {
+          openFileTreeTabInScope('right-0');
+          openOrMoveSingletonToScope('gsd', 'right-0');
+        }
+        await markFirstLaunchSeeded(activeName);
       }
     }
 
@@ -630,8 +636,25 @@ document.addEventListener('project-changed', async (e: Event) => {
       }
       // Phase 22 D-03/D-06: sticky-tab fallback removed. Empty scope is allowed;
       // state-manager (22-01) drops legacy 'file-tree'/'gsd' activeTabId on load.
-      // Right-scope D-02 first-launch defaults are seeded by sub-scope-pane.tsx
-      // (covered by gap-closure plan 22-07). No fallback needed here.
+
+      // Phase 22 gap-closure 22-07: restore per-project split state
+      // (active-sub-scope lists + split ratios) for the newly-active project.
+      // This runs BEFORE the first-launch seed so the seed observes the correct
+      // per-project scope list when checking for existing tabs.
+      restoreActiveSubScopes(newProjectName);
+
+      // Phase 22 gap-closure 22-07: first-launch seed runs exactly once per
+      // project. The `first-launch:<project>` flag lives in state.session and
+      // gates re-seeding — without this, deleting a tab and switching away /
+      // back causes the seed to recreate it.
+      if (shouldSeedFirstLaunch(newProjectName)) {
+        const rightFileTreeExists = fileTreeTabs.value.some(t => t.ownerScope === 'right-0');
+        if (!rightFileTreeExists && !gsdTab.value) {
+          openFileTreeTabInScope('right-0');
+          openOrMoveSingletonToScope('gsd', 'right-0');
+        }
+        await markFirstLaunchSeeded(newProjectName);
+      }
 
       // Restore editor tabs for the new project.
       // quick-260417-f6e: suppress persist during the restore loop — each

@@ -83,20 +83,21 @@ describe('Phase 22: split spawning', () => {
   });
 
   it('persistence of active sub-scopes', async () => {
-    // Spy on updateLayout to verify it is called with the correct key
+    // Phase 22 gap-closure 22-07: split state is persisted under a per-project
+    // key (`main-active-subscopes:<project>`) instead of the bare global key.
     const updateLayoutSpy = vi.spyOn(await import('../state-manager'), 'updateLayout');
 
     spawnSubScopeForZone('main');
     spawnSubScopeForZone('main');
 
-    // Expect updateLayout to have been called with the main-active-subscopes key
     expect(updateLayoutSpy).toHaveBeenCalled();
     const calls = updateLayoutSpy.mock.calls;
+    const perProjectKey = 'main-active-subscopes:testproj';
     const layoutCall = calls.find(([patch]) =>
-      'main-active-subscopes' in (patch as Record<string, unknown>)
+      perProjectKey in (patch as Record<string, unknown>)
     );
     expect(layoutCall).toBeDefined();
-    expect((layoutCall![0] as Record<string, unknown>)['main-active-subscopes']).toBe('["main-0","main-1"]');
+    expect((layoutCall![0] as Record<string, unknown>)[perProjectKey]).toBe('["main-0","main-1"]');
   });
 });
 
