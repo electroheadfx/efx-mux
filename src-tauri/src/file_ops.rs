@@ -553,9 +553,7 @@ pub async fn count_children(path: String) -> Result<ChildCount, String> {
 
 /// Synchronous inner implementation of launch_external_editor for testing.
 pub fn launch_external_editor_impl(app: &str, path: &str) -> Result<(), String> {
-    eprintln!("[FIX-05] launch_external_editor_impl: app={:?} path={:?}", app, path);
     if !is_safe_path(path) {
-        eprintln!("[FIX-05] launch_external_editor_impl: is_safe_path REJECTED path={:?}", path);
         return Err("Invalid path: directory traversal not allowed".to_string());
     }
     // SECURITY: app and path are passed as separate argv elements — never shell-interpolated.
@@ -563,34 +561,27 @@ pub fn launch_external_editor_impl(app: &str, path: &str) -> Result<(), String> 
     let mut child = std::process::Command::new("open")
         .args(["-a", app, path])
         .spawn()
-        .map_err(|e| {
-            eprintln!("[FIX-05] spawn failed: {:?}", e);
-            e.to_string()
-        })?;
+        .map_err(|e| e.to_string())?;
     // `open -a App path` exits quickly after handing off to LaunchServices. Wait on it so
     // we surface non-zero exit codes (e.g., "Unable to find application named 'X'") — the
     // prior `.spawn().map(|_| ())` shape swallowed those and made failures look identical
     // to success from the frontend's perspective. See
     // .planning/debug/resolved/open-project-external-editor-regression.md
     match child.wait() {
-        Ok(status) if status.success() => {
-            eprintln!("[FIX-05] open exited 0 for app={:?} path={:?}", app, path);
-            Ok(())
-        }
+        Ok(status) if status.success() => Ok(()),
         Ok(status) => {
+            // Permanent structured log: surfaces non-zero exit in the dev-server terminal
+            // so future launch regressions are debuggable even if the frontend toast is missed.
             let msg = format!(
-                "open -a {:?} {:?} exited with status {:?}",
+                "launch_external_editor: 'open -a {:?} {:?}' exited with status {:?}",
                 app,
                 path,
                 status.code()
             );
-            eprintln!("[FIX-05] {}", msg);
+            eprintln!("{}", msg);
             Err(msg)
         }
-        Err(e) => {
-            eprintln!("[FIX-05] child.wait failed: {:?}", e);
-            Err(e.to_string())
-        }
+        Err(e) => Err(e.to_string()),
     }
 }
 
