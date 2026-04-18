@@ -1431,11 +1431,13 @@ export function FileTree() {
           <Plus size={14} color={colors.textMuted} />
         </span>
 
-        {/* Phase 18 Plan 04 (D-10): Header Open In button — hidden when no editors detected */}
+        {/* Phase 18 Plan 04 (D-10): Header Open In button — hidden when no editors detected OR no active project */}
         {(() => {
           const ed = detectedEditors.value;
           const hasAny = !!(ed && (ed.zed || ed.code || ed.subl || ed.cursor || ed.idea));
-          if (!hasAny) return null;
+          const project = getActiveProject();
+          // Button only appears when: (1) at least one editor detected AND (2) active project exists
+          if (!hasAny || !project?.path) return null;
           return (
             <span
               onClick={openHeaderOpenInMenu}
