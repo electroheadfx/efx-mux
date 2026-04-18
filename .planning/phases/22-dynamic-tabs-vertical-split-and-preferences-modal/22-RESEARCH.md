@@ -805,28 +805,28 @@ No new threat surface introduced by Phase 22. Scope generalization is UI-layer o
 | A4 | No external tooling or user script depends on the `-r<N>` right-scope session name suffix | D-12 recommendation | Low — suffix was introduced Phase 20, users unlikely to have built tooling around it in the 2 days between Phase 20 ship and Phase 22. |
 | A5 | lucide-preact `Rows2` renders at 14px without pixel snapping issues in the tab bar | Icon Selection | Very low — same icon family as existing `FolderOpen`, `ListChecks` used in sticky tabs. Proven pattern. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should File Tree be a singleton like GSD / Git Changes?**
    - What we know: D-04 only mentions GSD and Git Changes as singletons. CONTEXT.md's Claude's Discretion notes "Whether `File Tree` as a dynamic tab kind gets a `+` menu item on `main` scope (currently it's a right-scope sticky only). Defaults to 'yes, uniformly available' but planner verifies user intent."
    - What's unclear: Whether two File Tree tabs (one per scope) displaying the same tree is desirable or confusing UX.
-   - Recommendation: **Non-singleton.** Each scope gets its own File Tree tab with independent UI state (expanded folders, scroll position). Same underlying tree source. If user reports "confusing," convert to singleton in a follow-up polish phase.
+   - RESOLVED: **Non-singleton.** Each scope gets its own File Tree tab with independent UI state (expanded folders, scroll position). Same underlying tree source. If user reports "confusing," convert to singleton in a follow-up polish phase.
 
 2. **Split creation spawns an empty scope — does "empty" mean zero tabs or one auto-spawned tab?**
    - What we know: D-02 says first-launch auto-spawns `Terminal-1` on `main-0` and GSD+File Tree on `right-0`. "No auto-spawn on `main-1..2`, `right-1..2` when those scopes are created empty via split."
    - What's unclear: UX on the empty state — D-03 says placeholder "+ to add tab." But does the split icon animate to indicate where to click?
-   - Recommendation: Plain text placeholder "`+` to add tab" in a subtle color (`colors.textDim`). No animation. Empty state is explicit; user's intent when they hit the split icon is to add tabs next.
+   - RESOLVED: Plain text placeholder "`+` to add tab" in a subtle color (`colors.textDim`). No animation. Empty state is explicit; user's intent when they hit the split icon is to add tabs next.
 
 3. **When the user drags a tab out of a scope that now has zero tabs, does the empty scope persist or auto-collapse?**
    - What we know: D-03 says "Empty scope allowed."
    - What's unclear: If `main-1` becomes empty via drag, does it still take up 1/3 of the main zone height?
-   - Recommendation: **Persist the empty scope.** User explicitly created it via split icon; silently auto-collapsing would feel broken. To remove, user closes the scope via a new "close scope" control (candidate for Claude's Discretion — a small × on the tab bar right edge when the scope has zero tabs). Or hit the split icon in an adjacent scope to re-absorb.
+   - RESOLVED: **Persist the empty scope.** User explicitly created it via split icon; silently auto-collapsing would feel broken. To remove, user closes the scope via a new "close scope" control (candidate for Claude's Discretion — a small × on the tab bar right edge when the scope has zero tabs). Or hit the split icon in an adjacent scope to re-absorb.
    - Defer the close-scope control to polish; v1 keeps the empty state indefinite.
 
 4. **Cross-scope drag of an Agent tab — does the agent-quit confirm modal trigger?**
    - What we know: Phase 20 agent-quit confirm modal fires on `closeTab`, not on `ownerScope` flip.
    - What's unclear: CONTEXT.md Deferred Ideas flagged "planner should decide."
-   - Recommendation: **Do NOT trigger confirm on drag.** PTY stays alive, session doesn't change — nothing to confirm. Only trigger on actual close.
+   - RESOLVED: **Do NOT trigger confirm on drag.** PTY stays alive, session doesn't change — nothing to confirm. Only trigger on actual close.
 
 ## Sources
 
