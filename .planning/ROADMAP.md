@@ -182,7 +182,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21
+Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21 -> 22
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -208,7 +208,27 @@ Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21
 | 19. GSD Sub-Tabs | v0.3.0 | 4/4 | Complete   | 2026-04-17 |
 | 20. Right Panel Multi-Terminal | v0.3.0 | 9/4 | Complete    | 2026-04-18 |
 | 21. Bug Fix Sprint | v0.3.0 | 4/4 | Complete   | 2026-04-18 |
+| 22. Dynamic tabs, vertical split, and preferences modal | v0.3.0 | 0/5 | Planned | — |
+
+### Phase 22: Dynamic tabs, vertical split, and preferences modal
+
+**Goal:** Dynamic tabs with fixed titles + vertical split + titlebar Preferences button — File Tree / GSD / Git Changes render as uniform dynamic tabs (closeable, drag-reorderable, add-via-`+`); main + right zones support 1-3 stacked sub-panes via a split icon with intra-zone resize; all tab kinds drag freely between any two scopes; PTY session names stay stable across drags via a shared per-project counter; Preferences opens via a new titlebar gear icon while Cmd+, is unchanged.
+**Requirements**: TABS-01, SPLIT-01, SPLIT-02, SPLIT-03, SPLIT-04, PREF-01
+**Depends on:** Phase 21
+**Plans:** 5 plans
+
+**Scope (user intent):**
+- **Uniform dynamic tabs** — make GSD and Git Changes behave like other tabs: not open on first launch, reorderable by drag, addable via `+` button, closeable. Persist across quit: each window stores active tab, tab order, and tab titles. GSD and Git Changes tabs are non-renameable (fixed titles).
+- **Vertical split** — add vertical split for main panel and right sidebar via a split icon. Each split owns its own tabs with `+` button. Tabs can be dragged between windows/splits.
+- **Preferences entry point** — add a Preferences button in the OS titlebar (right side) that opens a Preferences modal. Keyboard shortcut: `Cmd+,`.
+
+Plans:
+- [ ] 22-01-PLAN.md — Scope foundation: expand TerminalScope to 6 hierarchical ids, shared per-project PTY session-name counter, legacy-key + sticky-ID migrations in state-manager
+- [ ] 22-02-PLAN.md — Titlebar Preferences button (`.titlebar-prefs-btn` mirrors `.titlebar-add-btn`; Settings icon; togglePreferences() onClick)
+- [ ] 22-03-PLAN.md — UnifiedTabBar refactor: delete sticky tab kind, generalize GSD singleton, cross-scope drop affordance, split-icon button with 3-cap
+- [ ] 22-04-PLAN.md — Main/Right panel N-sub-scope rewrite with SubScopePane + intra-zone resize handles + D-02 first-launch defaults + Phase 22 CSS classes
+- [ ] 22-05-PLAN.md — Human UAT verification + REQUIREMENTS/ROADMAP closeout
 
 ---
 *Roadmap created: 2026-04-06*
-*Last updated: 2026-04-18 (Phase 21 plan 04 complete — scope reconciled, debt bundle closed)*
+*Last updated: 2026-04-18 (Phase 22 added — dynamic tabs, vertical split, preferences modal)*
