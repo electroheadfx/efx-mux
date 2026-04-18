@@ -27,6 +27,7 @@ import { ConfirmModal, showConfirmModal } from './components/confirm-modal';
 import { initDragManager } from './drag-manager';
 import { initTheme, registerTerminal, toggleThemeMode } from './theme/theme-manager';
 import { createNewTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs, saveProjectTabs, hasProjectTabs, restoreProjectTabs, getTerminalScope } from './components/terminal-tabs';
+import { getActiveSubScopesForZone } from './components/sub-scope-pane';
 import {
   loadAppState, saveAppState, getCurrentState, initBeforeUnload, sidebarCollapsed, updateLayout, updateSession,
   getProjects, getActiveProject, projects, activeProjectName
@@ -498,23 +499,16 @@ async function bootstrap() {
       // the restored Git Changes id.
       restoreGitChangesTab(activeName);
       try {
-        await getTerminalScope('right').restoreProjectTabs(activeName, activeProject?.path, agentBinary ?? undefined);
+        for (const scope of getActiveSubScopesForZone('right')) {
+          await getTerminalScope(scope).restoreProjectTabs(activeName, activeProject?.path, agentBinary ?? undefined);
+        }
       } catch (err) {
         console.warn('[efxmux] Failed to restore right-scope tabs:', err);
       }
-      // Right-scope active tab fallback: if the persisted active ID no longer
-      // resolves to a sticky id, a gc id owned by right, or a current dynamic
-      // tab, fall back to 'file-tree' (D-17 default).
-      const rightScope = getTerminalScope('right');
-      const rightActive = rightScope.activeTabId.value;
-      const rightTabs = rightScope.tabs.value;
-      const resolvable = rightActive === 'file-tree'
-        || rightActive === 'gsd'
-        || (gitChangesTab.value?.owningScope === 'right' && gitChangesTab.value.id === rightActive)
-        || rightTabs.some(t => t.id === rightActive);
-      if (!resolvable) {
-        rightScope.activeTabId.value = 'file-tree';
-      }
+      // Phase 22 D-03/D-06: sticky-tab fallback removed. Empty scope is allowed;
+      // state-manager (22-01) drops legacy 'file-tree'/'gsd' activeTabId on load.
+      // Right-scope D-02 first-launch defaults are seeded by sub-scope-pane.tsx
+      // (covered by gap-closure plan 22-07). No fallback needed here.
 
       // Phase 22 Plan 04 D-02: if no gsd/file-tree tabs were restored for right-0,
       // seed the defaults: GSD pane + File Tree as dynamic tabs in right-0.
@@ -568,8 +562,10 @@ document.addEventListener('project-pre-switch', (e: Event) => {
   if (oldName) {
     saveCurrentProjectState(oldName);
     saveProjectTabs(oldName);                              // main scope
-    // Phase 20 D-18: persist right-scope tabs for the outgoing project.
-    getTerminalScope('right').saveProjectTabs(oldName);
+    // Phase 22 D-10: persist right-scope tabs for every active right sub-scope.
+    for (const scope of getActiveSubScopesForZone('right')) {
+      getTerminalScope(scope).saveProjectTabs(oldName);
+    }
   }
 });
 
@@ -622,30 +618,20 @@ document.addEventListener('project-changed', async (e: Event) => {
       (gitChangesTab as any).value = null;
       restoreGitChangesTab(newProjectName);
 
-      // Phase 20 D-18: restore right-scope tabs for the new project. Serialized
-      // after main-scope restore to avoid concurrent persist writes racing on
-      // the same state.json blob.
+      // Phase 22 D-10: restore right-scope tabs for every active right sub-scope.
+      // Serialized after main-scope restore to avoid concurrent persist writes
+      // racing on the same state.json blob.
       try {
-        await getTerminalScope('right').restoreProjectTabs(newProjectName, project.path, agentBinary ?? undefined);
+        for (const scope of getActiveSubScopesForZone('right')) {
+          await getTerminalScope(scope).restoreProjectTabs(newProjectName, project.path, agentBinary ?? undefined);
+        }
       } catch (err) {
         console.warn('[efxmux] Failed to restore right-scope tabs:', err);
       }
-      // Right-scope active tab fallback to 'file-tree' (D-17) if persisted
-      // activeTabId no longer resolves to any known tab.
-      const rightScope = getTerminalScope('right');
-      const rightActive = rightScope.activeTabId.value;
-      const rightTabs = rightScope.tabs.value;
-      // Read gitChangesTab.value into a local so TS control-flow narrowing from
-      // the earlier `gitChangesTab.value = null` reset does not collapse the
-      // subsequent property reads to `never` (Fix #3 side effect).
-      const gcNow = gitChangesTab.value;
-      const rightResolvable = rightActive === 'file-tree'
-        || rightActive === 'gsd'
-        || (gcNow?.owningScope === 'right' && gcNow.id === rightActive)
-        || rightTabs.some(t => t.id === rightActive);
-      if (!rightResolvable) {
-        rightScope.activeTabId.value = 'file-tree';
-      }
+      // Phase 22 D-03/D-06: sticky-tab fallback removed. Empty scope is allowed;
+      // state-manager (22-01) drops legacy 'file-tree'/'gsd' activeTabId on load.
+      // Right-scope D-02 first-launch defaults are seeded by sub-scope-pane.tsx
+      // (covered by gap-closure plan 22-07). No fallback needed here.
 
       // Restore editor tabs for the new project.
       // quick-260417-f6e: suppress persist during the restore loop — each
@@ -658,9 +644,10 @@ document.addEventListener('project-changed', async (e: Event) => {
       persistEditorTabs();
 
       // Phase 20 D-21: the legacy `switch-bash-session` dispatch is removed.
-      // Right-scope terminals are now plain PTY tabs owned by getTerminalScope('right');
-      // their session names already include the project prefix via Plan 01's
-      // persistenceKey derivation, so no cross-project session switch is needed.
+      // Right-scope terminals are now plain PTY tabs owned by each active
+      // right-N sub-scope (Phase 22 D-10); their session names already include
+      // the project prefix via persistenceKey derivation, so no cross-project
+      // session switch is needed.
 
       // 07-06: Restore new project's server state (or defaults if never started)
       // Servers keep running in background -- only UI state switches
