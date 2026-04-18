@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: Workspace Evolution
 status: executing
-stopped_at: Completed 22-03-PLAN.md
-last_updated: "2026-04-18T18:06:28.726Z"
+stopped_at: Completed 22-04-PLAN.md
+last_updated: "2026-04-18T18:38:21.390Z"
 last_activity: 2026-04-18
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 40
-  completed_plans: 43
+  completed_plans: 44
   percent: 100
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 ## Current Position
 
 Phase: 22 (dynamic-tabs-vertical-split-and-preferences-modal) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-04-18
 
@@ -66,6 +66,10 @@ Progress: [██████████] 100% (Phase 17)
 - [Phase 21-bug-fix-sprint]: FIX-06 root cause: openEditorTab wrote only activeUnifiedTabId; RightPanel reads getTerminalScope('right').activeTabId separately. Introduced _activateEditorTab helper to route activation by ownerScope.
 - [Phase 21]: Plan 21-04 IN-02: approach (a) useRef refactor over approach (b) targeted disable — eliminates react-hooks/exhaustive-deps suppression in editor-tab.tsx entirely
 - [Phase 22]: Phase 22 Plan 03: StickyTabData removed — file-tree/gsd render as dynamic tabs with data-tab-id; gsdTab singleton signal + fileTreeTabs per-scope array; handleCrossScopeDrop routes all 5 tab kinds; split icon button with 3-pane cap stub
+- [Phase 22]: Zone type ('main' | 'right') separate from TerminalScope for split-group management
+- [Phase 22]: Shared sub-scope state in sub-scope-pane.tsx to avoid circular imports between main-panel and right-panel
+- [Phase 22]: SubScopePane: always-mount bodies with display:none toggle preserves xterm WebGL + CodeMirror state
+- [Phase 22]: unified-tab-bar uses local type-adapter wrappers (main-0→main mapping) rather than changing its existing zone type contract
 
 ### Roadmap Evolution
 
@@ -134,8 +138,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-18T18:06:28.722Z
-Stopped at: Completed 22-03-PLAN.md
+Last session: 2026-04-18T18:38:10.829Z
+Stopped at: Completed 22-04-PLAN.md
 Resume file: None
 
 Next: `/gsd-execute-phase 15` or `/gsd-code-review-fix 17` to fix remaining warnings
