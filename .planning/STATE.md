@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: Workspace Evolution
 status: executing
-stopped_at: Phase 20 UI-SPEC approved
-last_updated: "2026-04-18T05:44:56.145Z"
-last_activity: 2026-04-18
+stopped_at: Phase 21 context gathered
+last_updated: "2026-04-18T07:49:45.991Z"
+last_activity: "2026-04-18 - Completed quick task 260418-bpm: main-window new-tab focus fix"
 progress:
   total_phases: 7
   completed_phases: 6
@@ -122,8 +122,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-17T17:04:44.160Z
-Stopped at: Phase 20 UI-SPEC approved
-Resume file: /Users/lmarques/Dev/efx-mux/.planning/phases/20-right-panel-multi-terminal/20-UI-SPEC.md
+Last session: 2026-04-18T07:49:45.988Z
+Stopped at: Phase 21 context gathered
+Resume file: .planning/phases/21-bug-fix-sprint/21-CONTEXT.md
 
 Next: `/gsd-execute-phase 15` or `/gsd-code-review-fix 17` to fix remaining warnings
