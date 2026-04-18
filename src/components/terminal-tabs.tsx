@@ -789,21 +789,10 @@ export async function initFirstTab(
   await nextFrame();
   fitAddon.fit();
 
-  let disconnectPty: (() => void) | undefined;
-  let ptyConnected = false;
-
-  try {
-    const conn = await connectPty(terminal, sessionName, projectPath, agentBinary);
-    disconnectPty = conn.disconnect;
-    ptyConnected = true;
-  } catch (err) {
-    console.error('[efxmux] Failed to connect PTY:', err);
-    terminal.writeln('\x1b[33mWarning: Could not attach to tmux session "' + sessionName + '":\x1b[0m ' + err);
-    terminal.writeln('\x1b[33mIf tmux is not installed, run: brew install tmux\x1b[0m');
-  }
-
-  const resizeHandle = attachResizeHandler(container, terminal, fitAddon, sessionName);
-
+  // Commit the tab to scope state BEFORE spawning the PTY so the
+  // module-level `pty-exited` listener can find it if the tmux pane is
+  // already dead and the Rust monitor thread emits before this function
+  // returns. (Same startup TOCTOU race as restoreTabsScoped — quick-260418-b1a.)
   const tab: TerminalTab = {
     id,
     sessionName,
@@ -811,16 +800,28 @@ export async function initFirstTab(
     terminal,
     fitAddon,
     container,
-    ptyConnected,
-    disconnectPty,
-    detachResize: resizeHandle.detach,
+    ptyConnected: false,
+    disconnectPty: undefined,
+    detachResize: () => {},
     exitCode: undefined,
     isAgent: !!agentBinary,
     ownerScope: 'main',
   };
-
   s.tabs.value = [tab];
   s.activeTabId.value = id;
+
+  try {
+    const conn = await connectPty(terminal, sessionName, projectPath, agentBinary);
+    tab.disconnectPty = conn.disconnect;
+    tab.ptyConnected = true;
+  } catch (err) {
+    console.error('[efxmux] Failed to connect PTY:', err);
+    terminal.writeln('\x1b[33mWarning: Could not attach to tmux session "' + sessionName + '":\x1b[0m ' + err);
+    terminal.writeln('\x1b[33mIf tmux is not installed, run: brew install tmux\x1b[0m');
+  }
+
+  const resizeHandle = attachResizeHandler(container, terminal, fitAddon, sessionName);
+  tab.detachResize = resizeHandle.detach;
 
   persistTabStateScoped('main');
 
