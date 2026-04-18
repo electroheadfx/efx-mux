@@ -20,7 +20,7 @@ export function MainPanel() {
 
   return (
     <main class="main-panel relative" aria-label="Main panel">
-      <UnifiedTabBar />
+      <UnifiedTabBar scope="main" />
 
       {/* Terminal area -- always mounted, display toggled */}
       <div
@@ -36,17 +36,22 @@ export function MainPanel() {
         <ActiveTabCrashOverlay />
       </div>
 
-      {/* Editor tabs -- each manages its own display:none/flex via isActive */}
-      {editorTabs.value.map(tab => (
-        <EditorTab
-          key={tab.id}
-          tabId={tab.id}
-          filePath={tab.filePath}
-          fileName={tab.fileName}
-          content={tab.content}
-          isActive={tab.id === currentTabId}
-        />
-      ))}
+      {/* Editor tabs -- main scope only; right-panel mounts its own.
+          Plan 20-05-D: `ownerScope` filters editor tabs between panels so
+          each EditorTab component (and its CodeMirror EditorView) has exactly
+          one mount point. */}
+      {editorTabs.value
+        .filter(tab => (tab.ownerScope ?? 'main') === 'main')
+        .map(tab => (
+          <EditorTab
+            key={tab.id}
+            tabId={tab.id}
+            filePath={tab.filePath}
+            fileName={tab.fileName}
+            content={tab.content}
+            isActive={tab.id === currentTabId}
+          />
+        ))}
 
       {/* Git changes tab -- display toggled */}
       {gitChangesTab.value && (

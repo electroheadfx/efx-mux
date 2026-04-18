@@ -33,11 +33,11 @@ Requirements for Workspace Evolution release. Each maps to roadmap phases.
 
 ### GSD Viewer (GSD)
 
-- [ ] **GSD-01**: User can view Milestones sub-tab parsed from ROADMAP.md
-- [ ] **GSD-02**: User can view Phases sub-tab parsed from ROADMAP.md
-- [ ] **GSD-03**: User can view Progress sub-tab parsed from ROADMAP.md
-- [ ] **GSD-04**: User can view History sub-tab from MILESTONES.md
-- [ ] **GSD-05**: User can view State sub-tab (current position + decisions) from STATE.md
+- [x] **GSD-01**: User can view Milestones sub-tab parsed from ROADMAP.md
+- [x] **GSD-02**: User can view Phases sub-tab parsed from ROADMAP.md
+- [x] **GSD-03**: User can view Progress sub-tab parsed from ROADMAP.md
+- [x] **GSD-04**: User can view History sub-tab from MILESTONES.md
+- [x] **GSD-05**: User can view State sub-tab (current position + decisions) from STATE.md
 
 ### Sidebar (SIDE)
 
@@ -100,11 +100,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TREE-03 | Phase 18 | Pending |
 | TREE-04 | Phase 18 | Pending |
 | TREE-05 | Phase 18 | Pending |
-| GSD-01 | Phase 19 | Pending |
-| GSD-02 | Phase 19 | Pending |
-| GSD-03 | Phase 19 | Pending |
-| GSD-04 | Phase 19 | Pending |
-| GSD-05 | Phase 19 | Pending |
+| GSD-01 | Phase 19 | Complete |
+| GSD-02 | Phase 19 | Complete |
+| GSD-03 | Phase 19 | Complete |
+| GSD-04 | Phase 19 | Complete |
+| GSD-05 | Phase 19 | Complete |
 | SIDE-01 | Phase 16 | Pending |
 | SIDE-02 | Phase 20 | Pending |
 | MAIN-01 | Phase 17 | Pending |

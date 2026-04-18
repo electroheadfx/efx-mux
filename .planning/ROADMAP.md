@@ -43,8 +43,8 @@
 - [x] **Phase 16: Sidebar Evolution + Git Control** (3 plans) -- 3-tab sidebar with git staging/commit/push (completed 2026-04-15)
 - [x] **Phase 17: Main Panel File Tabs** (5 plans) -- CodeMirror editor tabs with dropdown menu (completed 2026-04-15)
 - [x] **Phase 18: File Tree Enhancements** -- Delete, drag/drop, external editor integration (completed 2026-04-16)
-- [ ] **Phase 19: GSD Sub-Tabs** -- 5 sub-tabs for Milestones, Phases, Progress, History, State
-- [ ] **Phase 20: Right Panel Multi-Terminal** -- Plus menu for Terminal/Agent sub-TUI
+- [x] **Phase 19: GSD Sub-Tabs** -- 5 sub-tabs for Milestones, Phases, Progress, History, State (completed 2026-04-17)
+- [x] **Phase 20: Right Panel Multi-Terminal** -- Plus menu for Terminal/Agent sub-TUI (completed 2026-04-18)
 - [ ] **Phase 21: Bug Fix Sprint** -- File watcher, phantom chars, scrollbar, padding fixes
 
 ## Phase Details
@@ -137,18 +137,30 @@ Plans:
   3. User can view Progress sub-tab parsed from ROADMAP.md
   4. User can view History sub-tab from MILESTONES.md
   5. User can view State sub-tab (current position + decisions) from STATE.md
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+  - [x] 19-01-PLAN.md -- Wave 0 foundation: install unified/remark deps, extend PanelsState + gsdSubTab signal, vitest ESM config, failing parser + pane test scaffolds
+  - [x] 19-02-PLAN.md -- Wave 1: implement all 5 parse functions (parseMilestones/parsePhases/parseProgress/parseHistory/parseState) with unified/remark, turn Plan 01 tests green
+  - [x] 19-03-PLAN.md -- Wave 2: build StatusBadge + 5 sub-tab components (Milestones/Phases/Progress/History/State), token-only, prop-driven
+  - [x] 19-04-PLAN.md -- Wave 3: GSDPane container with md-file-changed path filtering, swap right-panel.tsx, delete gsd-viewer.tsx, human UAT checkpoint
 **UI hint**: yes
 
 ### Phase 20: Right Panel Multi-Terminal
-**Goal**: Users can spawn multiple terminal/agent sub-TUIs in the right panel
-**Depends on**: Phase 15
+**Goal**: Users can spawn Terminal/Agent/Git-Changes sub-TUIs in the right panel via a unified tab bar that replaces the prior split layout with a single full-height pane; File Tree and GSD become sticky always-present tabs
+**Depends on**: Phases 15, 17, 19
 **Requirements**: SIDE-02
-**Success Criteria** (what must be TRUE):
-  1. User can add Terminal/Agent sub-TUI via plus menu in sidebar bash pane
-  2. User can switch between multiple terminal tabs in right panel bottom pane
-  3. Each terminal tab maintains independent PTY session
-**Plans**: TBD
+**Success Criteria** (what must be TRUE, post-discussion effective criteria):
+  1. User can add Terminal/Agent sub-TUI via the `+` menu in the **right-panel tab bar** (original wording "sidebar bash pane" is stale pre-Phase-17 phrasing — interpreted per 20-CONTEXT.md §canonical_refs as the right-panel tab bar)
+  2. User can switch between multiple terminal tabs in the right-panel tab bar
+  3. Each terminal tab maintains an independent PTY session (named `<project>-r<N>`)
+  4. File Tree + GSD remain always available as sticky uncloseable tabs in the right-panel bar
+  5. Horizontal split + dedicated bottom Bash pane are removed entirely
+**Plans**: 4 plans
+Plans:
+  - [x] 20-01-PLAN.md — terminal-tabs.tsx scope registry (main + right) with backward-compat exports
+  - [x] 20-02-PLAN.md — unified-tab-bar.tsx scope prop + sticky tabs + scope-aware plus menu + Git Changes owningScope handoff
+  - [x] 20-03-PLAN.md — state-manager legacy key migration + Rust kill_legacy_right_sessions command
+  - [x] 20-04-PLAN.md — right-panel.tsx single-pane rewrite + main.tsx dual-scope bootstrap + human UAT
 **UI hint**: yes
 
 ### Phase 21: Bug Fix Sprint
@@ -188,8 +200,8 @@ Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21
 | 16. Sidebar Evolution + Git Control | v0.3.0 | 4/4 | Complete   | 2026-04-15 |
 | 17. Main Panel File Tabs | v0.3.0 | 5/5 | Complete   | 2026-04-15 |
 | 18. File Tree Enhancements | v0.3.0 | 12/12 | Complete    | 2026-04-17 |
-| 19. GSD Sub-Tabs | v0.3.0 | 0/? | Not started | - |
-| 20. Right Panel Multi-Terminal | v0.3.0 | 0/? | Not started | - |
+| 19. GSD Sub-Tabs | v0.3.0 | 4/4 | Complete   | 2026-04-17 |
+| 20. Right Panel Multi-Terminal | v0.3.0 | 9/4 | Complete    | 2026-04-18 |
 | 21. Bug Fix Sprint | v0.3.0 | 0/? | Not started | - |
 
 ---

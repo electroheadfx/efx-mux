@@ -123,9 +123,20 @@ export function Dropdown({ items, trigger }: DropdownProps) {
         setSelectedIndex(0);
         if (triggerRef.current) {
           const rect = triggerRef.current.getBoundingClientRect();
+          // Phase 20, Plan 05 fix #1: flip menu to align right-edge when
+          // a left-aligned menu would overflow the viewport. Menu min-width
+          // is 160px (see menuRef style); add margin buffer.
+          const MENU_MIN_WIDTH = 160;
+          const MARGIN = 8;
+          const viewportWidth = window.innerWidth;
+          let left = rect.left + window.scrollX;
+          if (rect.left + MENU_MIN_WIDTH > viewportWidth - MARGIN) {
+            // Flip: align menu's right edge with trigger's right edge
+            left = Math.max(MARGIN, rect.right - MENU_MIN_WIDTH + window.scrollX);
+          }
           setMenuPosition({
             top: rect.bottom + window.scrollY,
-            left: rect.left + window.scrollX,
+            left,
           });
         }
       }

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: Workspace Evolution
 status: executing
-stopped_at: Phase 18 UI-SPEC approved
-last_updated: "2026-04-17T08:49:52.532Z"
-last_activity: 2026-04-17
+stopped_at: Phase 20 UI-SPEC approved
+last_updated: "2026-04-18T05:44:56.145Z"
+last_activity: 2026-04-18
 progress:
   total_phases: 7
-  completed_phases: 4
-  total_plans: 23
-  completed_plans: 23
+  completed_phases: 6
+  total_plans: 31
+  completed_plans: 36
   percent: 100
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** A single native macOS window that co-locates AI agent terminals alongside live GSD progress, git diff, and file tree -- all persisted across restarts via tmux.
-**Current focus:** Phase 18 — file-tree-enhancements
+**Current focus:** Phase 20 — right-panel-multi-terminal
 
 ## Current Position
 
-Phase: 19
+Phase: 21
 Plan: Not started
-Status: Ready to execute
-Last activity: 2026-04-17 - Completed quick task 260417-je3: Add HMR-wipe guard to save_state
+Status: Executing Phase 20
+Last activity: 2026-04-18
 
 **Code review fixes pending (non-blocking):**
 
@@ -60,6 +60,9 @@ Progress: [██████████] 100% (Phase 17)
 - v0.2.0: Sync inner functions for Rust testability of async Tauri commands
 - v0.1.0: Arrow.js -> Preact migration (Phase 6.1)
 - v0.1.0: tmux session backend for persistence
+- [Phase 19]: Phase 19 Plan 01: Added gsd_sub_tab to Rust PanelsState (not LayoutState.extra) for semantic correctness; parser stubs return typed empties with parseError='Not yet implemented' to give Plan 02 a deterministic RED state
+- [Phase 19]: Phase 19 Plan 02: Added @types/mdast@4.0.4 devDependency -- pnpm strict layout doesn't hoist transitive types, so mdast Root/Heading/List imports need the types package as a direct dep. Chose this over inline type definitions for canonical AST contract.
+- [Phase 19]: Phase 19 Plan 03: Co-located EmptyState helper with StatusBadge in status-badge.tsx (one shared-primitives file, imported by all 5 sub-tabs). Kept PhasesTab accordion state module-level per git-changes-tab.tsx precedent -- ephemeral across sub-tab switches by design.
 
 ### Pending Todos
 
@@ -111,11 +114,14 @@ None.
 | 260417-i0z | Save only active tab's file on Cmd+S (not all open editor tabs) | 2026-04-17 |
 | 260417-iat | Add keyboard shortcut to delete folder in file tree | 2026-04-17 |
 | 260417-je3 | Add HMR-wipe guard to save_state Tauri command (refuse overwriting non-empty projects with empty list) | 2026-04-17 |
+| Phase 19 P01 | 8min | 3 tasks | 10 files |
+| Phase 19 P02 | 3min 43s | 2 tasks | 3 files |
+| Phase 19 P03 | 8min 40s | 3 tasks | 6 files |
 
 ## Session Continuity
 
-Last session: 2026-04-16T18:11:49.441Z
-Stopped at: Phase 18 UI-SPEC approved
-Resume file: .planning/phases/18-file-tree-enhancements/18-UI-SPEC.md
+Last session: 2026-04-17T17:04:44.160Z
+Stopped at: Phase 20 UI-SPEC approved
+Resume file: /Users/lmarques/Dev/efx-mux/.planning/phases/20-right-panel-multi-terminal/20-UI-SPEC.md
 
 Next: `/gsd-execute-phase 15` or `/gsd-code-review-fix 17` to fix remaining warnings

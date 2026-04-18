@@ -26,13 +26,13 @@ import { ToastContainer, showToast } from './components/toast';
 import { ConfirmModal, showConfirmModal } from './components/confirm-modal';
 import { initDragManager } from './drag-manager';
 import { initTheme, registerTerminal, toggleThemeMode } from './theme/theme-manager';
-import { createNewTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs, saveProjectTabs, hasProjectTabs, restoreProjectTabs } from './components/terminal-tabs';
+import { createNewTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs, saveProjectTabs, hasProjectTabs, restoreProjectTabs, getTerminalScope } from './components/terminal-tabs';
 import {
   loadAppState, saveAppState, getCurrentState, initBeforeUnload, sidebarCollapsed, updateLayout, updateSession,
   getProjects, getActiveProject, projects, activeProjectName
 } from './state-manager';
 import { openProjectModal } from './components/project-modal';
-import { openEditorTab, openEditorTabPinned, restoreEditorTabs, activeUnifiedTabId, closeUnifiedTab, suppressEditorPersist, persistEditorTabs } from './components/unified-tab-bar';
+import { openEditorTab, openEditorTabPinned, restoreEditorTabs, activeUnifiedTabId, closeUnifiedTab, suppressEditorPersist, persistEditorTabs, gitChangesTab, restoreGitChangesTab } from './components/unified-tab-bar';
 import { triggerEditorSave } from './editor/setup';
 import { serverPaneState, saveCurrentProjectState, restoreProjectState } from './components/server-pane';
 import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from './components/file-tree';
@@ -42,9 +42,10 @@ import { projectSessionName } from './utils/session-name';
 // Module-level state for terminal session tracking
 // *PtyKey = original PTY spawn session (for write_pty)
 // *CurrentSession = which tmux session the client currently shows (for switch-client)
+// Phase 20 D-21: rightCurrentSession was removed — the right panel no longer has
+// a singleton bash session; each right-scope tab owns its own tmux session.
 let mainPtyKey = '';
 let mainCurrentSession = '';
-let rightCurrentSession = '';
 
 // Phase 18 Plan 07 (UAT Test 16 fix): Tauri 2.10.x onDragDropEvent payload.position.y
 // is reported in WINDOW coordinates (origin = top of macOS native title bar) when
@@ -393,13 +394,24 @@ async function bootstrap() {
       : (appState?.session?.['main-tmux-session'] ?? 'efx-mux');
     mainPtyKey = sessionName; // Store PTY key (never changes)
     mainCurrentSession = sessionName;
-    // Right panel uses same project but with -right suffix
-    rightCurrentSession = activeName
-      ? projectSessionName(activeName, 'right')
-      : (appState?.session?.['right-tmux-session'] ?? 'efx-mux-right');
 
     // Clean up dead tmux sessions from previous runs (Plan 05)
     try { await invoke('cleanup_dead_sessions'); } catch {}
+
+    // Phase 20 D-19: kill any legacy <project>-right tmux sessions from the
+    // prior right-panel layout. Best-effort; migration failure must not block
+    // bootstrap, so the invocation is wrapped in try/catch.
+    try {
+      const projectNames = projects.value.map(p => p.name);
+      if (projectNames.length > 0) {
+        const killed = await invoke<string[]>('kill_legacy_right_sessions', { projectNames });
+        if (killed.length > 0) {
+          console.log('[efxmux] killed legacy right sessions:', killed);
+        }
+      }
+    } catch {
+      // Best-effort: migration failure must not block bootstrap.
+    }
 
     // Agent detection (D-10, D-11, AGENT-03/04/05)
     let agentBinary: string | null = null;
@@ -455,6 +467,38 @@ async function bootstrap() {
       }
     }
 
+    // Phase 20 D-18: restore right-scope tabs for the active project. The main
+    // restore above has already populated main-scope tabs; here we add the right-
+    // scope siblings from the per-project `right-terminal-tabs:<project>` key.
+    // main.tsx serializes both restores (await chain) so the race that Pitfall 4
+    // guards against (concurrent persist during restore) cannot happen here.
+    if (activeName) {
+      // Fix #3 (20-05-E): restore Git Changes tab (incl. owningScope=right) so
+      // a user who had Git Changes pinned in the right panel still has it on
+      // the next launch. Must run BEFORE right-scope tab restoration so the
+      // RightPanel renders the gc body correctly when its activeTabId matches
+      // the restored Git Changes id.
+      restoreGitChangesTab(activeName);
+      try {
+        await getTerminalScope('right').restoreProjectTabs(activeName, activeProject?.path, agentBinary ?? undefined);
+      } catch (err) {
+        console.warn('[efxmux] Failed to restore right-scope tabs:', err);
+      }
+      // Right-scope active tab fallback: if the persisted active ID no longer
+      // resolves to a sticky id, a gc id owned by right, or a current dynamic
+      // tab, fall back to 'file-tree' (D-17 default).
+      const rightScope = getTerminalScope('right');
+      const rightActive = rightScope.activeTabId.value;
+      const rightTabs = rightScope.tabs.value;
+      const resolvable = rightActive === 'file-tree'
+        || rightActive === 'gsd'
+        || (gitChangesTab.value?.owningScope === 'right' && gitChangesTab.value.id === rightActive)
+        || rightTabs.some(t => t.id === rightActive);
+      if (!resolvable) {
+        rightScope.activeTabId.value = 'file-tree';
+      }
+    }
+
     // Restore editor tabs from persisted state
     if (activeName) {
       await restoreEditorTabs(activeName);
@@ -465,19 +509,9 @@ async function bootstrap() {
     // happened while persist was suppressed).
     persistEditorTabs();
 
-    // Apply right-h-pct after DOM is ready
-    if (appState?.layout?.['right-h-pct']) {
-      const pct = parseFloat(String(appState.layout['right-h-pct']));
-      if (!isNaN(pct)) {
-        const rightPanel = document.querySelector('.right-panel') as HTMLElement;
-        if (rightPanel) {
-          const rt = rightPanel.querySelector('.right-top') as HTMLElement;
-          const rb = rightPanel.querySelector('.right-bottom') as HTMLElement;
-          if (rt) rt.style.flex = `0 0 ${pct.toFixed(1)}%`;
-          if (rb) rb.style.flex = `0 0 ${(100 - pct).toFixed(1)}%`;
-        }
-      }
-    }
+    // Phase 20 D-01: the prior right-h-pct layout-apply block (sized the legacy
+    // .right-top / .right-bottom sub-panels) is removed — the right panel is
+    // now a single-pane shell with no horizontal split.
   });
 }
 
@@ -507,7 +541,9 @@ document.addEventListener('project-pre-switch', (e: Event) => {
   const { oldName } = (e as CustomEvent).detail;
   if (oldName) {
     saveCurrentProjectState(oldName);
-    saveProjectTabs(oldName);
+    saveProjectTabs(oldName);                              // main scope
+    // Phase 20 D-18: persist right-scope tabs for the outgoing project.
+    getTerminalScope('right').saveProjectTabs(oldName);
   }
 });
 
@@ -552,6 +588,39 @@ document.addEventListener('project-changed', async (e: Event) => {
         await initFirstTab(themeOptions, newMainSession, project.path, agentBinary ?? undefined);
       }
 
+      // Fix #3 (20-05-E): clear gitChangesTab (prior project may have owned it)
+      // then restore from new project's persisted state. Cast through `any`
+      // to prevent TS from narrowing subsequent `gitChangesTab.value` reads
+      // below — `restoreGitChangesTab` may reassign the signal but control-flow
+      // analysis cannot see across the function boundary.
+      (gitChangesTab as any).value = null;
+      restoreGitChangesTab(newProjectName);
+
+      // Phase 20 D-18: restore right-scope tabs for the new project. Serialized
+      // after main-scope restore to avoid concurrent persist writes racing on
+      // the same state.json blob.
+      try {
+        await getTerminalScope('right').restoreProjectTabs(newProjectName, project.path, agentBinary ?? undefined);
+      } catch (err) {
+        console.warn('[efxmux] Failed to restore right-scope tabs:', err);
+      }
+      // Right-scope active tab fallback to 'file-tree' (D-17) if persisted
+      // activeTabId no longer resolves to any known tab.
+      const rightScope = getTerminalScope('right');
+      const rightActive = rightScope.activeTabId.value;
+      const rightTabs = rightScope.tabs.value;
+      // Read gitChangesTab.value into a local so TS control-flow narrowing from
+      // the earlier `gitChangesTab.value = null` reset does not collapse the
+      // subsequent property reads to `never` (Fix #3 side effect).
+      const gcNow = gitChangesTab.value;
+      const rightResolvable = rightActive === 'file-tree'
+        || rightActive === 'gsd'
+        || (gcNow?.owningScope === 'right' && gcNow.id === rightActive)
+        || rightTabs.some(t => t.id === rightActive);
+      if (!rightResolvable) {
+        rightScope.activeTabId.value = 'file-tree';
+      }
+
       // Restore editor tabs for the new project.
       // quick-260417-f6e: suppress persist during the restore loop — each
       // open*EditorTab() mutation would otherwise overwrite activeFilePath in
@@ -562,12 +631,10 @@ document.addEventListener('project-changed', async (e: Event) => {
       // Force one persist now that activeUnifiedTabId has been set to the saved focus
       persistEditorTabs();
 
-      // Switch right panel bash terminal (silent via Rust)
-      const newRightSession = projectSessionName(newProjectName, 'right');
-      document.dispatchEvent(new CustomEvent('switch-bash-session', {
-        detail: { currentSession: rightCurrentSession, targetSession: newRightSession, startDir: project.path }
-      }));
-      rightCurrentSession = newRightSession;
+      // Phase 20 D-21: the legacy `switch-bash-session` dispatch is removed.
+      // Right-scope terminals are now plain PTY tabs owned by getTerminalScope('right');
+      // their session names already include the project prefix via Plan 01's
+      // persistenceKey derivation, so no cross-project session switch is needed.
 
       // 07-06: Restore new project's server state (or defaults if never started)
       // Servers keep running in background -- only UI state switches
