@@ -35,7 +35,7 @@ import { openProjectModal } from './components/project-modal';
 import { openEditorTab, openEditorTabPinned, restoreEditorTabs, activeUnifiedTabId, closeUnifiedTab, suppressEditorPersist, persistEditorTabs, gitChangesTab, restoreGitChangesTab, createAndFocusMainTerminalTab } from './components/unified-tab-bar';
 import { triggerEditorSave } from './editor/setup';
 import { serverPaneState, saveCurrentProjectState, restoreProjectState } from './components/server-pane';
-import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from './components/file-tree';
+import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor, defaultExternalEditor } from './components/file-tree';
 import { detectAgent } from './server/server-bridge';
 import { projectSessionName } from './utils/session-name';
 
@@ -133,6 +133,7 @@ async function bootstrap() {
     fileTreeFontSize.value = parseInt(String(layout['file-tree-font-size'])) || 13;
     fileTreeLineHeight.value = parseInt(String(layout['file-tree-line-height'])) || 2;
     fileTreeBgColor.value = String(layout['file-tree-bg-color'] ?? '');
+    defaultExternalEditor.value = String(layout['default-external-editor'] ?? '');
   }
 
   // Wire beforeunload

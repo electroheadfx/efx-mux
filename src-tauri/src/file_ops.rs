@@ -586,9 +586,14 @@ pub fn launch_external_editor_impl(app: &str, path: &str) -> Result<(), String> 
 }
 
 /// Launch an external GUI editor to open a file or folder (Phase 18, D-08).
+/// Uses spawn_blocking because launch_external_editor_impl calls child.wait() — a blocking
+/// syscall. Calling blocking code on the Tokio async executor thread causes intermittent
+/// hangs when the executor is under load (same pattern as all other I/O commands in this file).
 #[tauri::command]
 pub async fn launch_external_editor(app: String, path: String) -> Result<(), String> {
-    launch_external_editor_impl(&app, &path)
+    spawn_blocking(move || launch_external_editor_impl(&app, &path))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Synchronous inner implementation of open_default for testing.
@@ -606,7 +611,9 @@ pub fn open_default_impl(path: &str) -> Result<(), String> {
 /// Open a path with the macOS default application (Phase 18, D-06 fallback).
 #[tauri::command]
 pub async fn open_default(path: String) -> Result<(), String> {
-    open_default_impl(&path)
+    spawn_blocking(move || open_default_impl(&path))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Synchronous inner implementation of reveal_in_finder for testing.
@@ -624,7 +631,9 @@ pub fn reveal_in_finder_impl(path: &str) -> Result<(), String> {
 /// Reveal a path in Finder (Phase 18, D-06 fallback).
 #[tauri::command]
 pub async fn reveal_in_finder(path: String) -> Result<(), String> {
-    reveal_in_finder_impl(&path)
+    spawn_blocking(move || reveal_in_finder_impl(&path))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 fn which(cli: &str) -> bool {
@@ -635,21 +644,38 @@ fn which(cli: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Check if a macOS GUI application is registered with LaunchServices by name.
+/// Uses `open -Ra {app_name}` which succeeds (exit 0) if the app is found by
+/// LaunchServices, regardless of whether a CLI alias exists in PATH.
+/// This detects apps installed via the Mac App Store or DMG that never install a CLI.
+fn app_installed(app_name: &str) -> bool {
+    std::process::Command::new("open")
+        .args(["-Ra", app_name])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
 /// Synchronous inner implementation of detect_editors for testing.
+/// Detection uses two strategies (OR-combined):
+///   1. LaunchServices lookup via open -Ra AppName  - detects GUI apps without a CLI alias.
+///   2. PATH lookup via which cli                   - detects CLI-first installs.
 pub fn detect_editors_impl() -> DetectedEditors {
     DetectedEditors {
-        zed: which("zed"),
-        code: which("code"),
-        subl: which("subl"),
-        cursor: which("cursor"),
-        idea: which("idea"),
+        zed:    app_installed("Zed")                 || which("zed"),
+        code:   app_installed("Visual Studio Code")  || which("code"),
+        subl:   app_installed("Sublime Text")        || which("subl"),
+        cursor: app_installed("Cursor")              || which("cursor"),
+        idea:   app_installed("IntelliJ IDEA")       || which("idea"),
     }
 }
 
 /// Probe which external-editor CLIs are installed (Phase 18, D-06).
 #[tauri::command]
 pub async fn detect_editors() -> Result<DetectedEditors, String> {
-    Ok(detect_editors_impl())
+    spawn_blocking(detect_editors_impl)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

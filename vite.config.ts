@@ -4,6 +4,11 @@ import tailwindcss from '@tailwindcss/vite';
 
 const host = process.env.TAURI_DEV_HOST;
 
+// Dev-only note: opening vite.config.ts / tsconfig.json / vitest.config.ts /
+// vitest.setup.ts in an external editor (via Open In) touches their mtime and
+// triggers Vite's hardcoded config-restart watcher, causing the webview to
+// reload. Not a bug — server.watch.ignored does not cover this path. Harmless
+// in `pnpm tauri build`.
 export default defineConfig({
   plugins: [preact(), tailwindcss()],
   clearScreen: false,

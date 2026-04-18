@@ -29,6 +29,9 @@ interface ChildCount { files: number; folders: number; total: number; capped: bo
 export const fileTreeFontSize = signal(13);
 export const fileTreeLineHeight = signal(2);
 export const fileTreeBgColor = signal('');
+// Default external editor preference (empty string = no default; use picker dropdown).
+// Set by preferences panel; loaded from state.json layout['default-external-editor'].
+export const defaultExternalEditor = signal<string>('');
 
 // View mode signal
 // quick-260417-iat: exported so tests can deterministically set mode without
@@ -922,6 +925,30 @@ export function FileTree() {
       });
     })();
 
+    // Round 4: listen for the macOS "File > Open in External Editor" menu action.
+    // Resolves the default editor (or falls back to picker shown via headerMenu) so
+    // the top-bar menu entry behaves identically to the header button.
+    let unlistenOpenInEditor: (() => void) | null = null;
+    (async () => {
+      unlistenOpenInEditor = await listen('open-in-editor-requested', () => {
+        const project = getActiveProject();
+        if (!project?.path) return;
+        const resolvedDefault = resolveDefaultEditorDetected();
+        if (resolvedDefault) {
+          void launchOrToast(resolvedDefault, project.path);
+          return;
+        }
+        // No default: show the picker as a positioned menu anchored to the top-left.
+        // Best-effort placement — the native menu gives us no anchor element.
+        const children = buildOpenInChildren(project.path);
+        if (children.length === 0) {
+          showToast({ type: 'error', message: 'No external editors detected', hint: 'Install Zed, VSCode, or Cursor and restart.' });
+          return;
+        }
+        headerMenu.value = { x: 80, y: 56, items: children };
+      });
+    })();
+
     // Phase 18 Plan 05 (D-15..D-18): Finder drop event handlers. main.tsx dispatches
     // tree-finder-* CustomEvents for OS drops whose paths are OUTSIDE the project root.
     async function handleFinderDragover(e: Event) {
@@ -1043,6 +1070,7 @@ export function FileTree() {
       if (unlistenFs) unlistenFs();
       if (unlistenFileTree) unlistenFileTree();
       if (unlistenDelete) unlistenDelete();
+      if (unlistenOpenInEditor) unlistenOpenInEditor();
       unsubActiveTab();
       document.removeEventListener('project-changed', handleProjectChanged);
       document.removeEventListener('file-tree-scroll-to-selected', handleScrollToSelected);
@@ -1115,6 +1143,24 @@ export function FileTree() {
     if (ed.subl)   children.push({ label: 'Sublime Text',        icon: Type,          action: () => { void launchOrToast('Sublime Text', path); } });
     if (ed.idea)   children.push({ label: 'IntelliJ IDEA',       icon: Braces,        action: () => { void launchOrToast('IntelliJ IDEA', path); } });
     return children;
+  }
+
+  // Round 4: returns the configured default editor name if it is currently detected,
+  // or null if no default is set or the editor is no longer detected.
+  // Used by openHeaderOpenInMenu and buildRowMenuItems to decide between direct-launch
+  // and showing the picker dropdown / submenu.
+  function resolveDefaultEditorDetected(): string | null {
+    const def = defaultExternalEditor.value;
+    const ed = detectedEditors.value;
+    if (!def || !ed) return null;
+    const key = def.toLowerCase();
+    const detected =
+      (key === 'zed'                && ed.zed)  ||
+      (key === 'visual studio code' && ed.code) ||
+      (key === 'cursor'             && ed.cursor) ||
+      (key === 'sublime text'       && ed.subl) ||
+      (key === 'intellij idea'      && ed.idea);
+    return detected ? def : null;
   }
 
   async function launchOrToast(app: string, path: string): Promise<void> {
@@ -1200,6 +1246,12 @@ export function FileTree() {
     e.stopPropagation();
     const project = getActiveProject();
     if (!project?.path) return;
+    // Round 4: use shared helper — direct-launch when default editor is set and detected.
+    const resolvedDefault = resolveDefaultEditorDetected();
+    if (resolvedDefault) {
+      void launchOrToast(resolvedDefault, project.path);
+      return;
+    }
     const children = buildOpenInChildren(project.path);
     if (children.length === 0) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -1212,14 +1264,24 @@ export function FileTree() {
     // Resolve the target directory for "New File" / "New Folder" (D-23)
     const targetDir = isDir ? entry.path : entry.path.replace(/\/[^/]+$/, '');
     const items: ContextMenuItem[] = [];
-    // Phase 18 Plan 04: Open In submenu (only when editors detected)
-    const openInChildren = buildOpenInChildren(entry.path);
-    if (openInChildren.length > 0) {
+    // Round 4: if a default editor is set and detected, add a direct-launch item.
+    // Otherwise fall back to the hover-submenu picker (only shown when editors are detected).
+    const resolvedDefault = resolveDefaultEditorDetected();
+    if (resolvedDefault) {
       items.push({
-        label: 'Open In',
+        label: `Open in ${resolvedDefault}`,
         icon: ExternalLink,
-        children: openInChildren,
+        action: () => { void launchOrToast(resolvedDefault, entry.path); },
       });
+    } else {
+      const openInChildren = buildOpenInChildren(entry.path);
+      if (openInChildren.length > 0) {
+        items.push({
+          label: 'Open In',
+          icon: ExternalLink,
+          children: openInChildren,
+        });
+      }
     }
     // Open with default app (always)
     items.push({
@@ -1463,10 +1525,12 @@ export function FileTree() {
           const project = getActiveProject();
           // Button only appears when: (1) at least one editor detected AND (2) active project exists
           if (!hasAny || !project?.path) return null;
+          const def = defaultExternalEditor.value;
+          const tooltipLabel = def ? `Open in ${def}` : 'Open project in external editor';
           return (
             <span
               onClick={openHeaderOpenInMenu}
-              title="Open project in external editor"
+              title={tooltipLabel}
               style={{
                 cursor: 'pointer',
                 width: 28,

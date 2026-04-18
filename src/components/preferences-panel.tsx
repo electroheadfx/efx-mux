@@ -6,7 +6,7 @@ import type { ComponentChildren } from 'preact';
 import { signal } from '@preact/signals';
 import { activeProjectName, projects, updateLayout } from '../state-manager';
 import { openProjectModal } from './project-modal';
-import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor } from './file-tree';
+import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor, defaultExternalEditor, detectedEditors } from './file-tree';
 import { colors, fonts } from '../tokens';
 
 // ---------------------------------------------------------------------------
@@ -325,6 +325,52 @@ export function PreferencesPanel() {
                 </button>
               )}
             </div>
+          </SettingRow>
+
+          {/* External Editor */}
+          <SectionLabel label="EXTERNAL EDITOR" />
+          <SettingRow label="Default editor">
+            {(() => {
+              const ed = detectedEditors.value;
+              const options: string[] = [];
+              if (ed?.zed)    options.push('Zed');
+              if (ed?.code)   options.push('Visual Studio Code');
+              if (ed?.cursor) options.push('Cursor');
+              if (ed?.subl)   options.push('Sublime Text');
+              if (ed?.idea)   options.push('IntelliJ IDEA');
+              if (options.length === 0) {
+                return (
+                  <span style={{ fontFamily: fonts.mono, fontSize: 11, color: colors.textDim }}>
+                    No editors detected
+                  </span>
+                );
+              }
+              return (
+                <select
+                  value={defaultExternalEditor.value}
+                  onChange={(e) => {
+                    const v = (e.target as HTMLSelectElement).value;
+                    defaultExternalEditor.value = v;
+                    void updateLayout({ 'default-external-editor': v });
+                  }}
+                  style={{
+                    fontFamily: fonts.sans,
+                    fontSize: 13,
+                    color: colors.textPrimary,
+                    backgroundColor: colors.bgBase,
+                    border: `1px solid ${colors.bgSurface}`,
+                    borderRadius: 4,
+                    padding: '4px 8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="">None (show picker)</option>
+                  {options.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              );
+            })()}
           </SettingRow>
 
           {/* Shortcuts */}

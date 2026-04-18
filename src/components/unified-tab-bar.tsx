@@ -313,6 +313,32 @@ function _activateEditorTab(tab: EditorTabData): void {
 }
 
 /**
+ * Migrate an editor tab from the right panel to the main panel.
+ * Called when the user opens a right-scoped tab from the file tree — file-tree
+ * opens always target the main panel (VS Code / Zed semantics).
+ *
+ * Performs the same scope-signal cleanup as the unpinned-replacement migration
+ * in openEditorTab so the right panel reverts to its file-tree sticky default.
+ */
+function _migrateTabToMain(tabId: string): void {
+  // Update ownerScope in editorTabs signal
+  const updatedTabs = editorTabs.value.map(t =>
+    t.id === tabId ? { ...t, ownerScope: 'main' as const } : t,
+  );
+  setProjectEditorTabs(updatedTabs);
+  // Remove from right scoped tab order; add to main if not already present
+  setScopedTabOrder('right', getScopedTabOrder('right').filter(id => id !== tabId));
+  if (!getScopedTabOrder('main').includes(tabId)) {
+    setScopedTabOrder('main', [...getScopedTabOrder('main'), tabId]);
+  }
+  // Reset right panel active tab to file-tree sticky default
+  const rightScope = getTerminalScope('right');
+  if (rightScope.activeTabId.value === tabId) {
+    rightScope.activeTabId.value = 'file-tree';
+  }
+}
+
+/**
  * Open a file in an editor tab as a preview (single-click behavior).
  * D-03: one-tab-per-file policy. If already open, focus it.
  * Otherwise, replace the existing unpinned (preview) tab, or create a new one.
@@ -333,6 +359,19 @@ export function openEditorTab(filePath: string, fileName: string, content: strin
         t.id === existing.id ? { ...t, content } : t,
       );
       setProjectEditorTabs(refreshed);
+    }
+    // FIX (Bug: CLAUDE.md / right-scoped tab blank main panel): if the existing tab
+    // lives in the right panel, migrate it to main on any file-tree open. File-tree
+    // opens always target the main editor area (VS Code / Zed semantics). Without
+    // migration, _activateEditorTab sets activeUnifiedTabId to a right-scoped tab ID,
+    // causing the main panel to show neither terminal nor editor (blank state), while
+    // the right panel unexpectedly hides the file tree.
+    if ((existing.ownerScope ?? 'main') === 'right') {
+      _migrateTabToMain(existing.id);
+      // editorTabs was just mutated — read fresh reference for activation
+      const migrated = editorTabs.value.find(t => t.id === existing.id)!;
+      _activateEditorTab(migrated);
+      return;
     }
     _activateEditorTab(existing);
     return;
@@ -407,10 +446,17 @@ export function openEditorTabPinned(filePath: string, fileName: string, content:
       );
       setProjectEditorTabs(refreshed);
     }
+    // FIX (Bug: CLAUDE.md / right-scoped tab blank main panel): same migration
+    // as openEditorTab. Double-click from file tree must also target main panel.
+    if ((existing.ownerScope ?? 'main') === 'right') {
+      _migrateTabToMain(existing.id);
+    }
     if (!existing.pinned) {
       pinEditorTab(existing.id);
     }
-    _activateEditorTab(existing);
+    // Read fresh tab reference after potential migration + pin mutations
+    const updated = editorTabs.value.find(t => t.id === existing.id)!;
+    _activateEditorTab(updated);
     return;
   }
 

@@ -71,6 +71,39 @@ describe('ContextMenu', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  // WKWebView fix: item action fires on mousedown (primary trigger) so it works
+  // even when WKWebView suppresses click events for fixed-position menus overlapping
+  // overflow:hidden ancestors.
+  it('calls item action and onClose on mousedown (WKWebView primary trigger)', () => {
+    const onClose = vi.fn();
+    const action = vi.fn();
+    const items = [{ label: 'Test Action', action }];
+    render(<ContextMenu items={items} x={100} y={100} onClose={onClose} />);
+
+    const row = screen.getByText('Test Action').closest('[role="menuitem"]') as HTMLElement;
+    fireEvent.mouseDown(row);
+
+    expect(action).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  // Guard: when mousedown already triggered the action, the subsequent click event
+  // (fired by the browser after mousedown+mouseup) must NOT invoke the action again.
+  it('does not double-invoke action when mousedown is followed by click', () => {
+    const onClose = vi.fn();
+    const action = vi.fn();
+    const items = [{ label: 'Test Action', action }];
+    render(<ContextMenu items={items} x={100} y={100} onClose={onClose} />);
+
+    const row = screen.getByText('Test Action').closest('[role="menuitem"]') as HTMLElement;
+    // Simulate real browser sequence: mousedown then click on the same element
+    fireEvent.mouseDown(row);
+    fireEvent.click(row);
+
+    // Action must be called exactly once despite two events
+    expect(action).toHaveBeenCalledTimes(1);
+  });
+
   it('does not call action when disabled item is clicked', () => {
     const onClose = vi.fn();
     const items: ContextMenuItem[] = [
@@ -82,6 +115,20 @@ describe('ContextMenu', () => {
 
     expect(items[0].action).not.toHaveBeenCalled();
     // onClose should also not be called for disabled items
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('does not call action when disabled item receives mousedown', () => {
+    const onClose = vi.fn();
+    const items: ContextMenuItem[] = [
+      { label: 'Disabled Item', action: vi.fn(), disabled: true },
+    ];
+    render(<ContextMenu items={items} x={100} y={100} onClose={onClose} />);
+
+    const row = screen.getByText('Disabled Item').closest('[role="menuitem"]') as HTMLElement;
+    fireEvent.mouseDown(row);
+
+    expect(items[0].action).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
   });
 

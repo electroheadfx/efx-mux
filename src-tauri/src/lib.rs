@@ -36,9 +36,14 @@ pub fn run() {
                 .item(&MenuItem::with_id(app, "quit", "Quit Efxmux", true, Some("CmdOrCtrl+Q"))?)
                 .build()?;
 
-            // ── File menu — Add Project (Cmd+N) ─────────────────────────────────
+            // ── File menu — Add Project (Cmd+N) + Open in External Editor (Cmd+Shift+O) ──
             let file_menu = SubmenuBuilder::new(app, "File")
                 .item(&MenuItem::with_id(app, "add-project", "Add Project", true, Some("CmdOrCtrl+N"))?)
+                .separator()
+                // Round 4: "Open in External Editor" — emits 'open-in-editor-requested' to the
+                // frontend which resolves the configured default editor (or shows a picker).
+                // Cmd+Shift+O chosen to avoid conflicts with Cmd+O (standard open-file).
+                .item(&MenuItem::with_id(app, "open-in-editor", "Open in External Editor", true, Some("CmdOrCtrl+Shift+O"))?)
                 .build()?;
 
             // ── Edit menu — wires Cmd+C/V/X/A to WKWebView clipboard (per D-16) ──
@@ -216,6 +221,9 @@ pub fn run() {
                 // Phase 18 Plan 09 (UAT Test 5 fix): Cmd+Backspace → file-tree delete flow.
                 // file-tree.tsx listens for this event and routes to triggerDeleteConfirm.
                 "delete-selection" => { let _ = app.emit("delete-selected-tree-row", ()); }
+                // Round 4: File > Open in External Editor — file-tree.tsx listener resolves
+                // the configured default editor and launches it (or shows picker if unset).
+                "open-in-editor" => { let _ = app.emit("open-in-editor-requested", ()); }
                 _ => {}
             }
         })

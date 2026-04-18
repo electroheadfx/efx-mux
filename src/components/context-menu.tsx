@@ -32,6 +32,10 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps) {
   const submenuRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // WKWebView fix: track whether a mousedown already activated an item so the
+  // subsequent click event (fired after mousedown+mouseup) does not double-invoke
+  // the action. Reset to -1 after each click to allow future activations.
+  const mouseDownActivatedIndex = useRef<number>(-1);
   const [submenuIndex, setSubmenuIndex] = useState<number | null>(null);
   const [submenuPos, setSubmenuPos] = useState<{ x: number; y: number } | null>(null);
   // Phase 18 quick-260416-uig: per-item hover tint for main menu.
@@ -84,7 +88,7 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps) {
             if (items[i]?.children && row?.matches(':hover')) {
               const rect = row.getBoundingClientRect();
               setSubmenuIndex(i);
-              setSubmenuPos({ x: rect.right + 2, y: rect.top });
+              setSubmenuPos({ x: rect.right, y: rect.top });
               e.preventDefault();
               return;
             }
@@ -112,6 +116,11 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps) {
     <div
       ref={menuRef}
       role="menu"
+      // WKWebView fix: stop mousedown from bubbling through the fixed-position menu
+      // into DOM elements rendered below it (e.g. file-tree rows whose onMouseDown
+      // calls e.preventDefault(), which suppresses the subsequent click event and
+      // prevents item actions from firing).
+      onMouseDown={(e) => { e.stopPropagation(); }}
       style={{
         position: 'fixed',
         left: x,
@@ -150,9 +159,10 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps) {
               setHoveredIndex(i);
               if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
               if (!item.children) {
-                // Close any open submenu when hovering a non-submenu row (with 150ms delay)
+                // Close any open submenu when hovering a non-submenu row (with 300ms delay).
+                // Longer delay prevents accidental close when mouse arcs diagonally to the submenu.
                 if (submenuIndex !== null) {
-                  hoverTimerRef.current = setTimeout(() => setSubmenuIndex(null), 150);
+                  hoverTimerRef.current = setTimeout(() => setSubmenuIndex(null), 300);
                 }
                 return;
               }
@@ -161,15 +171,36 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps) {
                 if (!row) return;
                 const rect = row.getBoundingClientRect();
                 setSubmenuIndex(i);
-                setSubmenuPos({ x: rect.right + 2, y: rect.top });
+                setSubmenuPos({ x: rect.right, y: rect.top });
               }, 150);
             }}
             onMouseLeave={() => {
-              // Phase 18 quick-260416-uig: clear per-item hover tint
+              // Phase 18 quick-260416-uig: clear per-item hover tint immediately,
+              // but allow 300ms for mouse to arc into the submenu before closing it.
               setHoveredIndex(null);
               if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
             }}
-            onClick={() => handleItemClick(item)}
+            // WKWebView fix (primary trigger): fire the action on mousedown so it works
+            // even when WKWebView's pointer-event routing suppresses the click event for
+            // position:fixed elements that overlap overflow:hidden ancestors.
+            // The outer menu onMouseDown calls stopPropagation to prevent tree-row
+            // handlers from receiving this mousedown — but item rows need their own
+            // stopPropagation too since Preact bubbles inner handlers before outer ones.
+            // mouseDownActivatedIndex guards against double-invoke when click also fires.
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              mouseDownActivatedIndex.current = i;
+              handleItemClick(item);
+            }}
+            // onClick retained for keyboard activation (Enter/Space) and JSDOM test compatibility.
+            // Skipped if mousedown already triggered this item to prevent double-invoke.
+            onClick={() => {
+              if (mouseDownActivatedIndex.current === i) {
+                mouseDownActivatedIndex.current = -1;
+                return;
+              }
+              handleItemClick(item);
+            }}
             style={{
               padding: `${spacing.lg}px ${spacing['4xl']}px`,
               fontFamily: fonts.sans,
@@ -184,13 +215,21 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps) {
               backgroundColor: submenuIndex === i ? colors.bgBorder : (hoveredIndex === i ? colors.bgSurface : 'transparent'),
             }}
           >
-            {item.icon && <item.icon size={14} />}
-            <span style={{ flex: 1 }}>{item.label}</span>
+            {/* pointerEvents:none on icon wrapper and label so clicks always target
+                the parent div's event handlers regardless of which child element the
+                cursor lands on (SVG hit-test quirk in WKWebView).
+                display:inline-flex (not display:contents) ensures pointer-events:none
+                correctly prevents the icon SVG from intercepting events in WKWebView.
+                display:contents is a known problem in WebKit: the element has no box
+                of its own, so pointer-events:none may not apply to its SVG children. */}
+            {item.icon && <span style={{ display: 'inline-flex', pointerEvents: 'none' }}><item.icon size={14} /></span>}
+            <span style={{ flex: 1, pointerEvents: 'none' }}>{item.label}</span>
             {item.children && (
               <span
                 style={{
                   fontSize: 10,
                   color: submenuIndex === i ? colors.accent : colors.textMuted,
+                  pointerEvents: 'none',
                 }}
               >
                 ▸
@@ -207,7 +246,7 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps) {
           }}
           onMouseLeave={() => {
             if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-            hoverTimerRef.current = setTimeout(() => setSubmenuIndex(null), 150);
+            hoverTimerRef.current = setTimeout(() => setSubmenuIndex(null), 300);
           }}
         >
           <ContextMenu
