@@ -114,6 +114,7 @@ None.
 | 260417-i0z | Save only active tab's file on Cmd+S (not all open editor tabs) | 2026-04-17 |
 | 260417-iat | Add keyboard shortcut to delete folder in file tree | 2026-04-17 |
 | 260417-je3 | Add HMR-wipe guard to save_state Tauri command (refuse overwriting non-empty projects with empty list) | 2026-04-17 |
+| 260418-b1a | Fix `[exited]` dead terminal: right-panel overlay mount + restore-loop TOCTOU race + monitor thread delay | 2026-04-18 |
 | Phase 19 P01 | 8min | 3 tasks | 10 files |
 | Phase 19 P02 | 3min 43s | 2 tasks | 3 files |
 | Phase 19 P03 | 8min 40s | 3 tasks | 6 files |
