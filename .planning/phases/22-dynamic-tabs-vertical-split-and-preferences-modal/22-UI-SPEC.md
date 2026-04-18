@@ -1,10 +1,11 @@
 ---
 phase: 22
 slug: dynamic-tabs-vertical-split-and-preferences-modal
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-04-18
+reviewed_at: 2026-04-18
 ---
 
 # Phase 22 — UI Design Contract
