@@ -18,6 +18,8 @@ import { GitChangesTab } from './git-changes-tab';
 import { EditorTab } from './editor-tab';
 import { getTerminalScope } from './terminal-tabs';
 
+const { ActiveTabCrashOverlay: RightCrashOverlay } = getTerminalScope('right');
+
 /**
  * RightPanel — flex column with a UnifiedTabBar at top and a single content
  * region below. Sticky File Tree + GSD bodies are always mounted; Git Changes
@@ -107,6 +109,7 @@ export function RightPanel() {
             display: isDynamic ? 'block' : 'none',
           }}
         />
+        {isDynamic && <RightCrashOverlay />}
       </div>
     </aside>
   );

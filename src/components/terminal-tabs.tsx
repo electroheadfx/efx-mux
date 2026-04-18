@@ -669,39 +669,44 @@ async function restoreTabsScoped(
 
     const isAgentTab = saved.isAgent ?? (i === 0 && !!agentBinary);
     const shellCmd = (isAgentTab && agentBinary) ? agentBinary : undefined;
-    let disconnectPty: (() => void) | undefined;
-    let ptyConnected = false;
 
-    try {
-      const conn = await connectPty(terminal, saved.sessionName, projectPath, shellCmd);
-      disconnectPty = conn.disconnect;
-      ptyConnected = true;
-    } catch (err) {
-      console.error('[efxmux] Failed to restore PTY for tab:', saved.sessionName, err);
-      terminal.writeln(`\x1b[33mFailed to restore session "${saved.sessionName}": ${err}\x1b[0m`);
-    }
-
-    const resizeHandle = attachResizeHandler(container, terminal, fitAddon, saved.sessionName);
-
-    restoredTabs.push({
+    // Commit the tab to scope state BEFORE spawning the PTY so the
+    // module-level `pty-exited` listener can find it if the tmux pane
+    // is already dead and the Rust monitor thread emits before the
+    // loop finishes. (Startup TOCTOU race fix — debug:terminal-exited-no-restart)
+    const tab: TerminalTab = {
       id,
       sessionName: saved.sessionName,
       label: saved.label,
       terminal,
       fitAddon,
       container,
-      ptyConnected,
-      disconnectPty,
-      detachResize: resizeHandle.detach,
+      ptyConnected: false,
+      disconnectPty: undefined,
+      detachResize: () => {},
       exitCode: undefined,
       isAgent: isAgentTab,
       ownerScope: scope,
-    });
+    };
+    restoredTabs.push(tab);
+    s.tabs.value = [...restoredTabs];
+
+    try {
+      const conn = await connectPty(terminal, saved.sessionName, projectPath, shellCmd);
+      tab.disconnectPty = conn.disconnect;
+      tab.ptyConnected = true;
+    } catch (err) {
+      console.error('[efxmux] Failed to restore PTY for tab:', saved.sessionName, err);
+      terminal.writeln(`\x1b[33mFailed to restore session "${saved.sessionName}": ${err}\x1b[0m`);
+    }
+
+    const resizeHandle = attachResizeHandler(container, terminal, fitAddon, saved.sessionName);
+    tab.detachResize = resizeHandle.detach;
   }
 
   if (restoredTabs.length === 0) return false;
 
-  s.tabs.value = restoredTabs;
+  s.tabs.value = [...restoredTabs];
 
   // Plan 20-05-B: prefer the sessionName-anchored active marker (survives
   // restart), then fall back to the right-scope sticky id, then to first-tab.

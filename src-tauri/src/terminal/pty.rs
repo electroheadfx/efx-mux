@@ -288,8 +288,11 @@ pub async fn spawn_terminal(
     let app_for_monitor = app.clone();
     let session_for_monitor = sanitized.clone();
     std::thread::spawn(move || {
-        // Initial delay: let tmux stabilize after session creation
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        // Initial delay: short grace for tmux to register the session. Previously
+        // 1s, shortened to 100ms so reattach-to-already-dead panes surface the
+        // `pty-exited` event quickly enough to beat UI restore races.
+        // (debug:terminal-exited-no-restart)
+        std::thread::sleep(std::time::Duration::from_millis(100));
 
         loop {
             // Check if session still exists at all
