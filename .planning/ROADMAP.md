@@ -164,15 +164,20 @@ Plans:
 **UI hint**: yes
 
 ### Phase 21: Bug Fix Sprint
-**Goal**: Known architectural debts and UI bugs are resolved
+**Goal**: Known architectural debts and UI bugs are resolved (scope reconciled in 21-CONTEXT.md D-01)
 **Depends on**: Phases 16-20 (runs after core features are stable)
-**Requirements**: FIX-01, FIX-02, FIX-03, FIX-04
+**Requirements**: FIX-01, FIX-05, FIX-06 (FIX-02/03/04 superseded by Phase 21 — see 21-CONTEXT.md D-01); also closes WR-01, WR-02, WR-03 (verified pre-resolved), IN-02
 **Success Criteria** (what must be TRUE):
-  1. File tree updates when files are changed by external editors
-  2. No phantom characters appear during fast terminal scroll
-  3. Terminal has thin draggable scrollbar with faster wheel scroll
-  4. Sidebar bottom TUI has no black padding and aligns to top correctly
-**Plans**: TBD
+  1. File tree refreshes (no app re-init / no focus loss) when files change externally; clean editor tabs reload in place; dirty tabs show "changed on disk" indicator (FIX-01)
+  2. Open-in-external-editor works from header button AND row context menu; failures surface a toast (FIX-05)
+  3. Clicking CLAUDE.md (and any file) opens it in an editor tab; failures surface a toast (FIX-06)
+  4. Code-review debt closed: WR-01 (dropdown timeout cleanup), WR-02 (PTY cleanup logging), WR-03 (verified), IN-02 (editor-tab refs refactor)
+**Plans**: 4 plans
+Plans:
+  - [ ] 21-01-PLAN.md — FIX-01: file-tree-changed event + incremental refresh + dirty-aware editor reload
+  - [ ] 21-02-PLAN.md — FIX-05: Open-in-external-editor regression diagnosis + fix
+  - [ ] 21-03-PLAN.md — FIX-06: CLAUDE.md tab-open chain diagnosis + fix
+  - [ ] 21-04-PLAN.md — Code-review debt bundle (WR-01, WR-02, WR-03 verify, IN-02) + REQUIREMENTS/ROADMAP scope reconciliation
 
 ## Progress
 
@@ -202,7 +207,7 @@ Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21
 | 18. File Tree Enhancements | v0.3.0 | 12/12 | Complete    | 2026-04-17 |
 | 19. GSD Sub-Tabs | v0.3.0 | 4/4 | Complete   | 2026-04-17 |
 | 20. Right Panel Multi-Terminal | v0.3.0 | 9/4 | Complete    | 2026-04-18 |
-| 21. Bug Fix Sprint | v0.3.0 | 0/? | Not started | - |
+| 21. Bug Fix Sprint | v0.3.0 | 0/4 | Planning    | - |
 
 ---
 *Roadmap created: 2026-04-06*
