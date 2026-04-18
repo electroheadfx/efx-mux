@@ -1558,7 +1558,8 @@ function renderTab(
   let tabTitle: string;
 
   if (tab.type === 'terminal') {
-    const termTab = terminalTabs.value.find(t => t.id === tab.terminalTabId);
+    const scopeTabs = getTerminalScope(tab.scope).tabs.value;
+    const termTab = scopeTabs.find(t => t.id === tab.terminalTabId);
     label = termTab?.label ?? 'Terminal';
     tabTitle = termTab?.sessionName ?? label;
     if (isActive) {
