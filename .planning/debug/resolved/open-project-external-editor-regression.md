@@ -1,9 +1,9 @@
 ---
 slug: open-project-external-editor-regression
-status: investigating
+status: resolved
 trigger: "Open Project in external editor" header button AND file-tree row "Open In" context-menu items both fail silently — even when a project is active and editors are detected
 created: 2026-04-18
-updated: 2026-04-18
+updated: 2026-04-18T12:00:00Z
 phase: 21-bug-fix-sprint
 plan: 02
 related:
@@ -184,11 +184,55 @@ The Task-1 instrumentation (child.wait() + structured error) should turn (4) int
 
 ## Resolution
 
-*(To be filled at end of Task 2 after UAT confirms which layer fails.)*
+- **root_cause:** `launch_external_editor_impl` in `src-tauri/src/file_ops.rs` used
+  `.spawn().map(|_| ())` — this treats the spawn itself as the success signal and
+  never waits on the child or checks its exit code. `open -a <App> <path>` forks
+  immediately (LaunchServices hand-off) regardless of whether the app name resolves,
+  so when LaunchServices later rejected the request (e.g., CFBundleName mismatch
+  between `detect_editors` CLI probe and the installed `.app`), `open` exited
+  non-zero but the parent had already returned `Ok(())`. Frontend saw success and
+  never triggered the toast. Silent failure on both header-button and row
+  context-menu paths.
+
+- **fix:** Replace `.spawn().map(|_| ())` with `spawn + child.wait() + status check`.
+  Non-zero exit or wait error now returns `Err(String)` → propagates through Tauri
+  `invoke` → `launchExternalEditor` throws `FileError('LaunchError', …)` →
+  `launchOrToast` catch block fires → user sees the "Could not launch {app}" toast.
+
+  Both invocation paths (header dropdown and row context-menu Open In submenu)
+  share `buildOpenInChildren` → `launchOrToast` → `launchExternalEditor`, so the
+  single backend change fixes both paths simultaneously.
+
+- **verification:** `cargo check` clean, `pnpm exec tsc --noEmit` clean. UAT for
+  21-02 is deferred to joint verification at the end of phase 21 alongside 21-01
+  and 21-03 (user will run all three at once).
+
+- **files_changed:**
+  - `src-tauri/src/file_ops.rs` — `launch_external_editor_impl` now waits + checks
+    exit status; permanent structured `eprintln!` on non-zero exit.
+  - `src/components/file-tree.tsx` — permanent structured `console.warn` in
+    `launchOrToast` catch branch; debug `[FIX-05]` noise stripped.
+  - `.planning/debug/resolved/open-project-external-editor-regression.md` — this
+    document, marked `status: resolved`.
+
+- **commits:**
+  - `f2e639c` — instrument both layers + add spawn+wait+status-check shape (Task 1)
+  - `a0faf92` — strip instrumentation, keep permanent logs, finalize fix (Task 3)
 
 ## Prevention
 
-*(To be filled at end of Task 2.)*
+- **Rule:** Never `Command::spawn().map(|_| ())` when the spawned process is a
+  side-effecting LaunchServices/shell tool. Either (a) `.output()` synchronously
+  if output is small and timing allows, or (b) `spawn + wait` and check
+  `ExitStatus::success()`. Detaching from the child's exit code turns every failure
+  into a silent success.
+- **Rule:** Any IPC command that fronts a user-visible action must propagate
+  backend `Err(String)` to a frontend toast. The frontend `catch` branch is a
+  correctness requirement, not a convenience.
+- **Audit:** Other `.spawn().map(|_| ())` sites in `file_ops.rs` (`open_default_impl`,
+  `reveal_in_finder_impl`) have the same shape. They are Finder-integration calls
+  where silent failure is less severe (the user sees whether Finder appeared), but
+  the same pattern applies — flagged for future cleanup, not in-scope for 21-02.
 
 ## Test Gap
 
