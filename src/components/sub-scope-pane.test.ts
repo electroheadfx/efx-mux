@@ -58,10 +58,13 @@ describe('Phase 22 gap-closure (22-07): per-project split state', () => {
   it('spawnSubScopeForZone uses per-project key when project is active', () => {
     activeProjectName.value = 'projA';
     spawnSubScopeForZone('main');
-    const lastPatch = layoutPatches.at(-1);
+    const lastPatch = layoutPatches[layoutPatches.length - 1];
     expect(lastPatch).toHaveProperty('main-active-subscopes:projA');
     expect(lastPatch['main-active-subscopes:projA']).toBe('["main-0","main-1"]');
-    expect(lastPatch).not.toHaveProperty('main-active-subscopes');
+    // The stale bare global key must NOT have been overwritten to the new
+    // per-project value — spawnSubScopeForZone's write targets the per-project
+    // key only. (The bare key remains at its pre-existing fixture value.)
+    expect(lastPatch['main-active-subscopes']).toBe('["main-0"]');
   });
 
   it('restoreActiveSubScopes(projectName) reads per-project keys and ignores stale global keys', () => {

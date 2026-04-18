@@ -3,7 +3,7 @@
 // Ratios persisted via state-manager.ts (Phase 4: state.json via Rust backend).
 // Migrated to TypeScript (Phase 6.1)
 
-import { updateLayout } from './state-manager';
+import { updateLayout, activeProjectName } from './state-manager';
 
 interface DragCallbacksV {
   onDrag: (clientX: number) => void;
@@ -157,7 +157,13 @@ export function attachIntraZoneHandles(zone: 'main' | 'right'): void {
         const rect = panel.getBoundingClientRect();
         const pct = ((clientY - rect.top) / rect.height) * 100;
         const clamped = Math.max(10, Math.min(90, pct));
-        void updateLayout({ [`${zone}-split-${idx}-pct`]: `${clamped.toFixed(1)}%` });
+        // Phase 22 gap-closure 22-07: persist per-project so project A's split
+        // ratio does not leak into project B when switching.
+        const project = activeProjectName.value;
+        const key = project
+          ? `${zone}-split-${idx}-pct:${project}`
+          : `${zone}-split-${idx}-pct`;
+        void updateLayout({ [key]: `${clamped.toFixed(1)}%` });
       },
     });
   });

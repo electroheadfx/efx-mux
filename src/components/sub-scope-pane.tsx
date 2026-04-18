@@ -14,14 +14,34 @@ import { EditorTab } from './editor-tab';
 import { getTerminalScope, type TerminalScope } from './terminal-tabs';
 import { gitChangesTab, editorTabs, fileTreeTabs, gsdTab } from './unified-tab-bar';
 import { attachIntraZoneHandles } from '../drag-manager';
-import { updateLayout, getCurrentState } from '../state-manager';
+import {
+  updateLayout,
+  updateSession,
+  getCurrentState,
+  activeProjectName,
+} from '../state-manager';
 
 type Zone = 'main' | 'right';
 
-// ── Shared active-sub-scopes state ─────────────────────────────────────────────
+// ── Per-project key builders (Phase 22 gap-closure 22-07) ─────────────────────
 
-const MAIN_SUBSCOPES_KEY = 'main-active-subscopes';
-const RIGHT_SUBSCOPES_KEY = 'right-active-subscopes';
+function activeSubScopesKey(zone: Zone, projectName?: string | null): string {
+  return projectName
+    ? `${zone}-active-subscopes:${projectName}`
+    : `${zone}-active-subscopes`;
+}
+
+function splitRatioKey(zone: Zone, idx: number, projectName?: string | null): string {
+  return projectName
+    ? `${zone}-split-${idx}-pct:${projectName}`
+    : `${zone}-split-${idx}-pct`;
+}
+
+function firstLaunchKey(projectName: string): string {
+  return `first-launch:${projectName}`;
+}
+
+// ── Shared active-sub-scopes state ─────────────────────────────────────────────
 
 export const activeMainSubScopes = signal<TerminalScope[]>(['main-0']);
 export const activeRightSubScopes = signal<TerminalScope[]>(['right-0']);
@@ -37,7 +57,7 @@ export function spawnSubScopeForZone(zone: Zone): void {
   const nextIdx = current.length;
   const nextScope = `${zone}-${nextIdx}` as TerminalScope;
   sig.value = [...current, nextScope];
-  const key = zone === 'main' ? MAIN_SUBSCOPES_KEY : RIGHT_SUBSCOPES_KEY;
+  const key = activeSubScopesKey(zone, activeProjectName.value);
   void updateLayout({ [key]: JSON.stringify(sig.value) });
 }
 
@@ -46,27 +66,70 @@ export function __resetActiveSubScopesForTesting(): void {
   activeRightSubScopes.value = ['right-0'];
 }
 
-/** Called on app mount to restore persisted active sub-scope lists + split ratios. */
-export function restoreActiveSubScopes(): void {
+/**
+ * Restore per-project active-sub-scope lists + split ratios.
+ *
+ * Phase 22 gap-closure 22-07: takes an optional projectName; reads per-project
+ * keys (`main-active-subscopes:<project>` etc) and clears stale CSS vars
+ * before applying the new project's ratios so project A's split ratio does not
+ * leak into project B (test 4).
+ */
+export function restoreActiveSubScopes(projectName?: string | null): void {
   const state = getCurrentState();
   if (!state) return;
-  const mainRaw = state.layout?.[MAIN_SUBSCOPES_KEY];
-  const rightRaw = state.layout?.[RIGHT_SUBSCOPES_KEY];
+
+  // Always reset signals to defaults first so the prior project's scope list
+  // does not leak into a project that has no per-project entry.
+  activeMainSubScopes.value = ['main-0'];
+  activeRightSubScopes.value = ['right-0'];
+
+  // Always clear ALL split-ratio CSS vars first so blank projects start fresh.
+  for (const zone of ['main', 'right'] as const) {
+    for (let i = 0; i < 2; i++) {
+      document.documentElement.style.removeProperty(`--${zone}-split-${i}-pct`);
+    }
+  }
+
+  const mainRaw = state.layout?.[activeSubScopesKey('main', projectName)];
+  const rightRaw = state.layout?.[activeSubScopesKey('right', projectName)];
   if (typeof mainRaw === 'string') {
-    try { activeMainSubScopes.value = JSON.parse(mainRaw); } catch { /* fail-soft */ }
+    try {
+      const parsed = JSON.parse(mainRaw) as TerminalScope[];
+      if (Array.isArray(parsed) && parsed.length > 0) activeMainSubScopes.value = parsed;
+    } catch { /* fail-soft */ }
   }
   if (typeof rightRaw === 'string') {
-    try { activeRightSubScopes.value = JSON.parse(rightRaw); } catch { /* fail-soft */ }
+    try {
+      const parsed = JSON.parse(rightRaw) as TerminalScope[];
+      if (Array.isArray(parsed) && parsed.length > 0) activeRightSubScopes.value = parsed;
+    } catch { /* fail-soft */ }
   }
-  // Restore split ratios into CSS custom properties
-  for (const z of ['main', 'right'] as const) {
+
+  // Restore split ratios into CSS custom properties (per-project).
+  for (const zone of ['main', 'right'] as const) {
     for (let i = 0; i < 2; i++) {
-      const val = state.layout?.[`${z}-split-${i}-pct`];
+      const val = state.layout?.[splitRatioKey(zone, i, projectName)];
       if (typeof val === 'string') {
-        document.documentElement.style.setProperty(`--${z}-split-${i}-pct`, val);
+        document.documentElement.style.setProperty(`--${zone}-split-${i}-pct`, val);
       }
     }
   }
+}
+
+// ── First-launch flag helpers (gap-closure 22-07) ─────────────────────────────
+//
+// `first-launch:<project>` lives in state.session (Rust's arbitrary string map).
+// Presence of any value gates D-02 defaults from re-seeding on subsequent
+// launches — this is what makes deletes survive restart.
+
+export function shouldSeedFirstLaunch(projectName: string): boolean {
+  const state = getCurrentState();
+  if (!state) return true; // safest default
+  return state.session?.[firstLaunchKey(projectName)] === undefined;
+}
+
+export async function markFirstLaunchSeeded(projectName: string): Promise<void> {
+  await updateSession({ [firstLaunchKey(projectName)]: '1' });
 }
 
 // ── SubScopePane component ──────────────────────────────────────────────────────
