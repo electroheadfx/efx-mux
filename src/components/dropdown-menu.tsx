@@ -108,6 +108,16 @@ export function Dropdown({ items, trigger }: DropdownProps) {
     };
   }, [isOpen]);
 
+  // WR-01: clear pending typeahead timer when items prop changes so a stale
+  // timer cannot fire setSelectedIndex against the new items array.
+  useEffect(() => {
+    if (typeaheadTimeout.current) {
+      clearTimeout(typeaheadTimeout.current);
+      typeaheadTimeout.current = null;
+      typeaheadBuffer.current = '';
+    }
+  }, [items]);
+
   // Focus menu container when opened
   useEffect(() => {
     if (isOpen && menuRef.current) {
