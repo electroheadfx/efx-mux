@@ -52,7 +52,7 @@ Requirements for Workspace Evolution release. Each maps to roadmap phases.
 
 ### Bug Fixes (FIX)
 
-- [ ] **FIX-01**: File tree updates when files are changed by external editors
+- [x] **FIX-01**: File tree updates when files are changed by external editors
 - [ ] **FIX-02**: No phantom characters appear during fast terminal scroll
 - [ ] **FIX-03**: Terminal has thin draggable scrollbar with faster wheel scroll
 - [ ] **FIX-04**: Sidebar bottom TUI has no black padding and aligns to top correctly
@@ -110,7 +110,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MAIN-01 | Phase 17 | Pending |
 | MAIN-02 | Phase 17 | Pending |
 | MAIN-03 | Phase 18 | Pending |
-| FIX-01 | Phase 21 | Pending |
+| FIX-01 | Phase 21 | Complete |
 | FIX-02 | Phase 21 | Pending |
 | FIX-03 | Phase 21 | Pending |
 | FIX-04 | Phase 21 | Pending |
