@@ -45,7 +45,7 @@
 - [x] **Phase 18: File Tree Enhancements** -- Delete, drag/drop, external editor integration (completed 2026-04-16)
 - [x] **Phase 19: GSD Sub-Tabs** -- 5 sub-tabs for Milestones, Phases, Progress, History, State (completed 2026-04-17)
 - [x] **Phase 20: Right Panel Multi-Terminal** -- Plus menu for Terminal/Agent sub-TUI (completed 2026-04-18)
-- [ ] **Phase 21: Bug Fix Sprint** -- File watcher, phantom chars, scrollbar, padding fixes
+- [x] **Phase 21: Bug Fix Sprint** (4 plans) -- File watcher (FIX-01), Open-in-editor (FIX-05), CLAUDE.md tab-open (FIX-06), code-review debt (WR-01, WR-02, WR-03, IN-02) (completed 2026-04-18)
 
 ## Phase Details
 
@@ -164,20 +164,20 @@ Plans:
 **UI hint**: yes
 
 ### Phase 21: Bug Fix Sprint
-**Goal**: Known architectural debts and UI bugs are resolved (scope reconciled in 21-CONTEXT.md D-01)
+**Goal**: Resolve known external-editor sync bug, the open-in-external-editor regression, the CLAUDE.md tab-open failure, and outstanding Phase 17/20 code-review debt
 **Depends on**: Phases 16-20 (runs after core features are stable)
-**Requirements**: FIX-01, FIX-05, FIX-06 (FIX-02/03/04 superseded by Phase 21 — see 21-CONTEXT.md D-01); also closes WR-01, WR-02, WR-03 (verified pre-resolved), IN-02
+**Requirements**: FIX-01, FIX-05, FIX-06 (FIX-02/03/04 superseded — see CONTEXT.md D-01); also closes code-review debt WR-01, WR-02, WR-03 (verified pre-resolved), IN-02
 **Success Criteria** (what must be TRUE):
-  1. File tree refreshes (no app re-init / no focus loss) when files change externally; clean editor tabs reload in place; dirty tabs show "changed on disk" indicator (FIX-01)
-  2. Open-in-external-editor works from header button AND row context menu; failures surface a toast (FIX-05)
-  3. Clicking CLAUDE.md (and any file) opens it in an editor tab; failures surface a toast (FIX-06)
-  4. Code-review debt closed: WR-01 (dropdown timeout cleanup), WR-02 (PTY cleanup logging), WR-03 (verified), IN-02 (editor-tab refs refactor)
+  1. File tree updates when files are changed by external editors, without app re-init or focus loss; open editor tabs reload clean files in place and show a "changed on disk" indicator on dirty tabs (FIX-01)
+  2. Header "Open in external editor" button and file-tree row "Open In" context menu both successfully launch the chosen editor; failures surface a user-visible toast (FIX-05)
+  3. Clicking CLAUDE.md (and any other file) in the file tree opens it in an editor tab with the correct content; failures surface a toast (FIX-06)
+  4. Code-review debt closed: dropdown-menu typeahead timeout cleared on items change (WR-01); terminal-tabs PTY destroy errors logged with structured context (WR-02); projectSessionName lives in shared util (WR-03 verified); editor-tab createEditorState useEffect uses refs instead of eslint-disable (IN-02)
 **Plans**: 4 plans
 Plans:
-  - [x] 21-01-PLAN.md — FIX-01: file-tree-changed event + incremental refresh + dirty-aware editor reload
-  - [x] 21-02-PLAN.md — FIX-05: Open-in-external-editor regression diagnosis + fix
-  - [x] 21-03-PLAN.md — FIX-06: CLAUDE.md tab-open chain diagnosis + fix
-  - [ ] 21-04-PLAN.md — Code-review debt bundle (WR-01, WR-02, WR-03 verify, IN-02) + REQUIREMENTS/ROADMAP scope reconciliation
+  - [x] 21-01-PLAN.md — FIX-01: file-tree-changed Tauri event + incremental refresh + dirty-aware editor reload
+  - [x] 21-02-PLAN.md — FIX-05: Open-in-external-editor regression diagnosis + fix + spawn-status surfacing
+  - [x] 21-03-PLAN.md — FIX-06: CLAUDE.md tab-open click→tab→load chain diagnosis + fix
+  - [x] 21-04-PLAN.md — Code-review debt bundle (WR-01, WR-02, WR-03 verify, IN-02) + REQUIREMENTS/ROADMAP scope reconciliation
 
 ## Progress
 
@@ -207,8 +207,8 @@ Phases execute in numeric order: 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21
 | 18. File Tree Enhancements | v0.3.0 | 12/12 | Complete    | 2026-04-17 |
 | 19. GSD Sub-Tabs | v0.3.0 | 4/4 | Complete   | 2026-04-17 |
 | 20. Right Panel Multi-Terminal | v0.3.0 | 9/4 | Complete    | 2026-04-18 |
-| 21. Bug Fix Sprint | v0.3.0 | 3/4 | In Progress|  |
+| 21. Bug Fix Sprint | v0.3.0 | 4/4 | Complete    | 2026-04-18 |
 
 ---
 *Roadmap created: 2026-04-06*
-*Last updated: 2026-04-15 (Phase 17 gap closure plans added)*
+*Last updated: 2026-04-18 (Phase 21 plan 04 complete — scope reconciled, debt bundle closed)*

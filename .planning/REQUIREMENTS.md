@@ -52,10 +52,12 @@ Requirements for Workspace Evolution release. Each maps to roadmap phases.
 
 ### Bug Fixes (FIX)
 
-- [x] **FIX-01**: File tree updates when files are changed by external editors
-- [ ] **FIX-02**: No phantom characters appear during fast terminal scroll
-- [ ] **FIX-03**: Terminal has thin draggable scrollbar with faster wheel scroll
-- [ ] **FIX-04**: Sidebar bottom TUI has no black padding and aligns to top correctly
+- [~] **FIX-01**: File tree updates when files are changed by external editors  *(Phase 21)*
+- [~] **FIX-02**: ~~No phantom characters appear during fast terminal scroll~~ — **Superseded** (Phase 21, CONTEXT.md D-01: not reproducible)
+- [~] **FIX-03**: ~~Terminal has thin draggable scrollbar with faster wheel scroll~~ — **Superseded** (Phase 21, CONTEXT.md D-01: acceptable as-is)
+- [~] **FIX-04**: ~~Sidebar bottom TUI has no black padding and aligns to top correctly~~ — **Superseded** (Phase 21, CONTEXT.md D-01: bottom TUI removed during Phase 20)
+- [ ] **FIX-05**: Open-in-external-editor (header button + file-tree row context menu) launches the chosen editor reliably  *(Phase 21, added 2026-04-18)*
+- [ ] **FIX-06**: Clicking files (including CLAUDE.md) in the file tree opens them in editor tabs without silent failures  *(Phase 21, added 2026-04-18)*
 
 ## Future Requirements (v0.3.x)
 
@@ -111,15 +113,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MAIN-02 | Phase 17 | Pending |
 | MAIN-03 | Phase 18 | Pending |
 | FIX-01 | Phase 21 | Complete |
-| FIX-02 | Phase 21 | Pending |
-| FIX-03 | Phase 21 | Pending |
-| FIX-04 | Phase 21 | Pending |
+| FIX-02 | Phase 21 | Superseded |
+| FIX-03 | Phase 21 | Superseded |
+| FIX-04 | Phase 21 | Superseded |
+| FIX-05 | Phase 21 | Complete |
+| FIX-06 | Phase 21 | Complete |
 
 **Coverage:**
-- v0.3.0 requirements: 29 total
-- Mapped to phases: 29
+- v0.3.0 requirements: 31 total
+- Mapped to phases: 31
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-14*
-*Last updated: 2026-04-14 after roadmap creation*
+*Last updated: 2026-04-18 (Phase 21 scope reconciliation: FIX-02/03/04 superseded; FIX-05 + FIX-06 added)*
