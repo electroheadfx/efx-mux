@@ -22,10 +22,11 @@ export function RightPanel() {
       }}
     >
       {scopes.map((scope, i) => (
-        <div key={scope} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-          <SubScopePane scope={scope} zone="right" />
+        <>
+          <SubScopePane key={scope} scope={scope} zone="right" index={i} total={scopes.length} />
           {i < scopes.length - 1 && (
             <div
+              key={`right-intra-${i}`}
               class="split-handle-h-intra"
               data-handle={`right-intra-${i}`}
               role="separator"
@@ -33,7 +34,7 @@ export function RightPanel() {
               aria-label="Resize split pane"
             />
           )}
-        </div>
+        </>
       ))}
     </aside>
   );

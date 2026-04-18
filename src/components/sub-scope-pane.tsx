@@ -209,6 +209,10 @@ interface SubScopePaneProps {
   scope: TerminalScope;
   /** Zone name for intra-zone handle registration ('main' or 'right') */
   zone: Zone;
+  /** Index of this pane within its zone's active sub-scope list. Optional — defaults to 0. */
+  index?: number;
+  /** Total number of panes in this zone. Optional — defaults to 1. */
+  total?: number;
 }
 
 /**
@@ -224,10 +228,14 @@ interface SubScopePaneProps {
  * Empty state: when no tabs/singletons/file-trees exist in this scope,
  * renders .scope-empty-placeholder.
  */
-export function SubScopePane({ scope, zone }: SubScopePaneProps) {
+export function SubScopePane({ scope, zone, index = 0, total = 1 }: SubScopePaneProps) {
   const scopeState = getTerminalScope(scope);
   const { activeTabId } = scopeState;
   const activeId = activeTabId.value;
+
+  // Phase 22 gap-closure (22-11): non-last panes take their persisted ratio via
+  // CSS var; the last pane absorbs remaining space via flex:1.
+  const isLast = index === total - 1;
 
   // Register intra-zone drag handles for this zone on mount
   useEffect(() => {
@@ -257,7 +265,14 @@ export function SubScopePane({ scope, zone }: SubScopePaneProps) {
     <div
       class="sub-scope-pane flex flex-col"
       data-subscope={scope}
-      style={{ position: 'relative', flex: 1, minHeight: 48, overflow: 'hidden' }}
+      style={{
+        position: 'relative',
+        // Non-last panes consume their persisted split ratio; last pane absorbs remainder.
+        height: isLast ? undefined : `var(--${zone}-split-${index}-pct, ${(100 / total).toFixed(1)}%)`,
+        flex: isLast ? 1 : 'none',
+        minHeight: 48,
+        overflow: 'hidden',
+      }}
     >
       <UnifiedTabBar scope={scope} />
 

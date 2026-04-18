@@ -150,6 +150,24 @@ export function attachIntraZoneHandles(zone: 'main' | 'right'): void {
           `--${zone}-split-${idx}-pct`,
           `${clamped.toFixed(1)}%`,
         );
+
+        // Phase 22 gap-closure 22-11: also mutate the adjacent panes' inline
+        // style.height + flex so non-Preact consumers (and the 22-11 RED tests)
+        // observe the resize. Without this, SubScopePane renders flex:1 and the
+        // CSS var is cosmetically set but visually invisible.
+        const panes = panel.querySelectorAll<HTMLElement>('.sub-scope-pane');
+        const pane0 = panes[idx];
+        const pane1 = panes[idx + 1];
+        if (pane0 && pane1) {
+          const totalPx = pane0.offsetHeight + pane1.offsetHeight;
+          if (totalPx > 0) {
+            const newPane0Px = (clamped / 100) * totalPx;
+            pane0.style.height = `${newPane0Px}px`;
+            pane0.style.flex = 'none';
+            pane1.style.height = `${totalPx - newPane0Px}px`;
+            pane1.style.flex = 'none';
+          }
+        }
       },
       onEnd(clientY: number) {
         const panel = document.querySelector<HTMLElement>(`.${zone}-panel`);

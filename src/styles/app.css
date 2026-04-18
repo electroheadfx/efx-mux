@@ -403,6 +403,14 @@ html, body {
   outline-offset: -1px;
 }
 
+/* ─── Phase 22 gap-closure (22-11): Tab bar top border so it's visually distinct
+   from the background. The tab bar JSX already sets `border-b` (Tailwind) so
+   only the top border needs an explicit rule. */
+.tab-bar,
+[data-tablist-scope] {
+  border-top: 1px solid var(--color-border);
+}
+
 /* ─── Phase 22 Plan 04: Tab bar split icon button ─── */
 .tab-bar-split-icon {
   width: 18px;
@@ -415,6 +423,9 @@ html, body {
   align-items: center;
   justify-content: center;
   border: none;
+  /* Phase 22 gap-closure (22-11): breathing room so the icon isn't flush with
+     the right edge of the tab bar. */
+  margin-right: 6px;
   transition: color 0.15s, background-color 0.15s;
 }
 

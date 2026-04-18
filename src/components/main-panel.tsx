@@ -34,10 +34,11 @@ export function MainPanel() {
       style={{ backgroundColor: colors.bgBase, flex: 1, overflow: 'hidden' }}
     >
       {scopes.map((scope, i) => (
-        <div key={scope} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-          <SubScopePane scope={scope} zone="main" />
+        <>
+          <SubScopePane key={scope} scope={scope} zone="main" index={i} total={scopes.length} />
           {i < scopes.length - 1 && (
             <div
+              key={`main-intra-${i}`}
               class="split-handle-h-intra"
               data-handle={`main-intra-${i}`}
               role="separator"
@@ -45,7 +46,7 @@ export function MainPanel() {
               aria-label="Resize split pane"
             />
           )}
-        </div>
+        </>
       ))}
       <ServerPane />
     </main>

@@ -182,9 +182,10 @@ describe('Phase 22 gap-closure (22-11): attachIntraZoneHandles fresh-handle bind
 
     // Post-drag (POST-TASK-2): drag handler must set flex: 'none' on both adjacent panes
     // so the explicit height actually renders. On CURRENT CODE the drag only sets the CSS var
-    // and leaves the pane inline flex:1 untouched → pane0.style.flex is still '1' → FAIL.
-    expect(pane0.style.flex).toBe('none');
-    expect(pane1.style.flex).toBe('none');
+    // and leaves the pane inline flex:1 untouched → FAIL.
+    // (jsdom normalizes "flex: none" to "0 0 auto"; we check for that specific shorthand.)
+    expect(pane0.style.flex).toMatch(/^(none|0 0 auto)$/);
+    expect(pane1.style.flex).toMatch(/^(none|0 0 auto)$/);
     // Also verify the CSS var was written (sanity: this was already working in 22-04).
     expect(document.documentElement.style.getPropertyValue('--main-split-0-pct')).toMatch(/^\d+(\.\d+)?%$/);
   });
