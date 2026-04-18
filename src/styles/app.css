@@ -429,6 +429,26 @@ html, body {
   color: var(--color-text-muted);
 }
 
+/* ─── Phase 22 gap-closure (22-10): Close-split button ─── */
+.tab-bar-close-split-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  margin-left: 4px;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.tab-bar-close-split-icon:hover {
+  color: var(--color-accent);
+}
+
 /* ─── Project row hover actions ─── */
 .group:hover .project-row-actions {
   opacity: 1 !important;

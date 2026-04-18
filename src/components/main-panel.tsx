@@ -9,6 +9,7 @@ import {
   activeMainSubScopes,
   getActiveSubScopesForZone,
   spawnSubScopeForZone,
+  closeSubScope,
   __resetActiveSubScopesForTesting,
   restoreActiveSubScopes,
 } from './sub-scope-pane';
@@ -16,7 +17,7 @@ import { ServerPane } from './server-pane';
 import { useEffect } from 'preact/hooks';
 
 // Re-export shared helpers so callers can import from main-panel
-export { getActiveSubScopesForZone, spawnSubScopeForZone, __resetActiveSubScopesForTesting, restoreActiveSubScopes };
+export { getActiveSubScopesForZone, spawnSubScopeForZone, closeSubScope, __resetActiveSubScopesForTesting, restoreActiveSubScopes };
 
 export function MainPanel() {
   const scopes = activeMainSubScopes.value;

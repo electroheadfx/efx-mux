@@ -8,7 +8,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { colors, fonts, spacing } from '../tokens';
 import { Dropdown, type DropdownItem } from './dropdown-menu';
 import { showConfirmModal } from './confirm-modal';
-import { Terminal, Bot, FileDiff, Pin, PanelRightClose, PanelRight, FolderOpen, ListChecks, Rows2 } from 'lucide-preact';
+import { Terminal, Bot, FileDiff, Pin, PanelRightClose, PanelRight, FolderOpen, ListChecks, Rows2, X } from 'lucide-preact';
 import type { TerminalTab, TerminalScope } from './terminal-tabs';
 import {
   terminalTabs,
@@ -317,6 +317,16 @@ function _activateEditorTab(tab: EditorTabData): void {
   const scope = tab.ownerScope ?? 'main-0';
   if (scope.startsWith('right-')) {
     getTerminalScope('right-0').activeTabId.value = tab.id;
+  } else {
+    // Phase 22 gap-closure (22-10): SubScopePane reads
+    // getTerminalScope(scope).activeTabId.value — not activeUnifiedTabId —
+    // to decide which body to render. Without this assignment the first
+    // file-tree click opens a new editor tab whose id is written to
+    // activeUnifiedTabId, but the main-scope's activeTabId remains empty,
+    // so SubScopePane's editor body filter (`activeId === et.id`) is false
+    // and the body never renders until the user manually re-clicks the tab
+    // (UAT test 18a / gap 1 sub-issue).
+    getTerminalScope(scope).activeTabId.value = tab.id;
   }
   // Always also set activeUnifiedTabId so save shortcuts, persistence, and
   // cross-scope drag reorder logic can find the focused tab by id without
@@ -876,7 +886,7 @@ export function openFileTreeTabInScope(scope: TerminalScope): void {
 // ── Layout helpers (Phase 22 Plan 04) ─────────────────────────────────────────
 
 // Import real implementations from main-panel (re-exported from sub-scope-pane)
-import { spawnSubScopeForZone as realSpawnSubScope, getActiveSubScopesForZone as realGetActiveSubScopesForZone } from './main-panel';
+import { spawnSubScopeForZone as realSpawnSubScope, getActiveSubScopesForZone as realGetActiveSubScopesForZone, closeSubScope as realCloseSubScope } from './main-panel';
 
 /** Map 'main-0' → 'main' for spawnSubScopeForZone, pass 'right' through */
 function spawnSubScopeForZone(zone: 'main-0' | 'right'): void {
@@ -886,6 +896,11 @@ function spawnSubScopeForZone(zone: 'main-0' | 'right'): void {
 /** Map 'main-0' → 'main' for getActiveSubScopesForZone, pass 'right' through */
 function getActiveSubScopesForZone(zone: 'main-0' | 'right'): TerminalScope[] {
   return realGetActiveSubScopesForZone(zone === 'main-0' ? 'main' : zone);
+}
+
+/** Phase 22 gap-closure (22-10): close a sub-scope and migrate tabs to scope-0. */
+function closeSubScope(zone: 'main' | 'right', index: number): void {
+  return realCloseSubScope(zone, index);
 }
 
 /**
@@ -1875,6 +1890,49 @@ export function UnifiedTabBar({ scope }: UnifiedTabBarProps) {
         >
           <Rows2 size={14} />
         </button>
+
+        {/* Phase 22 gap-closure (22-10): close-split button (X, 14px).
+            Only rendered when THIS scope is not scope-0 (i.e. scope id ends
+            with `-1` or `-2`). Scope-0 cannot be closed. */}
+        {(() => {
+          const m = /-(\d+)$/.exec(scope);
+          const idx = m ? parseInt(m[1], 10) : 0;
+          if (idx === 0) return null;
+          const zKind: 'main' | 'right' = scope.startsWith('main') ? 'main' : 'right';
+          return (
+            <button
+              class="tab-bar-close-split-icon"
+              aria-label="Close split"
+              title="Close split (move tabs to first pane)"
+              onClick={(e: MouseEvent) => {
+                e.stopPropagation();
+                closeSubScope(zKind, idx);
+              }}
+              style={{
+                width: 18,
+                height: 18,
+                borderRadius: 3,
+                background: 'transparent',
+                color: colors.textMuted,
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginLeft: 4,
+                transition: 'color 0.15s, background-color 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.color = colors.accent;
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.color = colors.textMuted;
+              }}
+            >
+              <X size={14} />
+            </button>
+          );
+        })()}
       </div>
     </div>
   );

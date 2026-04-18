@@ -12,7 +12,7 @@ import { GSDPane } from './gsd-pane';
 import { GitChangesTab } from './git-changes-tab';
 import { EditorTab } from './editor-tab';
 import { getTerminalScope, type TerminalScope } from './terminal-tabs';
-import { gitChangesTab, editorTabs, fileTreeTabs, gsdTab } from './unified-tab-bar';
+import { gitChangesTab, editorTabs, fileTreeTabs, gsdTab, setProjectEditorTabs } from './unified-tab-bar';
 import { attachIntraZoneHandles } from '../drag-manager';
 import {
   updateLayout,
@@ -64,6 +64,77 @@ export function spawnSubScopeForZone(zone: Zone): void {
 export function __resetActiveSubScopesForTesting(): void {
   activeMainSubScopes.value = ['main-0'];
   activeRightSubScopes.value = ['right-0'];
+}
+
+/**
+ * Close a sub-scope at `index` within `zone` — Phase 22 gap-closure (22-10).
+ *
+ * UX contract (per 22-10-PLAN):
+ *  - index 0 cannot be closed (scope-0 is always present)
+ *  - tabs from the closed scope MIGRATE to scope-0 (no work destroyed)
+ *  - gsdTab / gitChangesTab / editorTabs / fileTreeTabs that were owned by the
+ *    closed scope have `owningScope`/`ownerScope` re-pointed to scope-0
+ *  - PTY session names stay stable (D-12) because we only update the tab's
+ *    `ownerScope` field — the underlying sessionName is untouched
+ *  - Fill-gap-at-end convention: the active list shrinks by dropping its last
+ *    id. Scope ids are added monotonically (main-0 → main-1 → main-2), so
+ *    after migration the list is simply `current.slice(0, -1)` regardless of
+ *    which index the user clicked.
+ *  - Persists the new active-subscopes list under the per-project key
+ *    (`${zone}-active-subscopes:<project>`) and saves the migrated tab list
+ *    for scope-0 and the (now-empty) closed scope.
+ */
+export function closeSubScope(zone: Zone, index: number): void {
+  if (index === 0) return;
+  const sig = zone === 'main' ? activeMainSubScopes : activeRightSubScopes;
+  const current = sig.value;
+  if (index >= current.length) return;
+
+  const closedScope = `${zone}-${index}` as TerminalScope;
+  const scope0 = `${zone}-0` as TerminalScope;
+
+  // 1. Migrate terminal/agent tabs to scope-0 with ownerScope re-pointed.
+  //    PTY session names stay stable (D-12).
+  const closedTabs = getTerminalScope(closedScope).tabs.value;
+  const migratedTabs = closedTabs.map(t => ({ ...t, ownerScope: scope0 }));
+  getTerminalScope(scope0).tabs.value = [
+    ...getTerminalScope(scope0).tabs.value,
+    ...migratedTabs,
+  ];
+  getTerminalScope(closedScope).tabs.value = [];
+
+  // 2. Re-point singleton ownership (gsd + git-changes).
+  if (gsdTab.value?.owningScope === closedScope) {
+    gsdTab.value = { ...gsdTab.value, owningScope: scope0 };
+  }
+  if (gitChangesTab.value?.owningScope === closedScope) {
+    gitChangesTab.value = { ...gitChangesTab.value, owningScope: scope0 };
+  }
+
+  // 3. Re-point dynamic tab kinds (editor + file-tree) whose ownerScope matches
+  //    the closed scope so SubScopePane filters them into scope-0.
+  const updatedEditors = editorTabs.value.map(t =>
+    t.ownerScope === closedScope ? { ...t, ownerScope: scope0 } : t,
+  );
+  setProjectEditorTabs(updatedEditors);
+
+  fileTreeTabs.value = fileTreeTabs.value.map(t =>
+    t.ownerScope === closedScope ? { ...t, ownerScope: scope0 } : t,
+  );
+
+  // 4. Drop the LAST scope id from the active list (fill-gap-at-end).
+  sig.value = current.slice(0, -1);
+
+  // 5. Persist the new active-subscopes list per project.
+  const project = activeProjectName.value;
+  const key = activeSubScopesKey(zone, project);
+  void updateLayout({ [key]: JSON.stringify(sig.value) });
+
+  // 6. Persist the migrated tab list (scope-0 gained tabs; closed scope is empty).
+  if (project) {
+    getTerminalScope(scope0).saveProjectTabs(project);
+    getTerminalScope(closedScope).saveProjectTabs(project);
+  }
 }
 
 /**
