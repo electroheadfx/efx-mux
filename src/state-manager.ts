@@ -88,6 +88,46 @@ export async function loadAppState(): Promise<AppState> {
     delete (currentState.layout as Record<string, string | boolean | undefined>)['right-h-pct'];
   }
 
+  // Phase 22 D-10: migrate legacy terminal-tabs persistence keys to hierarchical scope ids.
+  // Legacy:  terminal-tabs:<project>          → terminal-tabs:<project>:main-0
+  //          right-terminal-tabs:<project>   → terminal-tabs:<project>:right-0
+  // Idempotent: re-running is a no-op after first pass.
+  if (currentState) {
+    const session = currentState.session as Record<string, string | undefined>;
+    for (const key of Object.keys(session)) {
+      const mainLegacy = /^terminal-tabs:([^:]+)$/.exec(key);
+      if (mainLegacy) {
+        const project = mainLegacy[1];
+        const target = `terminal-tabs:${project}:main-0`;
+        if (session[target] === undefined) session[target] = session[key];
+        delete session[key];
+        continue;
+      }
+      const rightLegacy = /^right-terminal-tabs:(.+)$/.exec(key);
+      if (rightLegacy) {
+        const project = rightLegacy[1];
+        const target = `terminal-tabs:${project}:right-0`;
+        if (session[target] === undefined) session[target] = session[key];
+        delete session[key];
+      }
+    }
+
+    // Phase 22 D-06: drop sticky ids 'file-tree' / 'gsd' from persisted activeTabId
+    // in any per-scope blob. D-02 defaults re-seed at render time.
+    for (const key of Object.keys(session)) {
+      if (!/^terminal-tabs:.+:(main|right)-[0-2]$/.test(key)) continue;
+      const raw = session[key];
+      if (raw === undefined) continue;
+      try {
+        const parsed = JSON.parse(raw) as { activeTabId?: string };
+        if (parsed.activeTabId === 'file-tree' || parsed.activeTabId === 'gsd') {
+          parsed.activeTabId = '';
+          session[key] = JSON.stringify(parsed);
+        }
+      } catch { /* corrupt entry — fail-soft */ }
+    }
+  }
+
   // Set signals from loaded state
   sidebarCollapsed.value = currentState?.layout?.['sidebar-collapsed'] === true || currentState?.layout?.['sidebar-collapsed'] === 'true';
   if (currentState?.panels?.['right-top-tab']) rightTopTab.value = currentState.panels['right-top-tab'];
@@ -118,6 +158,19 @@ export async function saveAppState(state: AppState): Promise<void> {
   } catch (err) {
     console.warn('[efxmux] Failed to save state:', err);
   }
+}
+
+const TAB_COUNTER_PREFIX = 'tab-counter:';
+
+export function loadTabCounter(project: string): number {
+  if (!currentState) return 0;
+  const raw = (currentState.session as Record<string, string | undefined>)[`${TAB_COUNTER_PREFIX}${project}`];
+  const n = raw ? parseInt(raw, 10) : 0;
+  return Number.isFinite(n) ? n : 0;
+}
+
+export async function persistTabCounter(project: string, n: number): Promise<void> {
+  await updateSession({ [`${TAB_COUNTER_PREFIX}${project}`]: String(n) });
 }
 
 /**
