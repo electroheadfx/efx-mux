@@ -881,6 +881,26 @@ export function FileTree() {
       });
     })();
 
+    // Phase 21 Plan 01 (FIX-01 / D-05): listen for project-wide file changes coming from
+    // external editors (Zed, VSCode, etc.). The Rust watcher debounces at 300ms and filters
+    // out .git/, .planning/, node_modules, hidden files, etc. We MUST NOT call initTree()
+    // here — that wipes expand/collapse state. refreshTreePreservingState() re-reads from
+    // disk and re-anchors the user's view. CRITICAL (D-06): do NOT touch activeUnifiedTabId,
+    // do NOT focus/scroll anything — the user explicitly required no focus jump on external
+    // edits. Do NOT debounce in JS: the Rust side already debounces.
+    let unlistenFileTree: (() => void) | null = null;
+    (async () => {
+      unlistenFileTree = await listen<string>('file-tree-changed', () => {
+        const project = getActiveProject();
+        if (!project?.path) return;
+        if (viewMode.value === 'tree') {
+          void refreshTreePreservingState();
+        } else {
+          loadDir(currentPath.value);
+        }
+      });
+    })();
+
     // Phase 18 Plan 09 (UAT Test 5 fix): listen for Cmd+Backspace routed through the native
     // Tauri menu. WKWebView intercepts Cmd+Backspace via NSResponder doCommandBySelector:
     // before it reaches our keydown handlers, so the shortcut is bound to a native MenuItem
@@ -1021,6 +1041,7 @@ export function FileTree() {
 
     return () => {
       if (unlistenFs) unlistenFs();
+      if (unlistenFileTree) unlistenFileTree();
       if (unlistenDelete) unlistenDelete();
       unsubActiveTab();
       document.removeEventListener('project-changed', handleProjectChanged);
