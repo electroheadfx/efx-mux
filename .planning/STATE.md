@@ -74,6 +74,7 @@ Progress: [██████████] 100% (Phase 17)
 - [Phase 22]: Plan 22-10: _activateEditorTab writes scope.activeTabId for BOTH main and right scopes — SubScopePane reads scope-local activeTabId, so main-scope path previously left new tabs active-but-invisible (UAT test 18a fix)
 - [Phase 22]: Plan 22-11: Belt-and-braces intra-zone drag — CSS var (persistence) + direct pane.style mutation (immediate visual). Drop extra flex-1 wrapper div in main/right-panel so SubScopePane is the flex item and its inline height is respected.
 - [Phase 22]: Plan 22-11: [data-tablist-scope] is the canonical tab-bar wrapper selector; no literal .tab-bar class exists in the codebase. CSS adds border-top via [data-tablist-scope] (matches existing .drop-target pattern).
+- [Phase 22-12]: counter behavior = monotonic; preserves PTY-safety and D-12 stable-name invariant (deleting Terminal-N does not reuse slot N; next slot is max+1). Rationale: orphan tmux sessions may survive slot deletion → reuse would re-attach stale content; matches D-12 "PTY session name is stable on scope move"; simpler (one integer counter) vs. gap-fill (scan all 6 scopes per allocation).
 
 ### Roadmap Evolution
 

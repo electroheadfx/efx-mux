@@ -101,6 +101,18 @@ const scopes = new Map<TerminalScope, ScopeState>([
 
 export const projectTabCounter = signal<Map<string, number>>(new Map());
 
+// Phase 22 gap-closure 22-12: the per-project counter is MONOTONIC by design.
+// User-confirmed 2026-04-18. Deleting Terminal-N does NOT free slot N for
+// reuse; the next allocation always returns max+1. Rationale:
+//   1. PTY safety — a deleted Terminal-N may leave an orphan tmux session
+//      `<project>-N` alive; reusing N would re-attach that orphan and
+//      surface stale screen content.
+//   2. Matches D-12 (CONTEXT.md): "PTY session name is stable on scope move."
+//      Slot reuse would violate the stable-name invariant.
+//   3. Simpler implementation: one integer per project vs. gap-fill requiring
+//      a full scan of all 6 scopes' tab lists on every allocation.
+// Alternatives considered (gap-fill, gap-fill-with-tmux-wipe) were rejected
+// in the Task 1 design checkpoint of plan 22-12. See STATE.md Decisions.
 export function allocateNextSessionName(project: string | null): { name: string; n: number } {
   const key = project ?? '';
   const current = projectTabCounter.value.get(key) ?? 0;
