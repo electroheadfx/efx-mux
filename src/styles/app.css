@@ -163,6 +163,16 @@
 .terminal-containers .xterm {
   height: 100%;
   width: 100%;
+  background-color: var(--color-bg-terminal);
+}
+
+/* Phase 22 debug: the band user reported at pane bottom is the remainder
+   between xterm-screen (rows * cellHeight) and the pane container. xterm
+   can only render an integer number of rows, so there is always a small
+   sub-cell remainder. Paint the terminal-containers wrapper with the
+   terminal bg so that remainder is invisible. */
+.terminal-containers {
+  background-color: var(--color-bg-terminal);
 }
 
 .terminal-area .xterm-viewport,
