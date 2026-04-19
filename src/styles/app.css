@@ -159,43 +159,17 @@
   position: relative;
 }
 
-/* Phase 22 debug (7325e07 diagnostic confirmed): the band at pane
-   bottom is .xterm-scrollable-element extending beyond xterm-screen
-   by `container.height - rows*cellHeight`. xterm-screen renders the
-   actual terminal grid at rows*cellHeight; scrollable-element is its
-   parent and fills the container. The remainder strip is scrollable-
-   element's own bg showing below the screen.
-
-   Fix: paint scrollable-element with the tmux status-bar color so the
-   remainder reads as a continuation of the tmux bar. Other layers
-   keep the terminal bg. */
+/* Phase 22: paint terminal pane ancestors with the terminal bg so the
+   xterm integer-row remainder at pane bottom blends in. Do NOT stretch
+   xterm's own internals (height / min-height) — that breaks scrollbar
+   hit-testing and vertical-scroll track rendering. */
 .terminal-area .xterm,
 .terminal-containers .xterm {
-  height: 100%;
-  width: 100%;
   background-color: var(--color-bg-terminal);
 }
 
 .terminal-containers {
   background-color: var(--color-bg-terminal);
-}
-
-.xterm .xterm-viewport,
-.xterm-viewport {
-  min-height: 100% !important;
-  height: 100% !important;
-  background-color: var(--color-bg-terminal) !important;
-}
-
-.xterm .xterm-scrollable-element,
-.xterm-scrollable-element {
-  min-height: 100% !important;
-  background-color: var(--color-tmux-status, #859900) !important;
-}
-
-.xterm .xterm-screen,
-.xterm-screen {
-  background-color: var(--color-bg-terminal) !important;
 }
 
 .sub-scope-body {
