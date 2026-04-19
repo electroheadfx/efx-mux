@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: Workspace Evolution
 status: executing
-stopped_at: Completed 22-12-PLAN.md
-last_updated: "2026-04-19T06:21:29.675Z"
+stopped_at: Completed 22-13-PLAN.md
+last_updated: "2026-04-19T06:28:12.731Z"
 last_activity: 2026-04-19
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 49
-  completed_plans: 49
+  completed_plans: 50
   percent: 100
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 ## Current Position
 
 Phase: 22 (dynamic-tabs-vertical-split-and-preferences-modal) — EXECUTING
-Plan: 4 of 14
+Plan: 5 of 14
 Status: Ready to execute
 Last activity: 2026-04-19
 
@@ -75,6 +75,7 @@ Progress: [██████████] 100% (Phase 17)
 - [Phase 22]: Plan 22-11: Belt-and-braces intra-zone drag — CSS var (persistence) + direct pane.style mutation (immediate visual). Drop extra flex-1 wrapper div in main/right-panel so SubScopePane is the flex item and its inline height is respected.
 - [Phase 22]: Plan 22-11: [data-tablist-scope] is the canonical tab-bar wrapper selector; no literal .tab-bar class exists in the codebase. CSS adds border-top via [data-tablist-scope] (matches existing .drop-target pattern).
 - [Phase 22-12]: counter behavior = monotonic; preserves PTY-safety and D-12 stable-name invariant (deleting Terminal-N does not reuse slot N; next slot is max+1). Rationale: orphan tmux sessions may survive slot deletion → reuse would re-attach stale content; matches D-12 "PTY session name is stable on scope move"; simpler (one integer counter) vs. gap-fill (scan all 6 scopes per allocation).
+- [Phase 22]: Plan 22-13: Editor drag refactor — editor branch promoted above sourceScope===targetScope early-return in handleCrossScopeDrop to enable intra-scope reorder (UAT test 6 major). onDocMouseUp drop resolver rewritten: scope-first resolution via [data-tablist-scope] wrapper, empty targetId routes to append-last fallback in handleCrossScopeDrop, nearest-snap fallback constrained to drop target's scope (no cross-scope bleed).
 
 ### Roadmap Evolution
 
@@ -143,11 +144,12 @@ None.
 | Phase 22 P10 | ~12min | 2 tasks | 5 files |
 | Phase 22 P11 | ~4m30s | 2 tasks | 6 files |
 | Phase 22 P12 | ~10min | 3 tasks | 4 files |
+| Phase 22 P13 | ~15min | 2 tasks | 2 files |
 
 ## Session Continuity
 
-Last session: 2026-04-19T06:21:29.672Z
-Stopped at: Completed 22-12-PLAN.md
+Last session: 2026-04-19T06:28:12.728Z
+Stopped at: Completed 22-13-PLAN.md
 Resume file: None
 
 Next: `/gsd-execute-phase 15` or `/gsd-code-review-fix 17` to fix remaining warnings
