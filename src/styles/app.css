@@ -159,43 +159,47 @@
   position: relative;
 }
 
-/* Phase 22 DIAGNOSTIC — paint each xterm layer a unique bright color so
-   the visible band reveals WHICH element is actually being rendered.
-   Revert once diagnosed.
+/* Phase 22 debug (7325e07 diagnostic confirmed): the band at pane
+   bottom is .xterm-scrollable-element extending beyond xterm-screen
+   by `container.height - rows*cellHeight`. xterm-screen renders the
+   actual terminal grid at rows*cellHeight; scrollable-element is its
+   parent and fills the container. The remainder strip is scrollable-
+   element's own bg showing below the screen.
 
-     sub-scope-body      → YELLOW    #ffff00
-     terminal-containers → ORANGE    #ff8800
-     .xterm              → PURPLE    #ff00ff
-     .xterm-viewport     → RED       #ff0000
-     .xterm-scrollable-element → BLUE #0000ff
-     .xterm-screen       → CYAN      #00ffff
-*/
-.sub-scope-body {
-  background-color: #ffff00 !important;
-}
-.terminal-containers {
-  background-color: #ff8800 !important;
-}
+   Fix: paint scrollable-element with the tmux status-bar color so the
+   remainder reads as a continuation of the tmux bar. Other layers
+   keep the terminal bg. */
 .terminal-area .xterm,
 .terminal-containers .xterm {
   height: 100%;
   width: 100%;
-  background-color: #ff00ff !important;
+  background-color: var(--color-bg-terminal);
 }
+
+.terminal-containers {
+  background-color: var(--color-bg-terminal);
+}
+
 .xterm .xterm-viewport,
 .xterm-viewport {
   min-height: 100% !important;
   height: 100% !important;
-  background-color: #ff0000 !important;
+  background-color: var(--color-bg-terminal) !important;
 }
+
 .xterm .xterm-scrollable-element,
 .xterm-scrollable-element {
   min-height: 100% !important;
-  background-color: #0000ff !important;
+  background-color: var(--color-tmux-status, #859900) !important;
 }
+
 .xterm .xterm-screen,
 .xterm-screen {
-  background-color: #00ffff !important;
+  background-color: var(--color-bg-terminal) !important;
+}
+
+.sub-scope-body {
+  background-color: var(--color-bg-terminal);
 }
 
 .server-pane {
