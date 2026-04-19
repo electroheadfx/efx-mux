@@ -24,7 +24,7 @@ import { createTerminal, type TerminalOptions } from '../terminal/terminal-manag
 import { connectPty } from '../terminal/pty-bridge';
 import { attachResizeHandler } from '../terminal/resize-handler';
 import { registerTerminal, getTheme } from '../theme/theme-manager';
-import { updateSession, activeProjectName, projects, getCurrentState } from '../state-manager';
+import { updateSession, activeProjectName, projects, getCurrentState, loadTabCounter, persistTabCounter } from '../state-manager';
 import { detectAgent } from '../server/server-bridge';
 import { projectSessionName } from '../utils/session-name';
 import { CrashOverlay } from './crash-overlay';
@@ -118,6 +118,11 @@ export function allocateNextSessionName(project: string | null): { name: string;
   const current = projectTabCounter.value.get(key) ?? 0;
   const n = current + 1;
   projectTabCounter.value = new Map(projectTabCounter.value).set(key, n);
+  // Debug 22-pty-session-collision: persist the counter on every allocation so
+  // restart → create-new-tab continues numbering from the last-used value
+  // instead of restarting from 1 and colliding with restored session names.
+  // Fire-and-forget; ordering guaranteed by state-manager's debounced save.
+  if (key) void persistTabCounter(key, n);
   const suffix = n > 1 ? String(n) : undefined;
   return { name: projectSessionName(project, suffix), n };
 }
@@ -130,8 +135,16 @@ export function seedCounterFromRestoredTabs(project: string): void {
       if (m) max = Math.max(max, parseInt(m[1], 10));
     }
   }
+  // Debug 22-pty-session-collision: also consider the persisted counter value,
+  // which reflects the highest-ever allocated n (including tabs later closed).
+  // T-22-08-01: loadTabCounter guards with parseInt + Number.isFinite; it
+  // returns 0 on any parse failure or tampered value, so the max-of-three
+  // (session-name, persisted, in-memory) is always safe.
+  const persisted = loadTabCounter(project);
+  const inMemory = projectTabCounter.value.get(project) ?? 0;
+  const seeded = Math.max(max, persisted, inMemory);
   const next = new Map(projectTabCounter.value);
-  next.set(project, Math.max(max, next.get(project) ?? 0));
+  next.set(project, seeded);
   projectTabCounter.value = next;
 }
 
@@ -247,7 +260,13 @@ async function createNewTabScoped(
   if (wantAgent) {
     label = agentLabel(projectInfo?.agent);
   } else {
-    label = `Terminal ${s.counter.n}`;
+    // Debug 22-pty-session-collision: use the monotonic per-project sequence
+    // number for the label, not the per-scope counter `s.counter.n`. The
+    // per-scope counter can produce duplicate "Terminal N" labels across
+    // scopes (main-1 and right-0 both showing "Terminal 3") and is reset to 0
+    // on every process start. The monotonic `seq` matches the session-name
+    // suffix and stays unique across scopes AND restarts.
+    label = `Terminal ${seq}`;
   }
 
   // Create container

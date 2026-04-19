@@ -572,4 +572,94 @@ describe('terminal-tabs scope registry', () => {
       expect(name).toMatch(/^testproj(-\d+)?$/);
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Debug 22-pty-session-collision — regression guard for cross-scope session-name
+  // collision that silently killed right-scope tabs when the user created a new
+  // tab in a main sub-scope. Root cause: counter not seeded after restore, so
+  // allocateNextSessionName returned already-in-use names.
+  describe('Debug 22-pty-session-collision (counter seed after restore)', () => {
+    it('2 scopes × 2 tabs then allocate in a third scope: no session-name collision, victims still present', async () => {
+      const { allocateNextSessionName, seedCounterFromRestoredTabs, getTerminalScope } = await import('./terminal-tabs');
+
+      // Simulate a restart-restore: right-0 has 2 tabs, right-1 has 2 tabs,
+      // main-0 has 2 tabs. NONE of these went through allocateNextSessionName
+      // in this process — they were restored under their persisted sessionNames.
+      const synth = (scope: any, id: string, sessionName: string, label: string) => ({
+        id,
+        sessionName,
+        label,
+        exitCode: undefined,
+        isAgent: false,
+        ownerScope: scope,
+      }) as unknown as import('./terminal-tabs').TerminalTab;
+
+      getTerminalScope('main-0').tabs.value = [
+        synth('main-0', 'm0a', 'testproj', 'Terminal 1'),
+        synth('main-0', 'm0b', 'testproj-2', 'Terminal 2'),
+      ];
+      getTerminalScope('right-0').tabs.value = [
+        synth('right-0', 'r0a', 'testproj-3', 'Agent'),
+        synth('right-0', 'r0b', 'testproj-4', 'Terminal 4'),
+      ];
+      getTerminalScope('right-1').tabs.value = [
+        synth('right-1', 'r1a', 'testproj-5', 'Agent'),
+        synth('right-1', 'r1b', 'testproj-6', 'Terminal 6'),
+      ];
+
+      // Snapshot sessionNames across scope B (right-0) before the new allocation.
+      const victimsBefore = getTerminalScope('right-0').tabs.value.map(t => t.sessionName);
+
+      // After restore completes, seed the counter. THIS is the missing call
+      // that the bug fix adds to main.tsx.
+      seedCounterFromRestoredTabs('testproj');
+
+      // Now allocate a new session name in scope A (main-1, empty sub-scope).
+      const { name: newName, n: newN } = allocateNextSessionName('testproj');
+
+      // The new name MUST NOT collide with any existing sessionName.
+      const allExisting = [
+        ...getTerminalScope('main-0').tabs.value.map(t => t.sessionName),
+        ...getTerminalScope('right-0').tabs.value.map(t => t.sessionName),
+        ...getTerminalScope('right-1').tabs.value.map(t => t.sessionName),
+      ];
+      expect(allExisting).not.toContain(newName);
+
+      // The new sequence number must be strictly greater than every existing suffix.
+      // Existing max is 6; newN should be 7.
+      expect(newN).toBeGreaterThan(6);
+      expect(newName).toBe('testproj-7');
+
+      // Scope B (right-0) is untouched: its tab list still contains the same sessionNames.
+      const victimsAfter = getTerminalScope('right-0').tabs.value.map(t => t.sessionName);
+      expect(victimsAfter).toEqual(victimsBefore);
+    });
+
+    it('counter survives restart via persisted tab-counter:<project>', async () => {
+      const {
+        allocateNextSessionName,
+        seedCounterFromRestoredTabs,
+        __resetProjectTabCounterForTesting,
+      } = await import('./terminal-tabs');
+
+      // Simulate 3 prior allocations that persisted the counter.
+      allocateNextSessionName('testproj');      // n=1
+      allocateNextSessionName('testproj');      // n=2
+      allocateNextSessionName('testproj');      // n=3
+
+      // Simulate restart: in-memory counter wiped, but state.session retains
+      // the persisted tab-counter:testproj value (written by allocateNextSessionName
+      // via persistTabCounter).
+      __resetProjectTabCounterForTesting();
+
+      // With NO restored tabs this time (all prior tabs were closed), only the
+      // persisted counter value prevents reuse of -1, -2, -3.
+      seedCounterFromRestoredTabs('testproj');
+
+      const { name, n } = allocateNextSessionName('testproj');
+      // n must be at least 4 — the persisted counter said "highest ever was 3".
+      expect(n).toBeGreaterThanOrEqual(4);
+      expect(name).toBe('testproj-4');
+    });
+  });
 });

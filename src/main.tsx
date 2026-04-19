@@ -26,7 +26,7 @@ import { ToastContainer, showToast } from './components/toast';
 import { ConfirmModal, showConfirmModal } from './components/confirm-modal';
 import { initDragManager } from './drag-manager';
 import { initTheme, registerTerminal, toggleThemeMode } from './theme/theme-manager';
-import { createNewTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs, saveProjectTabs, hasProjectTabs, restoreProjectTabs, getTerminalScope } from './components/terminal-tabs';
+import { createNewTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs, saveProjectTabs, hasProjectTabs, restoreProjectTabs, getTerminalScope, seedCounterFromRestoredTabs } from './components/terminal-tabs';
 import { getActiveSubScopesForZone, shouldSeedFirstLaunch, markFirstLaunchSeeded } from './components/sub-scope-pane';
 import {
   loadAppState, saveAppState, getCurrentState, initBeforeUnload, sidebarCollapsed, updateLayout, updateSession,
@@ -526,6 +526,15 @@ async function bootstrap() {
       } catch (err) {
         console.warn('[efxmux] Failed to restore right-scope tabs:', err);
       }
+
+      // Debug 22-pty-session-collision: seed the monotonic per-project counter
+      // after BOTH main-scope and right-scope restores complete. Without this,
+      // projectTabCounter remains at 0 and the first allocateNextSessionName
+      // call after boot returns a session name already in use by a restored
+      // tab, causing spawn_terminal(force_new=true) to kill the victim session
+      // in another scope.
+      seedCounterFromRestoredTabs(activeName);
+
       // Phase 22 D-03/D-06: sticky-tab fallback removed. Empty scope is allowed;
       // state-manager (22-01) drops legacy 'file-tree'/'gsd' activeTabId on load.
       // Right-scope D-02 first-launch defaults are seeded by sub-scope-pane.tsx
@@ -653,6 +662,12 @@ document.addEventListener('project-changed', async (e: Event) => {
       } catch (err) {
         console.warn('[efxmux] Failed to restore right-scope tabs:', err);
       }
+
+      // Debug 22-pty-session-collision: seed the monotonic per-project counter
+      // after restoring both main- and right-scope tabs for the newly-active
+      // project. Prevents session-name collision when the user creates a new
+      // tab post-switch. See bootstrap path above for full rationale.
+      seedCounterFromRestoredTabs(newProjectName);
       // Phase 22 D-03/D-06: sticky-tab fallback removed. Empty scope is allowed;
       // state-manager (22-01) drops legacy 'file-tree'/'gsd' activeTabId on load.
 

@@ -91,8 +91,28 @@ pub async fn spawn_terminal(
     let wants_fresh = force_new.unwrap_or(false);
     if session_exists {
         if wants_fresh {
-            // force_new only: kill the old session so tmux new-session below
-            // creates a FRESH one. This is the createNewTab path.
+            // Debug 22-pty-session-collision defense-in-depth: refuse to kill
+            // a session that an active PTY client is currently attached to
+            // (i.e. already registered in PtyManager). A frontend bug that
+            // allocates a colliding session name must surface as a spawn
+            // error, NOT silently clobber the victim's live tmux session
+            // (which would mark the victim tab [exited] via the pane-death
+            // monitor and lose user state).
+            //
+            // If the PtyManager does not have an entry for this name, the
+            // session is an orphan from a previous run / external process —
+            // killing it is safe and intended.
+            let is_attached = app
+                .try_state::<PtyManager>()
+                .and_then(|mgr| mgr.0.lock().ok().map(|m| m.contains_key(&sanitized)))
+                .unwrap_or(false);
+            if is_attached {
+                return Err(format!(
+                    "[efxmux] refusing to kill live tmux session '{}' — frontend session-name collision (debug:22-pty-session-collision)",
+                    sanitized
+                ));
+            }
+            // Orphan session: kill so tmux new-session below creates a FRESH one.
             let _ = std::process::Command::new("tmux")
                 .args(["kill-session", "-t", &sanitized])
                 .output();
