@@ -15,6 +15,7 @@ import { getTerminalScope, type TerminalScope } from './terminal-tabs';
 import { gitChangesTab, editorTabs, fileTreeTabs, gsdTab, setProjectEditorTabs } from './unified-tab-bar';
 import { attachIntraZoneHandles } from '../drag-manager';
 import { dispatchLayoutChanged } from '../terminal/resize-handler';
+import { getCellMetricsForScope, snapDown } from '../terminal/cell-metrics';
 import {
   updateLayout,
   updateSession,
@@ -258,6 +259,35 @@ export function SubScopePane({ scope, zone, index = 0, total = 1 }: SubScopePane
   useEffect(() => {
     attachIntraZoneHandles(zone);
   }, [zone]);
+
+  // Phase-22 follow-up (quick 260419-k1n): quantize this pane's own height on
+  // initial mount + on tab switches. createTerminal()'s double-RAF fit has
+  // already run by this point for newly-created terminals; for tab switches
+  // we still run it because switching TO a terminal tab may land on a pane
+  // with row-remainder from a prior layout state.
+  useEffect(() => {
+    // Re-run after 2x RAF so the terminal double-RAF fit (in createTerminal)
+    // has finished and xterm cell dimensions are readable.
+    let id2: number | undefined;
+    const id1 = requestAnimationFrame(() => {
+      id2 = requestAnimationFrame(() => {
+        const metrics = getCellMetricsForScope(scope);
+        if (!metrics) return; // mixed content — leave alone
+        const pane = document.querySelector<HTMLElement>(`.sub-scope-pane[data-subscope="${scope}"]`);
+        if (!pane) return;
+        const current = pane.offsetHeight;
+        const snapped = snapDown(current, metrics.cellHeight, 48);
+        if (Math.abs(current - snapped) >= 1) {
+          pane.style.height = `${snapped}px`;
+          pane.style.flex = 'none';
+        }
+      });
+    });
+    return () => {
+      if (typeof id2 === 'number') cancelAnimationFrame(id2);
+      cancelAnimationFrame(id1);
+    };
+  }, [scope, activeId]);
 
   // Filter tabs/bodies for this scope
   const scopedFileTrees = fileTreeTabs.value.filter(t => t.ownerScope === scope);
