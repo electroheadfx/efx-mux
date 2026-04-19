@@ -150,9 +150,14 @@ async function bootstrap() {
   }
 
   // Phase 22 Plan 04 D-02 / gap-closure 22-07: restore persisted active sub-scope
-  // lists and split ratios for the active project (per-project keys). When no
-  // project is active yet, pass null so signals reset to defaults.
-  restoreActiveSubScopes(activeProjectName.value);
+  // lists and split ratios. At this point in bootstrap, `initProjects()` has not
+  // run yet so `activeProjectName.value` is null. Pass null so the function
+  // resets signals to their defaults (['main-0'], ['right-0']) — the real
+  // per-project restore happens in the Step-8 requestAnimationFrame block after
+  // the active project name is resolved. This two-step dance avoids a flash
+  // where non-per-project fallback values are applied and then overwritten.
+  // See debug session 22-persistence-chaos.
+  restoreActiveSubScopes(null);
 
   // Wire beforeunload
   initBeforeUnload();
@@ -216,7 +221,11 @@ async function bootstrap() {
   // Suppress editor tab persist until restore completes — prevents empty-array overwrite race
   // (activeProjectName change triggers computed → subscribe → persist empty before restore runs)
   suppressEditorPersist(true);
-  initProjects();
+  // Phase 22 persistence-chaos fix: await so that activeProjectName is set
+  // BEFORE the Step-8 requestAnimationFrame block reads it for the per-project
+  // sub-scope restore + tab restore. Previously this was fire-and-forget and
+  // the race caused per-project keys to miss on fast restarts.
+  await initProjects();
 
   // Step 6: Consolidated keyboard handler (D-01, D-02, UX-01)
   // Single capture-phase listener fires before xterm.js
@@ -445,20 +454,30 @@ async function bootstrap() {
       }
     }
 
-    // Try to restore tabs from persisted state (per-project key first, then legacy flat key)
+    // Phase 22 persistence-chaos fix: restore main-scope tabs via per-sub-scope
+    // keys exactly like the right-panel restore does. The pre-Phase-22 flat keys
+    // (`terminal-tabs:<project>` and global `terminal-tabs`) are no longer read
+    // here — they do not match the migrated key format (`terminal-tabs:<project>:<scope>`)
+    // and reading the global flat key caused cross-project state bleed.
+    //
+    // IMPORTANT: restoreActiveSubScopes(...) must run FIRST with the now-resolved
+    // active project name so the correct per-project sub-scope list is used.
+    // (main.tsx:155 called it with null before initProjects resolved.)
+    restoreActiveSubScopes(activeName ?? null);
+
     let tabsRestored = false;
-    const perProjectTabKey = activeName ? `terminal-tabs:${activeName}` : null;
-    const tabDataRaw = (perProjectTabKey && appState?.session?.[perProjectTabKey])
-      || appState?.session?.['terminal-tabs']
-      || null;
-    if (tabDataRaw) {
+    if (activeName) {
       try {
-        const parsedData = JSON.parse(tabDataRaw);
-        if (parsedData?.tabs?.length > 0) {
-          tabsRestored = await restoreTabs(parsedData, activeProject?.path, agentBinary ?? undefined);
+        for (const scope of getActiveSubScopesForZone('main')) {
+          const restored = await getTerminalScope(scope).restoreProjectTabs(
+            activeName,
+            activeProject?.path,
+            agentBinary ?? undefined,
+          );
+          if (restored) tabsRestored = true;
         }
       } catch (err) {
-        console.warn('[efxmux] Failed to restore tabs, will create fresh:', err);
+        console.warn('[efxmux] Failed to restore main-scope tabs, will create fresh:', err);
       }
     }
 

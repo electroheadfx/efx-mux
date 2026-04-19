@@ -67,21 +67,22 @@ pub async fn spawn_terminal(
         return Err("Invalid session name: must contain at least one alphanumeric character".to_string());
     }
 
-    // If the tmux session already exists, behaviour differs by tab type:
+    // If the tmux session already exists, behaviour is driven by `force_new`:
     //
-    // AGENT TABS (shell_command is Some, e.g. "claude"):
-    //   Kill the existing session so that `tmux new-session` below creates a FRESH one
-    //   and runs the inline-export shell wrapper:
-    //     export CLAUDE_CODE_NO_FLICKER=1 ...; claude; exec zsh
-    //   Without killing first, `tmux new-session -A` merely RE-ATTACHES to the running
-    //   session and the initial-command argument is silently ignored by tmux. The already-
-    //   running claude process retains whatever environment it had when first launched,
-    //   which may not include CLAUDE_CODE_NO_FLICKER=1 (e.g. sessions started before this
-    //   fix was deployed). Only a fresh session guarantees the env var reaches claude.
+    // force_new = true  (e.g. createNewTabScoped): kill + fresh new-session so any
+    //   shell_command runs from scratch with the inline-export env wrapper.
     //
-    // PLAIN SHELL TABS (shell_command is None):
-    //   Re-attach to the existing session (preserve user shell state). Clear scrollback
-    //   history to prevent stale content from being dumped to the new PTY client.
+    // force_new = false (e.g. restore path): re-attach to the living session to
+    //   preserve the running agent / shell state. This is what quit+restart needs
+    //   so Claude Code keeps its history and in-flight state instead of being torn
+    //   down and re-spawned (which produced the "rewind-at-start / [exited]" chaos
+    //   described in debug session 22-persistence-chaos). When shell_command is
+    //   provided alongside force_new=false, tmux new-session -A silently ignores
+    //   the initial-command argument — that's intentional: the agent is already
+    //   running inside the session.
+    //
+    // PLAIN SHELL TABS (shell_command is None): same logic — reattach on restore,
+    //   kill on force_new. Scrollback is cleared on reattach to avoid stale dumps.
     let session_exists = std::process::Command::new("tmux")
         .args(["has-session", "-t", &sanitized])
         .output()
@@ -89,11 +90,9 @@ pub async fn spawn_terminal(
         .unwrap_or(false);
     let wants_fresh = force_new.unwrap_or(false);
     if session_exists {
-        if wants_fresh || shell_command.as_deref().map(|s| !s.is_empty()).unwrap_or(false) {
-            // force_new OR agent tab: kill the old session so tmux new-session below
-            // creates a FRESH one. Without this, a plain-shell tab could reattach to a
-            // stale tmux session left by a previously closed agent tab (whose tmux session
-            // was kept alive by destroy_pty_session for tab-restoration purposes).
+        if wants_fresh {
+            // force_new only: kill the old session so tmux new-session below
+            // creates a FRESH one. This is the createNewTab path.
             let _ = std::process::Command::new("tmux")
                 .args(["kill-session", "-t", &sanitized])
                 .output();
