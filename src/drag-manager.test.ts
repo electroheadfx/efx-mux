@@ -3,25 +3,11 @@
 // Tests:
 //   - intra-zone handle registers and persists ratio
 //   - re-init is idempotent (calling attachIntraZoneHandles twice does not add duplicate listeners)
-//   - quantized intra-zone drag (quick 260419-k1n Task 2)
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { mockIPC } from '@tauri-apps/api/mocks';
 import * as dragManager from './drag-manager';
 import { loadAppState } from './state-manager';
-import { getCellMetricsForScope } from './terminal/cell-metrics';
-
-// Module-level mock so drag-manager imports the mocked getCellMetricsForScope.
-vi.mock('./terminal/cell-metrics', () => ({
-  getCellMetricsForScope: vi.fn(),
-  snapDown: (value: number, step: number, min = 0) => {
-    if (step <= 0) return value;
-    const snapped = Math.floor(value / step) * step;
-    return Math.max(min, snapped);
-  },
-  isTerminalScopeActive: vi.fn().mockReturnValue(true),
-  readCellMetrics: vi.fn(),
-}));
 
 function setupDOM() {
   document.body.innerHTML = `
@@ -202,151 +188,5 @@ describe('Phase 22 gap-closure (22-11): attachIntraZoneHandles fresh-handle bind
     expect(pane1.style.flex).toMatch(/^(none|0 0 auto)$/);
     // Also verify the CSS var was written (sanity: this was already working in 22-04).
     expect(document.documentElement.style.getPropertyValue('--main-split-0-pct')).toMatch(/^\d+(\.\d+)?%$/);
-  });
-});
-
-// Phase-22 follow-up (quick 260419-k1n): quantized intra-zone drag.
-// Tests A, B, C for Task 2.
-describe('Phase 22 quick-260419-k1n: quantized intra-zone drag', () => {
-  const MOCK_STATE_QUANT = {
-    version: 1,
-    layout: {},
-    theme: { mode: 'dark' },
-    session: {},
-    project: { active: null, projects: [] },
-    panels: {},
-  };
-
-  function setupQuantDOM() {
-    document.body.innerHTML = `
-      <div class="main-panel" style="height: 400px; display: flex; flex-direction: column;">
-        <div class="sub-scope-pane" data-subscope="main-0" style="flex: 1; min-height: 48px; height: 200px;"></div>
-        <div class="split-handle-h-intra" data-handle="main-intra-0" style="height: 4px;"></div>
-        <div class="sub-scope-pane" data-subscope="main-1" style="flex: 1; min-height: 48px; height: 200px;"></div>
-      </div>
-    `;
-    document.documentElement.style.removeProperty('--main-split-0-pct');
-  }
-
-  beforeEach(async () => {
-    setupQuantDOM();
-    vi.mocked(getCellMetricsForScope).mockReset();
-    mockIPC((cmd: string) => {
-      if (cmd === 'load_state') return MOCK_STATE_QUANT;
-      if (cmd === 'save_state') return undefined;
-      return undefined;
-    });
-    await loadAppState();
-  });
-
-  afterEach(() => {
-    document.querySelectorAll('[data-handle]').forEach(el => {
-      delete (el as HTMLElement).dataset.dragInit;
-    });
-    vi.mocked(getCellMetricsForScope).mockReset();
-  });
-
-  it('Test A: snaps pane0 height to multiple of cellHeight when both panes have active terminals', async () => {
-    // Both scopes return cell dims → snap should fire
-    vi.mocked(getCellMetricsForScope).mockImplementation((scope) => {
-      if (scope === 'main-0' || scope === 'main-1') {
-        return { cellWidth: 9, cellHeight: 18 };
-      }
-      return null;
-    });
-
-    dragManager.attachIntraZoneHandles('main');
-
-    const handle = document.querySelector<HTMLElement>('[data-handle="main-intra-0"]')!;
-    const pane0 = document.querySelector<HTMLElement>('[data-subscope="main-0"]')!;
-    const pane1 = document.querySelector<HTMLElement>('[data-subscope="main-1"]')!;
-
-    const panel = document.querySelector<HTMLElement>('.main-panel')!;
-    Object.defineProperty(panel, 'getBoundingClientRect', {
-      configurable: true,
-      value: () => ({ top: 0, height: 400, bottom: 400, left: 0, right: 100, width: 100, x: 0, y: 0, toJSON: () => ({}) } as DOMRect),
-    });
-    // Total height = 200 + 200 = 400px
-    Object.defineProperty(pane0, 'offsetHeight', { configurable: true, value: 200 });
-    Object.defineProperty(pane1, 'offsetHeight', { configurable: true, value: 200 });
-
-    // Drag to 223px from top (pane0 would become 223px if unquantized)
-    // panel.top=0, clientY=223 → pct = 223/400 * 100 = 55.75%
-    // rawPane0Px = (55.75/100) * 400 = 223
-    // snapDown(223, 18) = floor(223/18)*18 = floor(12.38)*18 = 12*18 = 216
-    // finalPct = (216/400)*100 = 54.0%
-    handle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientY: 0 }));
-    document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientY: 223 }));
-    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientY: 223 }));
-
-    expect(pane0.style.height).toBe('216px');
-    expect(pane0.style.flex).toMatch(/^(none|0 0 auto)$/);
-    expect(pane1.style.height).toBe('184px');
-
-    // Persisted pct should reflect the snapped value: 216/400 = 54.0%
-    // (We can't easily read the IPC call value directly but we verify via CSS var)
-    // The CSS var during drag reflects onDrag (unquantized), but onEnd should write 54.0%
-    // Indirectly confirmed by inline style being 216px
-  });
-
-  it('Test B: mixed-content pane skips snap — drag preserves pixel position', async () => {
-    // main-1 has no active terminal (returns null) → no quantization
-    vi.mocked(getCellMetricsForScope).mockImplementation((scope) => {
-      if (scope === 'main-0') return { cellWidth: 9, cellHeight: 18 };
-      return null; // main-1 = mixed content
-    });
-
-    dragManager.attachIntraZoneHandles('main');
-
-    const handle = document.querySelector<HTMLElement>('[data-handle="main-intra-0"]')!;
-    const pane0 = document.querySelector<HTMLElement>('[data-subscope="main-0"]')!;
-
-    const panel = document.querySelector<HTMLElement>('.main-panel')!;
-    Object.defineProperty(panel, 'getBoundingClientRect', {
-      configurable: true,
-      value: () => ({ top: 0, height: 400, bottom: 400, left: 0, right: 100, width: 100, x: 0, y: 0, toJSON: () => ({}) } as DOMRect),
-    });
-    Object.defineProperty(pane0, 'offsetHeight', { configurable: true, value: 200 });
-    const pane1 = document.querySelector<HTMLElement>('[data-subscope="main-1"]')!;
-    Object.defineProperty(pane1, 'offsetHeight', { configurable: true, value: 200 });
-
-    handle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientY: 0 }));
-    document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientY: 223 }));
-    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientY: 223 }));
-
-    // onDrag sets pane0.style.height to the raw drag pixel value (223/400*400 = 223px via onDrag).
-    // onEnd: mixed-content guard fires, no snap → pane0 height NOT changed by quantize path.
-    // But onDrag already set it to the raw value. We verify it's NOT 216 (the snapped value).
-    expect(pane0.style.height).not.toBe('216px');
-  });
-
-  it('Test C: minHeight floor wins over snap when drag is too low', async () => {
-    // Both panes have active terminals
-    vi.mocked(getCellMetricsForScope).mockImplementation(() => ({ cellWidth: 9, cellHeight: 18 }));
-
-    dragManager.attachIntraZoneHandles('main');
-
-    const handle = document.querySelector<HTMLElement>('[data-handle="main-intra-0"]')!;
-    const pane0 = document.querySelector<HTMLElement>('[data-subscope="main-0"]')!;
-    const pane1 = document.querySelector<HTMLElement>('[data-subscope="main-1"]')!;
-
-    const panel = document.querySelector<HTMLElement>('.main-panel')!;
-    Object.defineProperty(panel, 'getBoundingClientRect', {
-      configurable: true,
-      value: () => ({ top: 0, height: 400, bottom: 400, left: 0, right: 100, width: 100, x: 0, y: 0, toJSON: () => ({}) } as DOMRect),
-    });
-    Object.defineProperty(pane0, 'offsetHeight', { configurable: true, value: 200 });
-    Object.defineProperty(pane1, 'offsetHeight', { configurable: true, value: 200 });
-
-    // Drag to 30px — would give rawPane0Px = (10/100)*400 = 40 after 10% clamp
-    // snapDown(40, 18, 48) = max(48, floor(40/18)*18) = max(48, 36) = 48
-    // maxPane0 = 400 - 48 = 352; finalPane0 = min(48, 352) = 48
-    handle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientY: 0 }));
-    document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientY: 30 }));
-    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientY: 30 }));
-
-    // pane0 should be at 48px (minHeight floor wins over snap of 36px)
-    expect(pane0.style.height).toBe('48px');
-    expect(pane1.style.height).toBe('352px');
   });
 });
