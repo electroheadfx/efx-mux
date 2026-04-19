@@ -14,6 +14,7 @@ import { EditorTab } from './editor-tab';
 import { getTerminalScope, type TerminalScope } from './terminal-tabs';
 import { gitChangesTab, editorTabs, fileTreeTabs, gsdTab, setProjectEditorTabs } from './unified-tab-bar';
 import { attachIntraZoneHandles } from '../drag-manager';
+import { distributeCells } from '../window/pane-distribute';
 import { dispatchLayoutChanged } from '../terminal/resize-handler';
 import {
   updateLayout,
@@ -68,6 +69,10 @@ export function spawnSubScopeForZone(zone: Zone): void {
   // applied the new inline styles (height: var(--...)) before fit() reads
   // the container's clientHeight.
   queueMicrotask(() => dispatchLayoutChanged());
+  // 260419-mty: the new pane was just mounted — its CSS var pct is the default
+  // `${100 / total}%`, which rarely lands on a cell boundary. Schedule a
+  // distribute for the next rAF so Preact has rendered the new pane first.
+  requestAnimationFrame(() => distributeCells(zone));
 }
 
 export function __resetActiveSubScopesForTesting(): void {
@@ -152,6 +157,10 @@ export function closeSubScope(zone: Zone, index: number): void {
   // Preact has applied the new inline styles before terminals read the new
   // container clientHeight.
   queueMicrotask(() => dispatchLayoutChanged());
+  // 260419-mty: the remaining panes just grew to absorb the closed pane's
+  // space. Their pcts are now stale (summed to < 100). Distribute so they
+  // re-align to cell rows.
+  requestAnimationFrame(() => distributeCells(zone));
 }
 
 /**

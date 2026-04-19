@@ -9,6 +9,7 @@
 // should access _renderService or _core — keep the coupling at exactly one point.
 
 import { invoke } from '@tauri-apps/api/core';
+import { distributeCells } from './pane-distribute';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -140,5 +141,14 @@ export function syncIncrementsDebounced(): void {
     const cellH = Math.round(g.cellH * 2) / 2;
 
     void syncWindowIncrements(cellW, cellH);
+
+    // 260419-mty: post-distribute cell-aligned pcts across all stacked sub-scopes.
+    // Runs in the SAME 100ms trailing tick — single coalescer (RESEARCH §2b).
+    // Ordering: NSWindow snap IPC fires first (void — fire-and-forget), then we
+    // divide up the new cell-multiple zone heights. The IPC is async but the
+    // distribute reads DOM px that the NSWindow snap mutation will produce NEXT
+    // frame; both distributeCells + IPC converge to the same geometry.
+    distributeCells('main');
+    distributeCells('right');
   }, 100);
 }

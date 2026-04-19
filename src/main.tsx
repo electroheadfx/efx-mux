@@ -27,8 +27,9 @@ import { ConfirmModal, showConfirmModal } from './components/confirm-modal';
 import { initDragManager } from './drag-manager';
 import { initTheme, registerTerminal, toggleThemeMode } from './theme/theme-manager';
 import { syncIncrementsDebounced, clearWindowIncrements } from './window/resize-increments';
+import { distributeCells } from './window/pane-distribute';
 import { createNewTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs, saveProjectTabs, hasProjectTabs, restoreProjectTabs, getTerminalScope, seedCounterFromRestoredTabs } from './components/terminal-tabs';
-import { getActiveSubScopesForZone, shouldSeedFirstLaunch, markFirstLaunchSeeded } from './components/sub-scope-pane';
+import { getActiveSubScopesForZone, shouldSeedFirstLaunch, markFirstLaunchSeeded, activeMainSubScopes, activeRightSubScopes } from './components/sub-scope-pane';
 import {
   loadAppState, saveAppState, getCurrentState, initBeforeUnload, sidebarCollapsed, updateLayout, updateSession,
   getProjects, getActiveProject, projects, activeProjectName
@@ -244,6 +245,34 @@ async function bootstrap() {
   } catch {
     // Older WKWebView may not expose matchMedia for resolution — non-blocking.
   }
+
+  // Step 4d (260419-mty): window resize → shared debounce. The syncIncrementsDebounced
+  // handler already triggers distributeCells('main') + distributeCells('right')
+  // inside its 100ms trailing tick (resize-increments.ts). This is the ONE listener
+  // that feeds both window-increment sync AND multi-pane redistribute — single 100ms
+  // coalescer. NO ResizeObserver — feedback-loop trap (RESEARCH §2b).
+  window.addEventListener('resize', () => syncIncrementsDebounced());
+
+  // Step 4e (260419-mty): when a sub-scope's active tab flips between terminal
+  // and non-terminal content, redistribute in the next frame (so display:none
+  // toggles have landed). Subscribing reads on activeMainSubScopes /
+  // activeRightSubScopes + each scope's activeTabId register the effect as a
+  // dependency — signals re-fire when any pane's active tab changes or when a
+  // pane is added/removed.
+  effect(() => {
+    // Touch the active-sub-scope lists so add/remove re-subscribes.
+    const mainScopes = activeMainSubScopes.value;
+    const rightScopes = activeRightSubScopes.value;
+    // Touch every scope's activeTabId so tab-kind flips re-fire.
+    for (const s of mainScopes) void getTerminalScope(s).activeTabId.value;
+    for (const s of rightScopes) void getTerminalScope(s).activeTabId.value;
+    // Defer to the next frame so display:none toggles in SubScopePane have
+    // applied before we measure.
+    requestAnimationFrame(() => {
+      distributeCells('main');
+      distributeCells('right');
+    });
+  });
 
   // Step 5: Init project system
   // Suppress editor tab persist until restore completes — prevents empty-array overwrite race

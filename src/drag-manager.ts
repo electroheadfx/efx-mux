@@ -5,6 +5,7 @@
 
 import { updateLayout, activeProjectName, sidebarCollapsed } from './state-manager';
 import { snapToCell, syncIncrementsDebounced } from './window/resize-increments';
+import { distributeCells } from './window/pane-distribute';
 
 interface DragCallbacksV {
   onDrag: (clientX: number) => void;
@@ -212,6 +213,10 @@ export function attachIntraZoneHandles(zone: 'main' | 'right'): void {
           : `${zone}-split-${idx}-pct`;
         void updateLayout({ [key]: `${clamped.toFixed(1)}%` });
         syncIncrementsDebounced();
+        // 260419-mty: re-align the OTHER terminal panes in this zone after the
+        // dragged pane snapped. Runtime-only write; persisted per-project pct
+        // (set by updateLayout above) stays the user's intent.
+        distributeCells(zone);
       },
     });
   });
