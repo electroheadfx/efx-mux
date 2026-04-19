@@ -1262,19 +1262,35 @@ describe('Phase 22: dynamic sticky-removed tabs', () => {
         id: 'agent-rename-right',
         sessionName: 'testproj-r2',
         label: 'Agent claude',
-        terminal: null as any, fitAddon: null as any,
-        container: null as any,
+        // Minimal stubs: switchToTabScoped touches container.style.display and
+        // terminal/fitAddon in a deferred rAF block; supply just enough so
+        // activation (triggered by the first click of the double-click rename
+        // gesture) doesn't throw. Pre-fix, the click routed to main-0 alias
+        // which had no tabs, so no container access occurred — but that was
+        // the R-11 bug we're fixing. Real activation is now scope-aware.
+        terminal: { focus: () => {} } as any,
+        fitAddon: { fit: () => {} } as any,
+        container: document.createElement('div') as any,
         ptyConnected: false, isAgent: true, ownerScope: 'right-0' as const,
       };
       const right = getTerminalScope('right-0');
       right.tabs.value = [agentTab as any];
       right.activeTabId.value = agentTab.id;
 
-      // Trigger double-click rename on the rendered tab
+      // Trigger double-click rename on the rendered tab.
+      // Post-fix for debug 22-tab-content-desync: the tab bar now correctly
+      // reflects the per-scope activeTabId, so when this tab is active the
+      // renderTab path emits a leading status-indicator <span> before the
+      // label <span> (terminal isActive branch). Find the label span by text
+      // content so the test targets the correct element in both active and
+      // inactive render variants.
       const { container } = render(<UnifiedTabBar scope="right-0" />);
       const tabEl = container.querySelector('[data-tab-id="agent-rename-right"]') as HTMLElement;
       expect(tabEl).not.toBeNull();
-      const labelSpan = tabEl.querySelector('span') as HTMLElement;
+      const labelSpan = Array.from(tabEl.querySelectorAll('span')).find(
+        s => s.textContent === 'Agent claude',
+      ) as HTMLElement;
+      expect(labelSpan).not.toBeUndefined();
       fireEvent.click(labelSpan);
       fireEvent.click(labelSpan);
       const input = tabEl.querySelector('input[type="text"]') as HTMLInputElement;
@@ -1403,5 +1419,124 @@ describe('Phase 22 gap-closure (22-13): editor reorder + cross-scope drop + appe
     handleCrossScopeDrop('editor-1', 'main-0', 'editor-3', 'main-0', true /* insertAfter */);
     const order = getScopedTabOrder('main-0');
     expect(order.indexOf('editor-1')).toBeGreaterThan(order.indexOf('editor-3'));
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Debug 22-tab-content-desync — tab-bar highlight must read per-scope signal,
+// and clicking a sub-scope terminal tab must not corrupt main-0 scope state.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('Debug 22-tab-content-desync: per-scope highlight + cross-scope isolation', () => {
+  beforeEach(() => {
+    projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'claude' } as any];
+    activeProjectName.value = 'testproj';
+    gitChangesTab.value = null;
+    gsdTab.value = null;
+    fileTreeTabs.value = [];
+    setProjectEditorTabs([]);
+    activeUnifiedTabId.value = '';
+    for (const s of ['main-0', 'main-1', 'main-2', 'right-0', 'right-1', 'right-2'] as const) {
+      getTerminalScope(s).tabs.value = [];
+      getTerminalScope(s).activeTabId.value = '';
+    }
+    mockIPC((_cmd, _args) => null);
+  });
+
+  afterEach(() => { cleanup(); });
+
+  it('tab-bar highlight reads getTerminalScope(scope).activeTabId, NOT the global activeUnifiedTabId', () => {
+    // Simulate a restored state where right-0 has two terminal tabs and the
+    // per-scope activeTabId points at the second one. The global
+    // activeUnifiedTabId is empty (post-restore reality before user clicks).
+    const right0 = getTerminalScope('right-0');
+    const termA: any = { id: 'tab-r0-A', sessionName: 's-a', label: 'Agent c', isAgent: true, ownerScope: 'right-0' };
+    const termB: any = { id: 'tab-r0-B', sessionName: 's-b', label: 'Terminal 4', isAgent: false, ownerScope: 'right-0' };
+    right0.tabs.value = [termA, termB];
+    right0.activeTabId.value = termB.id; // "Terminal 4" is the body-active tab
+    activeUnifiedTabId.value = '';        // global stale on restore
+
+    const { container } = render(<UnifiedTabBar scope="right-0" />);
+    const termAEl = container.querySelector(`[data-tab-id="${termA.id}"]`) as HTMLElement;
+    const termBEl = container.querySelector(`[data-tab-id="${termB.id}"]`) as HTMLElement;
+    expect(termAEl).not.toBeNull();
+    expect(termBEl).not.toBeNull();
+
+    // Regression: BEFORE the fix, neither tab was highlighted (currentId read
+    // from global activeUnifiedTabId). AFTER the fix, termB is highlighted.
+    expect(termBEl.getAttribute('aria-selected')).toBe('true');
+    expect(termAEl.getAttribute('aria-selected')).toBe('false');
+  });
+
+  it('clicking a terminal tab in right-0 does NOT corrupt main-0.activeTabId (R-11 regression)', () => {
+    // Main-0 has an editor tab as active (simulates CLAUDE.md open).
+    const main0 = getTerminalScope('main-0');
+    const editorTab: any = {
+      id: 'editor-claude-md',
+      type: 'editor',
+      filePath: '/proj/CLAUDE.md',
+      fileName: 'CLAUDE.md',
+      content: '# hi',
+      pinned: true,
+      ownerScope: 'main-0',
+      dirty: false,
+    };
+    setProjectEditorTabs([editorTab]);
+    main0.activeTabId.value = editorTab.id;
+    activeUnifiedTabId.value = editorTab.id;
+
+    // Right-0 has an agent tab. Use a minimal stub — container/terminal nulls
+    // are OK because the test mocks IPC and scopeHandle.switchToTab only runs
+    // switchToTabScoped which iterates containers but is tolerated here (null
+    // container = DOM element created on the fly).
+    const right0 = getTerminalScope('right-0');
+    const rightTerm: any = {
+      id: 'tab-r0-term',
+      sessionName: 's-r',
+      label: 'Agent c',
+      isAgent: true,
+      ownerScope: 'right-0',
+      container: document.createElement('div'),
+      terminal: { focus: () => {} },
+      fitAddon: { fit: () => {} },
+      ptyConnected: false,
+    };
+    right0.tabs.value = [rightTerm];
+    right0.activeTabId.value = '';
+
+    const { container } = render(<UnifiedTabBar scope="right-0" />);
+    const rightEl = container.querySelector(`[data-tab-id="${rightTerm.id}"]`) as HTMLElement;
+    expect(rightEl).not.toBeNull();
+    fireEvent.click(rightEl);
+
+    // After click: right-0.activeTabId flips to the terminal; main-0.activeTabId
+    // must remain on the editor — otherwise the main pane's editor body goes
+    // display:none and the user sees "CLAUDE.md disappeared" (R-11).
+    expect(right0.activeTabId.value).toBe(rightTerm.id);
+    expect(main0.activeTabId.value).toBe(editorTab.id);
+  });
+
+  it('clicking tabs across two sub-scopes keeps each scope body independent', () => {
+    // Two right sub-scopes, each with two terminal tabs. A click in scope-1
+    // must not change scope-2's per-scope activeTabId.
+    const r1 = getTerminalScope('right-0');
+    const r2 = getTerminalScope('right-1');
+    const r1TabA: any = { id: 'r1-A', sessionName: 'sr1-a', label: 'Terminal 1', isAgent: false, ownerScope: 'right-0', container: document.createElement('div'), terminal: { focus: () => {} }, fitAddon: { fit: () => {} }, ptyConnected: false };
+    const r1TabB: any = { id: 'r1-B', sessionName: 'sr1-b', label: 'Terminal 2', isAgent: false, ownerScope: 'right-0', container: document.createElement('div'), terminal: { focus: () => {} }, fitAddon: { fit: () => {} }, ptyConnected: false };
+    const r2TabA: any = { id: 'r2-A', sessionName: 'sr2-a', label: 'Terminal 3', isAgent: false, ownerScope: 'right-1', container: document.createElement('div'), terminal: { focus: () => {} }, fitAddon: { fit: () => {} }, ptyConnected: false };
+    const r2TabB: any = { id: 'r2-B', sessionName: 'sr2-b', label: 'Terminal 4', isAgent: false, ownerScope: 'right-1', container: document.createElement('div'), terminal: { focus: () => {} }, fitAddon: { fit: () => {} }, ptyConnected: false };
+    r1.tabs.value = [r1TabA, r1TabB];
+    r2.tabs.value = [r2TabA, r2TabB];
+    r1.activeTabId.value = r1TabA.id;
+    r2.activeTabId.value = r2TabB.id;
+
+    const { container: c1 } = render(<UnifiedTabBar scope="right-0" />);
+    // Click Terminal 2 in scope-1.
+    const r1B = c1.querySelector(`[data-tab-id="${r1TabB.id}"]`) as HTMLElement;
+    fireEvent.click(r1B);
+
+    // Scope-1 flips, scope-2 stays on its own tab.
+    expect(r1.activeTabId.value).toBe(r1TabB.id);
+    expect(r2.activeTabId.value).toBe(r2TabB.id);
   });
 });

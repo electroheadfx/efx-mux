@@ -1844,7 +1844,6 @@ export function UnifiedTabBar({ scope }: UnifiedTabBarProps) {
   // Phase 22: active tab for each scope reads from that scope's own signal,
   // so sub-scopes maintain independent focus state.
   const scopeActiveId = getTerminalScope(scope).activeTabId.value;
-  const currentId = activeUnifiedTabId.value;
   const dropdownItems = buildDropdownItems(scope);
   const hasDynamicRight = scope.startsWith('right') && computeDynamicTabsForScope(scope).length > 0;
 
@@ -1872,11 +1871,18 @@ export function UnifiedTabBar({ scope }: UnifiedTabBarProps) {
     }
     // Terminal tab: scope determined by tab.scope.
     if (tab.type === 'terminal') {
+      // Bug 22-tab-content-desync (R-11): previously this branch wrote the
+      // top-level `activeTabId` export AND called `switchToTab(...)`. Both of
+      // those symbols are main-0 aliases (terminal-tabs.tsx:853 + :863-867),
+      // so clicking a terminal tab that lives in any non-main-0 sub-scope
+      // (right-0, right-1, main-1, …) overwrote main-0.activeTabId and ran
+      // switchToTabScoped('main-0', <foreign-id>), hiding every main-0
+      // terminal container (display:none) — which in turn made the main panel
+      // appear blank ("CLAUDE.md disappeared"). Route through the scope
+      // handle's switchToTab instead so it targets the correct scope.
       const scopeHandle = getTerminalScope(tab.scope);
-      scopeHandle.activeTabId.value = tab.id;
+      scopeHandle.switchToTab(tab.id);
       activeUnifiedTabId.value = tab.id;
-      activeTabId.value = tab.id;
-      switchToTab(tab.id);
       return;
     }
     // Editor tabs — route to owning scope's signal.
@@ -1930,7 +1936,14 @@ export function UnifiedTabBar({ scope }: UnifiedTabBarProps) {
         onWheel={handleWheel}
       >
         {ordered.map((tab, i) => {
-          const isActive = tab.id === currentId;
+          // Bug 22-tab-content-desync (Bug 1): tab-bar highlight must track the
+          // PER-SCOPE active-tab signal, matching what SubScopePane uses to
+          // decide which body to render (sub-scope-pane.tsx:234). Previously
+          // this used `currentId = activeUnifiedTabId.value` (global), which
+          // was only updated on explicit writes — so on restore, sub-scopes'
+          // tab bars showed no highlight even though a body was visible, and
+          // clicking a tab flipped the highlight without matching the body.
+          const isActive = tab.id === scopeActiveId;
           const rendered = renderTab(tab, isActive, handleTabClick, handleClose, scope);
           // D-05 optional divider: insert 1px rule after the sticky pair when
           // right scope has at least one dynamic tab. Sticky tabs occupy
@@ -1972,7 +1985,7 @@ export function UnifiedTabBar({ scope }: UnifiedTabBarProps) {
           main and right tab bars independently show/hide this icon based on
           what the user is looking at in that scope (Plan 20-05-C).
         */}
-        {isEditorTabActiveInScope(ordered, currentId) && (
+        {isEditorTabActiveInScope(ordered, scopeActiveId) && (
           <button
             class="w-7 h-7 rounded flex items-center justify-center cursor-pointer shrink-0"
             style={{
