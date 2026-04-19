@@ -14,6 +14,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
+import { getCellMetricsForScope, snapDown } from './cell-metrics';
+import type { TerminalScope } from '../components/terminal-tabs';
 
 /** Event name broadcast by drag-manager + sub-scope-pane when any pane geometry changes. */
 export const LAYOUT_CHANGED_EVENT = 'efxmux:layout-changed';
@@ -62,6 +64,25 @@ export function attachResizeHandler(
 
       lastCols = cols;
       lastRows = rows;
+
+      // Phase-22 follow-up (quick 260419-k1n): pin pane height to a multiple of
+      // cellHeight after fit so the row-remainder band disappears. Only applies
+      // when container sits inside a .sub-scope-pane whose active tab is a terminal.
+      const paneEl = container.closest<HTMLElement>('.sub-scope-pane');
+      if (paneEl) {
+        const scope = paneEl.dataset.subscope as TerminalScope | undefined;
+        if (scope) {
+          const metrics = getCellMetricsForScope(scope);
+          if (metrics) {
+            const current = paneEl.offsetHeight;
+            const snapped = snapDown(current, metrics.cellHeight, 48);
+            if (Math.abs(current - snapped) >= 1) {
+              paneEl.style.height = `${snapped}px`;
+              paneEl.style.flex = 'none';
+            }
+          }
+        }
+      }
 
       // Debounced IPC to Rust (D-12: 150ms trailing)
       if (resizeTimer) clearTimeout(resizeTimer);

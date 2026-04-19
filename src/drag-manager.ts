@@ -4,6 +4,8 @@
 // Migrated to TypeScript (Phase 6.1)
 
 import { updateLayout, activeProjectName, sidebarCollapsed } from './state-manager';
+import { getCellMetricsForScope, snapDown } from './terminal/cell-metrics';
+import type { TerminalScope } from './components/terminal-tabs';
 
 interface DragCallbacksV {
   onDrag: (clientX: number) => void;
@@ -187,13 +189,50 @@ export function attachIntraZoneHandles(zone: 'main' | 'right'): void {
         const rect = panel.getBoundingClientRect();
         const pct = ((clientY - rect.top) / rect.height) * 100;
         const clamped = Math.max(10, Math.min(90, pct));
+
+        // Phase-22 follow-up (quick 260419-k1n): snap pane0's pixel height to a
+        // multiple of the active terminal's cellHeight so the row-remainder band
+        // disappears. Only snap when BOTH adjacent panes have an active terminal;
+        // mixed-content panes keep pixel-accurate drag behavior.
+        const panes = panel.querySelectorAll<HTMLElement>('.sub-scope-pane');
+        const pane0 = panes[idx];
+        const pane1 = panes[idx + 1];
+        let finalClamped = clamped;
+        if (pane0 && pane1) {
+          const scope0 = pane0.dataset.subscope as TerminalScope | undefined;
+          const scope1 = pane1.dataset.subscope as TerminalScope | undefined;
+          if (scope0 && scope1) {
+            const m0 = getCellMetricsForScope(scope0);
+            const m1 = getCellMetricsForScope(scope1);
+            if (m0 && m1) {
+              const totalPx = pane0.offsetHeight + pane1.offsetHeight;
+              if (totalPx > 0) {
+                // pane0 target px from the % the user dragged to.
+                const rawPane0Px = (clamped / 100) * totalPx;
+                // Snap pane0 DOWN to a multiple of its own cellHeight (48px floor).
+                const snappedPane0Px = snapDown(rawPane0Px, m0.cellHeight, 48);
+                // Also clamp so pane1 keeps at least 48px.
+                const maxPane0 = totalPx - 48;
+                const finalPane0 = Math.min(snappedPane0Px, maxPane0);
+                // Recompute the % from the snapped pixel height.
+                finalClamped = Math.max(10, Math.min(90, (finalPane0 / totalPx) * 100));
+                // Also mutate inline style so the immediate visual matches persisted state.
+                pane0.style.height = `${finalPane0}px`;
+                pane0.style.flex = 'none';
+                pane1.style.height = `${totalPx - finalPane0}px`;
+                pane1.style.flex = 'none';
+              }
+            }
+          }
+        }
+
         // Phase 22 gap-closure 22-07: persist per-project so project A's split
         // ratio does not leak into project B when switching.
         const project = activeProjectName.value;
         const key = project
           ? `${zone}-split-${idx}-pct:${project}`
           : `${zone}-split-${idx}-pct`;
-        void updateLayout({ [key]: `${clamped.toFixed(1)}%` });
+        void updateLayout({ [key]: `${finalClamped.toFixed(1)}%` });
       },
     });
   });
