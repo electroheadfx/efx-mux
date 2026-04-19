@@ -159,62 +159,43 @@
   position: relative;
 }
 
+/* Phase 22 DIAGNOSTIC — paint each xterm layer a unique bright color so
+   the visible band reveals WHICH element is actually being rendered.
+   Revert once diagnosed.
+
+     sub-scope-body      → YELLOW    #ffff00
+     terminal-containers → ORANGE    #ff8800
+     .xterm              → PURPLE    #ff00ff
+     .xterm-viewport     → RED       #ff0000
+     .xterm-scrollable-element → BLUE #0000ff
+     .xterm-screen       → CYAN      #00ffff
+*/
+.sub-scope-body {
+  background-color: #ffff00 !important;
+}
+.terminal-containers {
+  background-color: #ff8800 !important;
+}
 .terminal-area .xterm,
 .terminal-containers .xterm {
   height: 100%;
   width: 100%;
-  background-color: var(--color-bg-terminal);
+  background-color: #ff00ff !important;
 }
-
-/* Phase 22 debug: the band user reported at pane bottom is the remainder
-   between xterm-screen (rows * cellHeight) and the pane container. xterm
-   can only render an integer number of rows, so there is always a small
-   sub-cell remainder. Paint the terminal-containers wrapper with the
-   terminal bg so that remainder is invisible. */
-.terminal-containers {
-  background-color: var(--color-bg-terminal);
-}
-
-.terminal-area .xterm-viewport,
-.terminal-containers .xterm-viewport {
-  background-color: var(--color-bg-terminal) !important;
-}
-
-.terminal-area .xterm-screen,
-.terminal-containers .xterm-screen {
-  background-color: var(--color-bg-terminal);
-}
-
-/* Phase 22 debug: the "hole" at pane bottom is the empty area below
-   xterm-scrollable-element inside xterm-viewport — integer rows *
-   cellHeight rarely equals container height exactly, so there is
-   always a 0–16px remainder. Paint the viewport with the tmux
-   status-bar green (--color-tmux-status) so the remainder looks
-   like an intentional continuation of the tmux bar. Other xterm
-   ancestors keep the dark terminal bg. */
 .xterm .xterm-viewport,
 .xterm-viewport {
   min-height: 100% !important;
   height: 100% !important;
-  background-color: var(--color-tmux-status, #859900) !important;
+  background-color: #ff0000 !important;
 }
-
 .xterm .xterm-scrollable-element,
 .xterm-scrollable-element {
   min-height: 100% !important;
-  background-color: var(--color-bg-terminal) !important;
+  background-color: #0000ff !important;
 }
-
 .xterm .xterm-screen,
 .xterm-screen {
-  background-color: var(--color-bg-terminal) !important;
-}
-
-/* Also paint the pane body itself. Editor / file-tree / GSD bodies are
-   absolute inset:0 with their own backgrounds so they cover this; only
-   terminal panes leave the body exposed. */
-.sub-scope-body {
-  background-color: var(--color-bg-terminal);
+  background-color: #00ffff !important;
 }
 
 .server-pane {
