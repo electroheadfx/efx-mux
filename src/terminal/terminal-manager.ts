@@ -80,10 +80,22 @@ export function createTerminal(container: HTMLElement, options: TerminalOptions 
       return false;
     }
 
-    // Cmd+K -> clear terminal scrollback (standard macOS shortcut)
+    // Cmd+K -> clear terminal (standard macOS shortcut). Send Ctrl+L (form feed,
+    // 0x0c) through the PTY so the shell clears + redraws naturally. `terminal.clear()`
+    // only wipes xterm's local buffer which desyncs against tmux: tmux keeps rendering
+    // its last frame and the status bar ends up stuck at the top row until the next
+    // tmux refresh. Shell-level clear lets tmux repaint the whole viewport.
     if (ev.metaKey && !ev.ctrlKey && !ev.altKey && (ev.key === 'k' || ev.key === 'K')) {
       ev.preventDefault();
-      terminal.clear();
+      const sn = options.sessionName;
+      if (sn) {
+        invoke('send_literal_sequence', {
+          sessionName: sn,
+          sequence: '\x0c',
+        }).catch(() => {});
+      } else {
+        terminal.clear();
+      }
       return false;
     }
 
