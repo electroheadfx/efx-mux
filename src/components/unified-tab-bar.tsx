@@ -1056,6 +1056,38 @@ export function closeUnifiedTab(tabId: string): void {
     return;
   }
 
+  // Phase 22 gap-closure (22-09, re-applied 22-14 after 22-10 silent revert):
+  // GSD singleton and File Tree per-scope tabs are NOT in `allTabs` (which is
+  // main-only), so the × button's onClose was a silent no-op. Route explicitly
+  // through the scope registry.
+  const gsd = gsdTab.value;
+  if (gsd && gsd.id === tabId) {
+    const owner = getTerminalScope(gsd.owningScope);
+    if (owner.activeTabId.value === tabId) {
+      owner.activeTabId.value = '';
+    }
+    if (activeUnifiedTabId.value === tabId) {
+      activeUnifiedTabId.value = '';
+    }
+    gsdTab.value = null;
+    setScopedTabOrder(gsd.owningScope, getScopedTabOrder(gsd.owningScope).filter(id => id !== tabId));
+    return;
+  }
+
+  const ftTab = fileTreeTabs.value.find(t => t.id === tabId);
+  if (ftTab) {
+    const owner = getTerminalScope(ftTab.ownerScope);
+    if (owner.activeTabId.value === tabId) {
+      owner.activeTabId.value = '';
+    }
+    if (activeUnifiedTabId.value === tabId) {
+      activeUnifiedTabId.value = '';
+    }
+    fileTreeTabs.value = fileTreeTabs.value.filter(t => t.id !== tabId);
+    setScopedTabOrder(ftTab.ownerScope, getScopedTabOrder(ftTab.ownerScope).filter(id => id !== tabId));
+    return;
+  }
+
   if (!tab) return;
 
   if (tab.type === 'editor') {
@@ -2133,8 +2165,21 @@ function renderTab(
         />
       </span>
     );
+  } else if (tab.type === 'gsd') {
+    // Phase 22 gap-closure (22-09, re-applied 22-14 after 22-10 silent revert):
+    // explicit GSD branch so renderTab doesn't fall through to the git-changes
+    // catch-all and swap labels.
+    label = 'GSD';
+    tabTitle = 'GSD';
+    indicator = <ListChecks size={14} style={{ color: colors.accent, flexShrink: 0 }} />;
+  } else if (tab.type === 'file-tree') {
+    // Phase 22 gap-closure (22-09, re-applied 22-14 after 22-10 silent revert):
+    // explicit File Tree branch.
+    label = 'File Tree';
+    tabTitle = 'File Tree';
+    indicator = <FolderOpen size={14} style={{ color: colors.accent, flexShrink: 0 }} />;
   } else {
-    // git-changes
+    // git-changes (catch-all default; deliberate per exhaustive type narrowing)
     label = 'Git Changes';
     tabTitle = 'Git Changes';
     indicator = <FileDiff size={14} style={{ color: colors.accent, flexShrink: 0 }} />;

@@ -791,6 +791,59 @@ describe('Phase 22: dynamic sticky-removed tabs', () => {
       const closeSpans = container.querySelectorAll('span[title="Close tab"]');
       expect(closeSpans.length).toBeGreaterThan(0);
     });
+
+    // Phase 22 regression coverage (22-14): 22-10 silently reverted 22-09's fix
+    // because the existing tests only asserted structural presence (data-tab-id,
+    // close-span count). These tests assert the USER-OBSERVABLE behavior that
+    // was broken: label text content, close button side-effect.
+
+    it('GSD tab renders with the label text "GSD" (not "Git Changes")', () => {
+      gsdTab.value = { id: 'gsd', type: 'gsd', owningScope: 'main-0' };
+      const { container } = render(<UnifiedTabBar scope="main-0" />);
+      const gsdEl = container.querySelector('[data-tab-id="gsd"]') as HTMLElement;
+      expect(gsdEl).not.toBeNull();
+      expect(gsdEl.textContent).toContain('GSD');
+      expect(gsdEl.textContent).not.toContain('Git Changes');
+    });
+
+    it('File Tree tab renders with the label text "File Tree" (not "Git Changes")', () => {
+      fileTreeTabs.value = [{
+        id: 'file-tree-label-test',
+        type: 'file-tree',
+        ownerScope: 'right-0',
+      }];
+      const { container } = render(<UnifiedTabBar scope="right-0" />);
+      const ftEl = container.querySelector('[data-tab-id="file-tree-label-test"]') as HTMLElement;
+      expect(ftEl).not.toBeNull();
+      expect(ftEl.textContent).toContain('File Tree');
+      expect(ftEl.textContent).not.toContain('Git Changes');
+    });
+
+    it('clicking close (×) on GSD tab actually removes it (not a silent no-op)', () => {
+      gsdTab.value = { id: 'gsd', type: 'gsd', owningScope: 'main-0' };
+      const { container } = render(<UnifiedTabBar scope="main-0" />);
+      const gsdEl = container.querySelector('[data-tab-id="gsd"]') as HTMLElement;
+      expect(gsdEl).not.toBeNull();
+      const closeSpan = gsdEl.querySelector('span[title="Close tab"]') as HTMLElement;
+      expect(closeSpan).not.toBeNull();
+      fireEvent.click(closeSpan);
+      expect(gsdTab.value).toBeNull();
+    });
+
+    it('clicking close (×) on File Tree tab actually removes it (not a silent no-op)', () => {
+      fileTreeTabs.value = [{
+        id: 'file-tree-close-test',
+        type: 'file-tree',
+        ownerScope: 'right-0',
+      }];
+      const { container } = render(<UnifiedTabBar scope="right-0" />);
+      const ftEl = container.querySelector('[data-tab-id="file-tree-close-test"]') as HTMLElement;
+      expect(ftEl).not.toBeNull();
+      const closeSpan = ftEl.querySelector('span[title="Close tab"]') as HTMLElement;
+      expect(closeSpan).not.toBeNull();
+      fireEvent.click(closeSpan);
+      expect(fileTreeTabs.value.find(t => t.id === 'file-tree-close-test')).toBeUndefined();
+    });
   });
 
   // ── D-05: fixed titles no-rename ──────────────────────────────────────────
