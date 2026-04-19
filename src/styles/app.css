@@ -185,6 +185,21 @@
   background-color: var(--color-bg-terminal);
 }
 
+/* Phase 22 debug: the "hole" at pane bottom is the empty area below
+   xterm-scrollable-element inside xterm-viewport. Force the viewport
+   and scrollable-element to fill their parents with min-height: 100%
+   so there is no uncovered space below the rendered rows. */
+.xterm-viewport {
+  min-height: 100% !important;
+  height: 100% !important;
+  background-color: var(--color-bg-terminal) !important;
+}
+
+.xterm-scrollable-element {
+  min-height: 100% !important;
+  background-color: var(--color-bg-terminal) !important;
+}
+
 .server-pane {
   flex-shrink: 0;
   border-top: 1px solid var(--color-border);
