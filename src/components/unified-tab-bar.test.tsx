@@ -1110,4 +1110,48 @@ describe('Phase 22: dynamic sticky-removed tabs', () => {
       expect(spawnSubScopeForZone).not.toHaveBeenCalled();
     });
   });
+
+  // ── Phase 22 gap-closure 22-12: + button scope routing ──────────────────────
+  // UAT test 15 (a): + click routes new terminal to originating scope, not main-0.
+  //
+  // Test contract: buildDropdownItems(scope, overrides) is the SSoT for dropdown
+  // items. Production callers omit overrides; tests inject a spy `createTerminalTab`
+  // to observe scope propagation without triggering real PTY spawn.
+
+  describe('Phase 22 gap-closure (22-12): +-button scope routing', () => {
+    it('Terminal item action forwards originating scope main-1 to creator', async () => {
+      const { buildDropdownItems } = await import('./unified-tab-bar');
+      const createTerminalTab = vi.fn(async () => undefined);
+      const items = buildDropdownItems('main-1', { createTerminalTab });
+      const terminalItem = items.find(i => i.label === 'Terminal (Zsh)')!;
+      expect(terminalItem).toBeDefined();
+      terminalItem.action();
+      expect(createTerminalTab).toHaveBeenCalledTimes(1);
+      const firstCall = createTerminalTab.mock.calls[0][0];
+      expect(firstCall?.scope).toBe('main-1');
+      expect(firstCall?.isAgent).toBeFalsy();
+    });
+
+    it('Agent item action forwards originating scope right-1 to creator with isAgent=true', async () => {
+      const { buildDropdownItems } = await import('./unified-tab-bar');
+      const createTerminalTab = vi.fn(async () => undefined);
+      const items = buildDropdownItems('right-1', { createTerminalTab });
+      const agentItem = items.find(i => i.label === 'Agent')!;
+      expect(agentItem).toBeDefined();
+      agentItem.action();
+      expect(createTerminalTab).toHaveBeenCalledTimes(1);
+      const firstCall = createTerminalTab.mock.calls[0][0];
+      expect(firstCall?.scope).toBe('right-1');
+      expect(firstCall?.isAgent).toBe(true);
+    });
+
+    it('Terminal item action forwards originating scope main-2', async () => {
+      const { buildDropdownItems } = await import('./unified-tab-bar');
+      const createTerminalTab = vi.fn(async () => undefined);
+      const items = buildDropdownItems('main-2', { createTerminalTab });
+      const terminalItem = items.find(i => i.label === 'Terminal (Zsh)')!;
+      terminalItem.action();
+      expect(createTerminalTab.mock.calls[0][0]?.scope).toBe('main-2');
+    });
+  });
 });
