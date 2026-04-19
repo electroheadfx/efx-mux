@@ -4,6 +4,7 @@
 // Migrated to TypeScript (Phase 6.1)
 
 import { updateLayout, activeProjectName, sidebarCollapsed } from './state-manager';
+import { snapToCell, syncIncrementsDebounced } from './window/resize-increments';
 
 interface DragCallbacksV {
   onDrag: (clientX: number) => void;
@@ -29,9 +30,11 @@ export function initDragManager(): void {
     sidebarHandle.dataset.dragInit = 'true';
     makeDragV(sidebarHandle, {
       onDrag(clientX: number) {
-        // clientX is the new sidebar right edge.
+        // Snap to cell boundary before clamping (Architecture C live drag quantization).
+        const snapped = snapToCell(clientX, 'x');
+        // clientX / snapped is the new sidebar right edge.
         // Clamp: min 40px (icon strip), max 400px.
-        const w = Math.min(400, Math.max(40, clientX));
+        const w = Math.min(400, Math.max(40, snapped));
         // Bug fix 22-sidebar-resize-dead: when the sidebar is collapsed the CSS rule
         // `.sidebar.collapsed { width: 40px }` has higher specificity than
         // `width: var(--sidebar-w)`, so updating the CSS var alone has no visual
@@ -45,8 +48,10 @@ export function initDragManager(): void {
         document.documentElement.style.setProperty('--sidebar-w', `${w}px`);
       },
       onEnd(clientX: number) {
-        const w = Math.min(400, Math.max(40, clientX));
+        const snapped = snapToCell(clientX, 'x');
+        const w = Math.min(400, Math.max(40, snapped));
         updateLayout({ 'sidebar-w': `${w}px`, 'sidebar-collapsed': false });
+        syncIncrementsDebounced();
       },
     });
   }
@@ -56,19 +61,23 @@ export function initDragManager(): void {
   if (mainRightHandle) {
     makeDragV(mainRightHandle, {
       onDrag(clientX: number) {
-        // clientX is the left edge of the right panel.
+        // Snap to cell boundary before converting to percent.
+        const snapped = snapToCell(clientX, 'x');
+        // snapped is the left edge of the right panel.
         // Convert to a % of total window width for responsive behavior.
         const totalW = window.innerWidth;
-        const rawPct = ((totalW - clientX) / totalW) * 100;
+        const rawPct = ((totalW - snapped) / totalW) * 100;
         // Clamp: min 10%, max 50%
         const pct = Math.min(50, Math.max(10, rawPct));
         document.documentElement.style.setProperty('--right-w', `${pct.toFixed(1)}%`);
       },
       onEnd(clientX: number) {
+        const snapped = snapToCell(clientX, 'x');
         const totalW = window.innerWidth;
-        const rawPct = ((totalW - clientX) / totalW) * 100;
+        const rawPct = ((totalW - snapped) / totalW) * 100;
         const pct = Math.min(50, Math.max(10, rawPct));
         updateLayout({ 'right-w': `${pct.toFixed(1)}%` });
+        syncIncrementsDebounced();
       },
     });
   }
@@ -79,22 +88,26 @@ export function initDragManager(): void {
     mainHHandle.dataset.dragInit = 'true';
     makeDragH(mainHHandle, {
       onDrag(clientY: number) {
-        // Server pane is at the bottom of .main-panel. Its height = container bottom - clientY.
+        // Snap to cell boundary before computing server pane height.
+        const snapped = snapToCell(clientY, 'y');
+        // Server pane is at the bottom of .main-panel. Its height = container bottom - snapped.
         const mainPanel = document.querySelector<HTMLElement>('.main-panel');
         if (!mainPanel) return;
         const rect = mainPanel.getBoundingClientRect();
-        const newHeight = rect.bottom - clientY;
+        const newHeight = rect.bottom - snapped;
         // Clamp: min 100px, max 50% of main panel height
         const clamped = Math.min(rect.height * 0.5, Math.max(100, newHeight));
         document.documentElement.style.setProperty('--server-pane-h', `${Math.round(clamped)}px`);
       },
       onEnd(clientY: number) {
+        const snapped = snapToCell(clientY, 'y');
         const mainPanel = document.querySelector<HTMLElement>('.main-panel');
         if (!mainPanel) return;
         const rect = mainPanel.getBoundingClientRect();
-        const newHeight = rect.bottom - clientY;
+        const newHeight = rect.bottom - snapped;
         const clamped = Math.min(rect.height * 0.5, Math.max(100, newHeight));
         updateLayout({ 'server-pane-height': `${Math.round(clamped)}px` });
+        syncIncrementsDebounced();
       },
     });
   }
@@ -153,10 +166,12 @@ export function attachIntraZoneHandles(zone: 'main' | 'right'): void {
 
     makeDragH(handle, {
       onDrag(clientY: number) {
+        // Snap to cell boundary before intra-zone height math.
+        const snapped = snapToCell(clientY, 'y');
         const panel = document.querySelector<HTMLElement>(`.${zone}-panel`);
         if (!panel) return;
         const rect = panel.getBoundingClientRect();
-        const pct = ((clientY - rect.top) / rect.height) * 100;
+        const pct = ((snapped - rect.top) / rect.height) * 100;
         const clamped = Math.max(10, Math.min(90, pct));
         document.documentElement.style.setProperty(
           `--${zone}-split-${idx}-pct`,
@@ -182,10 +197,12 @@ export function attachIntraZoneHandles(zone: 'main' | 'right'): void {
         }
       },
       onEnd(clientY: number) {
+        // Snap to cell boundary before persisting.
+        const snapped = snapToCell(clientY, 'y');
         const panel = document.querySelector<HTMLElement>(`.${zone}-panel`);
         if (!panel) return;
         const rect = panel.getBoundingClientRect();
-        const pct = ((clientY - rect.top) / rect.height) * 100;
+        const pct = ((snapped - rect.top) / rect.height) * 100;
         const clamped = Math.max(10, Math.min(90, pct));
         // Phase 22 gap-closure 22-07: persist per-project so project A's split
         // ratio does not leak into project B when switching.
@@ -194,6 +211,7 @@ export function attachIntraZoneHandles(zone: 'main' | 'right'): void {
           ? `${zone}-split-${idx}-pct:${project}`
           : `${zone}-split-${idx}-pct`;
         void updateLayout({ [key]: `${clamped.toFixed(1)}%` });
+        syncIncrementsDebounced();
       },
     });
   });

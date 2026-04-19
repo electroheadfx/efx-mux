@@ -8,6 +8,7 @@ import { Terminal } from '@xterm/xterm';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { FitAddon } from '@xterm/addon-fit';
 import { invoke } from '@tauri-apps/api/core';
+import { syncIncrementsDebounced } from '../window/resize-increments';
 
 export interface TerminalOptions {
   theme?: Record<string, string>;
@@ -167,6 +168,12 @@ export function createTerminal(container: HTMLElement, options: TerminalOptions 
   }
   tryWebGL();
 
+  // Register onRender catch-all AFTER tryWebGL() so the first onRender fires
+  // with the chosen renderer's measured cell geometry. This is a low-fi
+  // fallback that coalesces into the shared 100ms debounce — cheap even if it
+  // fires frequently.
+  terminal.onRender(() => syncIncrementsDebounced());
+
   // Initial fit: defer two animation frames so the browser has completed
   // flex layout before FitAddon measures the container. A synchronous
   // fit() call here measures the container at its pre-layout (0) height
@@ -175,6 +182,7 @@ export function createTerminal(container: HTMLElement, options: TerminalOptions 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       fitAddon.fit();
+      syncIncrementsDebounced(); // sync after first real fit so cell dims are valid
     });
   });
 

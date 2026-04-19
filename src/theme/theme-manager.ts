@@ -11,6 +11,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
+import { syncIncrementsDebounced } from '../window/resize-increments';
 
 
 // ---------------------------------------------------------------------------
@@ -117,6 +118,9 @@ export function applyTheme(theme: ThemeData): void {
       }
       reg.fitAddon.fit();
     }
+    // Re-sync window increments after font/size changes — one debounced call
+    // coalesces even if applyTheme fires multiple times per theme change.
+    syncIncrementsDebounced();
   }
 }
 

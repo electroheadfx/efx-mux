@@ -190,3 +190,113 @@ describe('Phase 22 gap-closure (22-11): attachIntraZoneHandles fresh-handle bind
     expect(document.documentElement.style.getPropertyValue('--main-split-0-pct')).toMatch(/^\d+(\.\d+)?%$/);
   });
 });
+
+describe('Phase quick-260419-l4c: snap-to-cell quantization', () => {
+  // Note: existing tests above mount terminals WITHOUT _xterm._core, so snapToCell
+  // returns px unchanged (pass-through) in those tests — their assertions remain valid.
+  // These new tests explicitly mount a stub terminal so snapToCell quantizes.
+
+  function setupSnapDOM() {
+    // initDragManager() early-returns when document.getElementById('app') is null.
+    // Wrap everything in #app so initDragManager() proceeds.
+    document.body.innerHTML = `
+      <div id="app">
+        <div class="main-panel" style="height: 400px; display: flex; flex-direction: column; position: relative; top: 0; left: 0;">
+          <div class="sub-scope-pane" data-subscope="main-0" style="flex: 1; height: 200px;"></div>
+          <div class="split-handle-h-intra" data-handle="main-intra-0" style="height: 4px;"></div>
+          <div class="sub-scope-pane" data-subscope="main-1" style="flex: 1; height: 200px;"></div>
+          <div class="split-handle-v" data-handle="sidebar-main"></div>
+        </div>
+      </div>
+    `;
+    // Mount a stub .xterm inside .main-panel so snapToCell can read cell geometry.
+    const panel = document.querySelector<HTMLElement>('.main-panel')!;
+    const xterm = document.createElement('div');
+    xterm.className = 'xterm';
+    // Cell geometry: cellW=10, cellH=20, origin at (40, 100)
+    (xterm as any)._xterm = {
+      _core: {
+        _renderService: {
+          dimensions: {
+            css: { cell: { width: 10, height: 20 } },
+          },
+        },
+      },
+    };
+    xterm.getBoundingClientRect = () =>
+      ({
+        left: 40,
+        top: 100,
+        right: 840,
+        bottom: 700,
+        width: 800,
+        height: 600,
+        x: 40,
+        y: 100,
+        toJSON: () => ({}),
+      } as DOMRect);
+    panel.appendChild(xterm);
+  }
+
+  beforeEach(() => {
+    setupSnapDOM();
+    mockIPC((cmd: string) => {
+      if (cmd === 'load_state') return MOCK_STATE;
+      if (cmd === 'save_state') return undefined;
+      if (cmd === 'set_content_resize_increments') return undefined;
+      if (cmd === 'clear_content_resize_increments') return undefined;
+      return undefined;
+    });
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+    document.querySelectorAll('[data-handle]').forEach(el => {
+      delete (el as HTMLElement).dataset.dragInit;
+    });
+  });
+
+  it('sidebar-main onDrag quantizes --sidebar-w to cellW multiples relative to pane origin', () => {
+    // origin=40, cellW=10
+    // clientX=205 → snapToCell(205,'x') = 40 + round((205-40)/10)*10 = 40 + round(16.5)*10 = 40 + 170 = 210
+    // The sidebar handle's onDrag then clamps(40, 400, 210) = 210 and sets --sidebar-w: "210px"
+    dragManager.initDragManager();
+    const handle = document.querySelector<HTMLElement>('[data-handle="sidebar-main"]')!;
+
+    handle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 0 }));
+    document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 205 }));
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: 205 }));
+
+    const sidebarW = document.documentElement.style.getPropertyValue('--sidebar-w');
+    // The snapped value 210 is cell-aligned (offset 170 = 17 cells × 10px)
+    expect(sidebarW).toBe('210px');
+  });
+
+  it('intra-zone onDrag snaps clientY to cellH before height math', () => {
+    // origin=100, cellH=20
+    // clientY=253 → snapToCell(253,'y') = 100 + round((253-100)/20)*20 = 100 + round(7.65)*20 = 100 + 160 = 260
+    // Verify that pane heights are computed from snapped=260, not raw 253.
+    dragManager.attachIntraZoneHandles('main');
+    const handle = document.querySelector<HTMLElement>('[data-handle="main-intra-0"]')!;
+    const pane0 = document.querySelector<HTMLElement>('[data-subscope="main-0"]')!;
+    const pane1 = document.querySelector<HTMLElement>('[data-subscope="main-1"]')!;
+
+    const panel = document.querySelector<HTMLElement>('.main-panel')!;
+    Object.defineProperty(panel, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ top: 0, height: 400, bottom: 400, left: 0, right: 100, width: 100, x: 0, y: 0, toJSON: () => ({}) } as DOMRect),
+    });
+    Object.defineProperty(pane0, 'offsetHeight', { configurable: true, value: 200 });
+    Object.defineProperty(pane1, 'offsetHeight', { configurable: true, value: 200 });
+
+    handle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientY: 0 }));
+    document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientY: 253 }));
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientY: 253 }));
+
+    // With snapped clientY=260: pct = (260-0)/400 = 65%, clamped = 65%
+    // newPane0Px = 0.65 * 400 = 260px
+    const final0 = parseFloat(pane0.style.height || '0');
+    // Should be 260px (from snapped=260), not ~252.5px (from raw=253)
+    expect(final0).toBeCloseTo(260, 0);
+  });
+});

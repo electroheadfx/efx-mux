@@ -26,6 +26,7 @@ import { ToastContainer, showToast } from './components/toast';
 import { ConfirmModal, showConfirmModal } from './components/confirm-modal';
 import { initDragManager } from './drag-manager';
 import { initTheme, registerTerminal, toggleThemeMode } from './theme/theme-manager';
+import { syncIncrementsDebounced, clearWindowIncrements } from './window/resize-increments';
 import { createNewTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs, saveProjectTabs, hasProjectTabs, restoreProjectTabs, getTerminalScope, seedCounterFromRestoredTabs } from './components/terminal-tabs';
 import { getActiveSubScopesForZone, shouldSeedFirstLaunch, markFirstLaunchSeeded } from './components/sub-scope-pane';
 import {
@@ -216,6 +217,33 @@ async function bootstrap() {
 
   // Step 4: Wire drag handles (must be after render so [data-handle] elements exist)
   requestAnimationFrame(() => initDragManager());
+
+  // Step 4b: Architecture C — enable NSWindow contentResizeIncrements only when
+  // the main-0 scope's active tab is a terminal. For editor/file-tree/gsd/
+  // git-changes tabs, clear increments so the window resizes freely by pixel.
+  effect(() => {
+    const main0 = getTerminalScope('main-0');
+    const activeId = main0.activeTabId.value;
+    // If the active id appears in main-0's terminal tabs list, it's a terminal.
+    const isTerminal = main0.tabs.value.some(t => t.id === activeId);
+    if (isTerminal) {
+      syncIncrementsDebounced();
+    } else {
+      void clearWindowIncrements();
+    }
+  });
+
+  // Step 4c: DPR-change listener — dragging the window between 1x and 2x
+  // monitors triggers xterm cell remeasure; keep the window snap aligned.
+  try {
+    const mql1 = window.matchMedia('(resolution: 1dppx)');
+    const mql2 = window.matchMedia('(resolution: 2dppx)');
+    const onDpr = () => syncIncrementsDebounced();
+    mql1.addEventListener('change', onDpr);
+    mql2.addEventListener('change', onDpr);
+  } catch {
+    // Older WKWebView may not expose matchMedia for resolution — non-blocking.
+  }
 
   // Step 5: Init project system
   // Suppress editor tab persist until restore completes — prevents empty-array overwrite race
