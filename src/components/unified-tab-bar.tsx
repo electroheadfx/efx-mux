@@ -182,7 +182,7 @@ function _getScopeOrderMap(scope: TerminalScope): Map<string, string[]> {
 }
 
 /** Read the dynamic-tab order for a scope + active project. */
-function getScopedTabOrder(scope: TerminalScope): string[] {
+export function getScopedTabOrder(scope: TerminalScope): string[] {
   const name = activeProjectName.value;
   if (!name) return [];
   const inner = _getScopeOrderMap(scope);
@@ -190,7 +190,7 @@ function getScopedTabOrder(scope: TerminalScope): string[] {
 }
 
 /** Replace the dynamic-tab order for a scope + active project. */
-function setScopedTabOrder(scope: TerminalScope, order: string[]): void {
+export function setScopedTabOrder(scope: TerminalScope, order: string[]): void {
   const name = activeProjectName.value;
   if (!name) return;
   // Strip the singleton gsd ID — singleton is stored in gsdTab signal, not in scoped order.

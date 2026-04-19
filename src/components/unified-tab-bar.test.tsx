@@ -1155,3 +1155,73 @@ describe('Phase 22: dynamic sticky-removed tabs', () => {
     });
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 22 gap-closure (22-13) — editor reorder + cross-scope drop + fallback
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// UAT test 6 (major): editor tabs were not reorderable via drag, cross-scope
+// drops required a visible insertion marker, and drops without a marker were
+// silently rejected. This plan makes editor tabs first-class draggable with:
+//   1. Intra-scope reorder via handleCrossScopeDrop when sourceScope === targetScope
+//   2. Cross-scope move with insert-at-target (when _targetId supplied) or append-last
+//   3. Fallback append-last when _targetId === '' (no insertion marker hit)
+
+describe('Phase 22 gap-closure (22-13): editor reorder + cross-scope drop + append fallback', () => {
+  beforeEach(() => {
+    projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'claude' } as any];
+    activeProjectName.value = 'testproj';
+    setProjectEditorTabs([]);
+    // Reset scoped orders for the three scopes exercised below.
+    (async () => {
+      const mod = await import('./unified-tab-bar');
+      mod.setScopedTabOrder('main-0', []);
+      mod.setScopedTabOrder('main-1', []);
+    })();
+  });
+
+  afterEach(() => {
+    cleanup();
+    setProjectEditorTabs([]);
+  });
+
+  it('editor cross-scope drop moves tab to target scope (append-last)', async () => {
+    const { setScopedTabOrder, getScopedTabOrder } = await import('./unified-tab-bar');
+    setProjectEditorTabs([
+      { id: 'editor-1', type: 'editor', filePath: '/a', fileName: 'a.ts', content: '', ownerScope: 'main-0' } as any,
+    ]);
+    setScopedTabOrder('main-0', ['editor-1']);
+    handleCrossScopeDrop('editor-1', 'main-0', '', 'main-1', false);
+    expect(editorTabs.value.find(t => t.id === 'editor-1')!.ownerScope).toBe('main-1');
+    expect(getScopedTabOrder('main-0')).not.toContain('editor-1');
+    expect(getScopedTabOrder('main-1')).toContain('editor-1');
+  });
+
+  it('drop on empty-string target id falls back to append-last in target scope', async () => {
+    const { setScopedTabOrder, getScopedTabOrder } = await import('./unified-tab-bar');
+    setProjectEditorTabs([
+      { id: 'editor-1', type: 'editor', filePath: '/a', fileName: 'a.ts', content: '', ownerScope: 'main-0' } as any,
+      { id: 'editor-2', type: 'editor', filePath: '/b', fileName: 'b.ts', content: '', ownerScope: 'main-1' } as any,
+    ]);
+    setScopedTabOrder('main-0', ['editor-1']);
+    setScopedTabOrder('main-1', ['editor-2']);
+    // Empty target id should append, not reject.
+    handleCrossScopeDrop('editor-1', 'main-0', '', 'main-1', false);
+    const main1Order = getScopedTabOrder('main-1');
+    expect(main1Order[main1Order.length - 1]).toBe('editor-1');
+  });
+
+  it('intra-scope editor reorder via handleCrossScopeDrop with same source/target scope updates order', async () => {
+    const { setScopedTabOrder, getScopedTabOrder } = await import('./unified-tab-bar');
+    setProjectEditorTabs([
+      { id: 'editor-1', type: 'editor', filePath: '/a', fileName: 'a.ts', content: '', ownerScope: 'main-0' } as any,
+      { id: 'editor-2', type: 'editor', filePath: '/b', fileName: 'b.ts', content: '', ownerScope: 'main-0' } as any,
+      { id: 'editor-3', type: 'editor', filePath: '/c', fileName: 'c.ts', content: '', ownerScope: 'main-0' } as any,
+    ]);
+    setScopedTabOrder('main-0', ['editor-1', 'editor-2', 'editor-3']);
+    // Move editor-1 to after editor-3 (intra-bar reorder).
+    handleCrossScopeDrop('editor-1', 'main-0', 'editor-3', 'main-0', true /* insertAfter */);
+    const order = getScopedTabOrder('main-0');
+    expect(order.indexOf('editor-1')).toBeGreaterThan(order.indexOf('editor-3'));
+  });
+});
