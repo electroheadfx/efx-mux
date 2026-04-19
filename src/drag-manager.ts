@@ -3,7 +3,7 @@
 // Ratios persisted via state-manager.ts (Phase 4: state.json via Rust backend).
 // Migrated to TypeScript (Phase 6.1)
 
-import { updateLayout, activeProjectName } from './state-manager';
+import { updateLayout, activeProjectName, sidebarCollapsed } from './state-manager';
 
 interface DragCallbacksV {
   onDrag: (clientX: number) => void;
@@ -24,17 +24,29 @@ export function initDragManager(): void {
 
   // -- Sidebar <-> Main vertical handle ----------------------------------------
   const sidebarHandle = document.querySelector<HTMLElement>('[data-handle="sidebar-main"]');
-  if (sidebarHandle) {
+  // Idempotency guard: skip if already initialized (matches pattern used by mainHHandle).
+  if (sidebarHandle && !sidebarHandle.dataset.dragInit) {
+    sidebarHandle.dataset.dragInit = 'true';
     makeDragV(sidebarHandle, {
       onDrag(clientX: number) {
         // clientX is the new sidebar right edge.
         // Clamp: min 40px (icon strip), max 400px.
         const w = Math.min(400, Math.max(40, clientX));
+        // Bug fix 22-sidebar-resize-dead: when the sidebar is collapsed the CSS rule
+        // `.sidebar.collapsed { width: 40px }` has higher specificity than
+        // `width: var(--sidebar-w)`, so updating the CSS var alone has no visual
+        // effect. Clear the collapsed flag first so the class is removed, then
+        // immediately set the var to the desired drag width.
+        // The Preact signal effect fires synchronously and sets --sidebar-w: '200px';
+        // the setProperty call immediately after overrides that with the drag value.
+        if (sidebarCollapsed.value) {
+          sidebarCollapsed.value = false;
+        }
         document.documentElement.style.setProperty('--sidebar-w', `${w}px`);
       },
       onEnd(clientX: number) {
         const w = Math.min(400, Math.max(40, clientX));
-        updateLayout({ 'sidebar-w': `${w}px` });
+        updateLayout({ 'sidebar-w': `${w}px`, 'sidebar-collapsed': false });
       },
     });
   }

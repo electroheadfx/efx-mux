@@ -17,7 +17,10 @@ export function RightPanel() {
       style={{
         backgroundColor: colors.bgBase,
         borderLeft: `1px solid ${colors.bgBorder}`,
-        flex: 1,
+        // Bug fix 22-sidebar-resize-dead: removed flex:1 (introduced in Phase 22-04).
+        // flex:1 shorthand sets flex-basis:0% which overrides width:var(--right-w)
+        // from the CSS class, making the main-right drag handle non-functional.
+        // CSS class .right-panel already provides: flex-shrink:0; width:var(--right-w).
         overflow: 'hidden',
       }}
     >
