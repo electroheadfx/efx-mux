@@ -4,7 +4,6 @@
 // Migrated to TypeScript (Phase 6.1)
 
 import { updateLayout, activeProjectName } from './state-manager';
-import { dispatchLayoutChanged } from './terminal/resize-handler';
 
 interface DragCallbacksV {
   onDrag: (clientX: number) => void;
@@ -169,11 +168,6 @@ export function attachIntraZoneHandles(zone: 'main' | 'right'): void {
             pane1.style.flex = 'none';
           }
         }
-
-        // Debug 22-terminal-not-filling-pane: notify every mounted terminal
-        // that pane geometry changed so FitAddon re-fits. ResizeObserver alone
-        // is unreliable for pre-existing terminals across split transitions.
-        dispatchLayoutChanged();
       },
       onEnd(clientY: number) {
         const panel = document.querySelector<HTMLElement>(`.${zone}-panel`);
@@ -188,11 +182,6 @@ export function attachIntraZoneHandles(zone: 'main' | 'right'): void {
           ? `${zone}-split-${idx}-pct:${project}`
           : `${zone}-split-${idx}-pct`;
         void updateLayout({ [key]: `${clamped.toFixed(1)}%` });
-
-        // Final refit after drag ends (belt-and-suspenders — onDrag already
-        // dispatches on every movement but onEnd catches the terminal state
-        // if the final movement did not trigger a distinct fit).
-        dispatchLayoutChanged();
       },
     });
   });
