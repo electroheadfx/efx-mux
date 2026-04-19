@@ -159,15 +159,19 @@
   position: relative;
 }
 
-.terminal-area .xterm {
+.terminal-area .xterm,
+.terminal-containers .xterm {
   height: 100%;
+  width: 100%;
 }
 
-.terminal-area .xterm-viewport {
+.terminal-area .xterm-viewport,
+.terminal-containers .xterm-viewport {
   background-color: var(--color-bg-terminal) !important;
 }
 
-.terminal-area .xterm-screen {
+.terminal-area .xterm-screen,
+.terminal-containers .xterm-screen {
   background-color: var(--color-bg-terminal);
 }
 
