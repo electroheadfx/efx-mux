@@ -39,7 +39,14 @@ export function createTerminal(container: HTMLElement, options: TerminalOptions 
       cursor: '#258ad1',
       selectionBackground: '#3e454a',
     },
-    overviewRuler: { width: 10 },
+    // overviewRuler.width is subtracted by FitAddon from the available width
+    // before cols are computed, producing a permanent right-side gap equal to
+    // this value. It also sets the VS Code scrollbar widget width (hidden via
+    // CSS). FitAddon falls back to 14 when width is 0/undefined (`|| 14`), so
+    // 1 is the minimum we can set without triggering the fallback. This yields
+    // a ~1px right gap instead of 10px, so tmux status bar visually fills the
+    // pane width (gap is one pixel-ish, invisible against terminal bg).
+    overviewRuler: { width: 1 },
     allowProposedApi: true,
   });
 
