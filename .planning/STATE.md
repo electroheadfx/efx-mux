@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: Workspace Evolution
 status: executing
-stopped_at: Completed 22-13-PLAN.md
-last_updated: "2026-04-19T06:28:12.731Z"
+stopped_at: Phase 22 UAT Round 2 FAILED — see 22-14-SUMMARY.md; user decision needed (hotfix-chain vs stale-build-check vs defer-to-phase-23)
+last_updated: "2026-04-19T07:05:43.026Z"
 last_activity: 2026-04-19
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 49
-  completed_plans: 50
+  completed_plans: 53
   percent: 100
 ---
 
@@ -76,6 +76,7 @@ Progress: [██████████] 100% (Phase 17)
 - [Phase 22]: Plan 22-11: [data-tablist-scope] is the canonical tab-bar wrapper selector; no literal .tab-bar class exists in the codebase. CSS adds border-top via [data-tablist-scope] (matches existing .drop-target pattern).
 - [Phase 22-12]: counter behavior = monotonic; preserves PTY-safety and D-12 stable-name invariant (deleting Terminal-N does not reuse slot N; next slot is max+1). Rationale: orphan tmux sessions may survive slot deletion → reuse would re-attach stale content; matches D-12 "PTY session name is stable on scope move"; simpler (one integer counter) vs. gap-fill (scan all 6 scopes per allocation).
 - [Phase 22]: Plan 22-13: Editor drag refactor — editor branch promoted above sourceScope===targetScope early-return in handleCrossScopeDrop to enable intra-scope reorder (UAT test 6 major). onDocMouseUp drop resolver rewritten: scope-first resolution via [data-tablist-scope] wrapper, empty targetId routes to append-last fallback in handleCrossScopeDrop, nearest-snap fallback constrained to drop target's scope (no cross-scope bleed).
+- [Phase 22]: Phase 22 UAT Round 2 failed with 5 regressions directly contradicting 22-08, 22-09, and 22-13 SUMMARY.md claims — gap-closure batch landed code commits but did not achieve end-to-end UAT closure; Phase 22 remains In Progress, 22-05 live, REQUIREMENTS untouched
 
 ### Roadmap Evolution
 
@@ -91,6 +92,7 @@ None.
 - Git push credential handling: Must decide PTY shell-out vs git2-credentials crate (Phase 16)
 - Tauri drag-drop bug #14624: Verify fix in 2.10.3 before Phase 18
 - Next: Phase 15 planning/execution
+- Phase 22 UAT Round 2 FAILED (2026-04-19): 5 regressions + 4 residual issues. Contradictions: R-6/R-7/R-8 contradict 22-09 (GSD/File Tree labels still 'Git Changes', close buttons non-functional); R-10 contradicts 22-08 (tabs not persisted across restart); R-5 contradicts 22-13 (moved tab not activated on receiver). New regression R-11: cross-scope terminal activation erases main-panel file content. Phase 22 NOT complete. 22-05-PLAN.md NOT superseded. REQUIREMENTS.md NOT modified. See 22-14-SUMMARY.md for full contradiction analysis and paths forward.
 
 ## Quick Tasks Completed
 
@@ -148,8 +150,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-19T06:28:12.728Z
-Stopped at: Completed 22-13-PLAN.md
+Last session: 2026-04-19T07:05:43.023Z
+Stopped at: Phase 22 UAT Round 2 FAILED — see 22-14-SUMMARY.md; user decision needed (hotfix-chain vs stale-build-check vs defer-to-phase-23)
 Resume file: None
 
 Next: `/gsd-execute-phase 15` or `/gsd-code-review-fix 17` to fix remaining warnings
