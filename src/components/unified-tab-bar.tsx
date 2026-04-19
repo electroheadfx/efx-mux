@@ -1490,7 +1490,16 @@ function onDocMouseUp(e: MouseEvent): void {
     return;
   }
 
-  // Find drop target
+  // Phase 22 gap-closure (22-13): Resolve target scope FIRST via the tab-bar
+  // wrapper under cursor, not via the nearest tab. This ensures drops on empty
+  // pane tab-bars route to that scope (append-last) rather than being "snapped"
+  // to some distant tab in another scope. Fallback-append is then handled
+  // inside handleCrossScopeDrop when targetId === ''.
+  const dropTargetEl = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+  const scopeWrapperEl = dropTargetEl?.closest('[data-tablist-scope]') as HTMLElement | null;
+  const dropTargetScope = scopeWrapperEl?.getAttribute('data-tablist-scope') as TerminalScope | null;
+
+  // Find drop target tab (if any) within the cursor's x-range.
   const tabEls = document.querySelectorAll<HTMLElement>('[data-tab-id]');
   let targetId: string | null = null;
   let insertAfter = false;
@@ -1505,10 +1514,51 @@ function onDocMouseUp(e: MouseEvent): void {
     }
   }
 
-  // If dropped outside tabs, find nearest
-  if (!targetId) {
+  // Cross-scope drop path (including empty-marker fallback: targetId === '').
+  if (
+    reorder.sourceScope &&
+    dropTargetScope &&
+    dropTargetScope !== reorder.sourceScope
+  ) {
+    handleCrossScopeDrop(
+      reorder.sourceId,
+      reorder.sourceScope,
+      targetId ?? '',
+      dropTargetScope,
+      insertAfter,
+    );
+    cleanupReorder();
+    return;
+  }
+
+  // Intra-scope editor reorder: editor sources drop on their own scope's tab-bar.
+  if (
+    reorder.sourceScope &&
+    dropTargetScope &&
+    dropTargetScope === reorder.sourceScope &&
+    reorder.sourceId.startsWith('editor-') &&
+    targetId &&
+    targetId !== reorder.sourceId
+  ) {
+    handleCrossScopeDrop(
+      reorder.sourceId,
+      reorder.sourceScope,
+      targetId,
+      dropTargetScope,
+      insertAfter,
+    );
+    cleanupReorder();
+    return;
+  }
+
+  // If dropped outside any tab but inside the same scope wrapper, snap to nearest
+  // tab in THAT scope only (preserving legacy intra-bar nearest-snap behavior for
+  // non-editor tab kinds).
+  if (!targetId && dropTargetScope) {
     let closestDist = Infinity;
     for (const el of tabEls) {
+      const wrapper = el.closest('[data-tablist-scope]') as HTMLElement | null;
+      if (wrapper?.getAttribute('data-tablist-scope') !== dropTargetScope) continue;
       const rect = el.getBoundingClientRect();
       const center = rect.left + rect.width / 2;
       const dist = Math.abs(e.clientX - center);
@@ -1521,26 +1571,7 @@ function onDocMouseUp(e: MouseEvent): void {
   }
 
   if (targetId && targetId !== reorder.sourceId) {
-    // ── Fix #5 (20-05-E): cross-scope drop detection ──────────────────────
-    const targetEl = Array.from(tabEls).find(el => el.dataset.tabId === targetId) ?? null;
-    const targetScope = (targetEl?.closest('[data-tablist-scope]') as HTMLElement | null)
-      ?.getAttribute('data-tablist-scope') as TerminalScope | null;
-    if (
-      reorder.sourceScope &&
-      targetScope &&
-      targetScope !== reorder.sourceScope
-    ) {
-      handleCrossScopeDrop(
-        reorder.sourceId,
-        reorder.sourceScope,
-        targetId,
-        targetScope,
-        insertAfter,
-      );
-      cleanupReorder();
-      return;
-    }
-    // ── Same-scope reorder (existing behavior) ───────────────────────────
+    // ── Same-scope reorder (existing behavior for non-editor tabs) ──────
     const ordered = getOrderedTabs();
     const allIds = ordered.map(t => t.id);
     const sourceIdx = allIds.indexOf(reorder.sourceId);
@@ -1573,6 +1604,78 @@ export function handleCrossScopeDrop(
   targetScope: TerminalScope,
   _insertAfter: boolean,
 ): void {
+  // Phase 22 gap-closure (22-13): editor tabs — handle BOTH intra-scope reorder
+  // AND cross-scope move in one branch. This branch is placed BEFORE the
+  // sourceScope === targetScope early-return so editor tabs can be reordered
+  // within the same scope (UAT test 6).
+  if (sourceId.startsWith('editor-')) {
+    const edTab = editorTabs.value.find(t => t.id === sourceId);
+    if (!edTab) return;
+    const currentOwnerScope = edTab.ownerScope ?? 'main-0';
+
+    // Intra-scope reorder: same scope, explicit target tab — reposition within order.
+    if (currentOwnerScope === targetScope && _targetId) {
+      const order = getScopedTabOrder(targetScope).filter(id => id !== sourceId);
+      const targetIdx = order.indexOf(_targetId);
+      if (targetIdx === -1) {
+        // Target not found in order — Fallback: append to end.
+        setScopedTabOrder(targetScope, [...order, sourceId]);
+        return;
+      }
+      const insertAt = _insertAfter ? targetIdx + 1 : targetIdx;
+      order.splice(insertAt, 0, sourceId);
+      setScopedTabOrder(targetScope, order);
+      return;
+    }
+
+    // Same scope, no target tab (drop on empty area of own tab-bar): no-op.
+    if (currentOwnerScope === targetScope) return;
+
+    // Cross-scope move: flip ownerScope and update scoped orders.
+    const updated = editorTabs.value.map(t =>
+      t.id === sourceId ? { ...t, ownerScope: targetScope } : t,
+    );
+    setProjectEditorTabs(updated);
+
+    setScopedTabOrder(
+      sourceScope,
+      getScopedTabOrder(sourceScope).filter(id => id !== sourceId),
+    );
+
+    if (_targetId) {
+      // Insert at target position.
+      const targetOrder = getScopedTabOrder(targetScope).filter(id => id !== sourceId);
+      const targetIdx = targetOrder.indexOf(_targetId);
+      const insertAt = targetIdx === -1
+        ? targetOrder.length
+        : (_insertAfter ? targetIdx + 1 : targetIdx);
+      targetOrder.splice(insertAt, 0, sourceId);
+      setScopedTabOrder(targetScope, targetOrder);
+    } else {
+      // Fallback: append to end of target scope (fallback when _targetId === '').
+      setScopedTabOrder(
+        targetScope,
+        [...getScopedTabOrder(targetScope).filter(id => id !== sourceId), sourceId],
+      );
+    }
+
+    if (targetScope.startsWith('right')) {
+      getTerminalScope('right-0').activeTabId.value = sourceId;
+      if (activeUnifiedTabId.value === sourceId) {
+        const remainingMain = computeDynamicTabsForScope('main-0');
+        activeUnifiedTabId.value = remainingMain[0]?.id ?? '';
+      }
+    } else {
+      activeUnifiedTabId.value = sourceId;
+      const rightScope = getTerminalScope('right-0');
+      if (rightScope.activeTabId.value === sourceId) {
+        const remainingRight = computeDynamicTabsForScope('right-0');
+        rightScope.activeTabId.value = remainingRight[0]?.id ?? '';
+      }
+    }
+    return;
+  }
+
   if (sourceScope === targetScope) return;
 
   // GSD singleton drag
@@ -1606,6 +1709,9 @@ export function handleCrossScopeDrop(
   }
 
   // Plan 20-05-D: editor tabs — flip ownerScope and update scoped orders.
+  // NOTE: editor branch moved to the top of this function (22-13); this branch
+  // is now unreachable for editor sources. Preserved-disabled to simplify
+  // backport hunks — safe because sourceId.startsWith('editor-') is handled above.
   if (sourceId.startsWith('editor-')) {
     const edTab = editorTabs.value.find(t => t.id === sourceId);
     if (!edTab) return;
