@@ -47,33 +47,7 @@ export function initDragManager(): void {
         document.documentElement.style.setProperty('--sidebar-w', `${w}px`);
       },
       onEnd(clientX: number) {
-        let w = Math.min(400, Math.max(40, clientX));
-
-        // Phase-22 follow-up (quick 260419-k1n): snap sidebar width so the
-        // main-panel residual width is a multiple of main-0's cellWidth. Only
-        // applies when main-0's active tab is a terminal. Otherwise keep the
-        // pixel-accurate drag the user asked for.
-        const metrics = getCellMetricsForScope('main-0');
-        if (metrics) {
-          // Residual main width = window.innerWidth - sidebarW - rightPanelPx.
-          // Read right panel width from getBoundingClientRect for the resolved px.
-          const rightPanel = document.querySelector<HTMLElement>('.right-panel');
-          const rightW = rightPanel?.getBoundingClientRect().width ?? 0;
-          const totalW = window.innerWidth;
-          const residual = totalW - w - rightW;
-          if (residual > 0) {
-            // Snap residual DOWN (safer — never crops content).
-            const snappedResidual = snapDown(residual, metrics.cellWidth, metrics.cellWidth);
-            // Recompute sidebar width from the snapped residual.
-            const snappedW = totalW - rightW - snappedResidual;
-            // Re-clamp after snap.
-            w = Math.min(400, Math.max(40, snappedW));
-            // Mirror the onDrag inline style path so the UI snaps visually too.
-            if (sidebarCollapsed.value) sidebarCollapsed.value = false;
-            document.documentElement.style.setProperty('--sidebar-w', `${w}px`);
-          }
-        }
-
+        const w = Math.min(400, Math.max(40, clientX));
         updateLayout({ 'sidebar-w': `${w}px`, 'sidebar-collapsed': false });
       },
     });
