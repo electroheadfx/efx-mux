@@ -151,6 +151,10 @@
   inset: 0;
 }
 
+/* .terminal-area is a legacy class — no longer in the DOM after Phase 22's
+   sub-scope-pane restructuring. Keep the empty rule so tooling does not flag it
+   as an unknown class, but add no properties; all terminal rules now live under
+   .terminal-containers below. */
 .terminal-area {
   flex: 1;
   min-height: 0;
@@ -159,36 +163,66 @@
   position: relative;
 }
 
-/* Phase 22 debug (7325e07 diagnostic confirmed): the bottom band is
-   .xterm-scrollable-element showing its background below .xterm-screen.
-   xterm-screen height = rows * cellHeight (always less than container);
-   scrollable-element fills the container height. Painting both the
-   scrollable-element and all ancestor wrappers with terminal bg makes
-   the row-remainder invisible — no height stretches (those broke the
-   vertical scrollbar track in b39564c). */
-.terminal-area .xterm {
+/* ─── xterm.js element overrides — scoped to .terminal-containers ───────────
+   .terminal-area was the pre-Phase-22 parent; it is no longer in the DOM.
+   The actual mount path is:
+     .terminal-containers[data-scope] > div.absolute.inset-0 > .xterm > ...
+   All xterm child rules must use .terminal-containers as the ancestor so
+   they actually apply to the live DOM. */
+
+/* xterm div must fill its container so FitAddon measures the correct height. */
+.terminal-containers .xterm {
   height: 100%;
 }
 
-.terminal-area .xterm-viewport {
+/* Paint viewport with terminal background so any uncovered area matches.
+   overflow-x: hidden prevents a ghost horizontal scrollbar — xterm 6 handles
+   horizontal wrapping internally and never needs a horizontal scrollbar. */
+.terminal-containers .xterm-viewport {
   background-color: var(--color-bg-terminal) !important;
-  /* Prevent the global *::-webkit-scrollbar { height: 8px } rule from
-     reserving horizontal scrollbar space inside the terminal viewport.
-     xterm never uses a horizontal scrollbar; the reservation showed as
-     an ~8px dark strip at pane bottom (diagnosed in a1d5b41). */
   overflow-x: hidden !important;
 }
 
-.terminal-area .xterm-screen {
+.terminal-containers .xterm-screen {
   background-color: var(--color-bg-terminal);
 }
 
-/* Paint the scrollable-element itself (it wraps xterm-screen and extends
-   to fill the viewport height) so the row-remainder shows terminal bg.
-   Do NOT set min-height/height here — that overflows the scrollbar track. */
-.terminal-area .xterm-scrollable-element {
+/* Paint the scrollable-element (it fills the container height, extending
+   below .xterm-screen's row area) so the row-remainder gap shows terminal bg.
+   Do NOT add height/min-height here — that breaks the VS Code scrollbar track. */
+.terminal-containers .xterm-scrollable-element {
   background-color: var(--color-bg-terminal) !important;
 }
+
+/* ─── xterm 6.0 right-side scrollbar gutter (debug 22-terminal-scrollbar-gutter) ──
+   Root cause: xterm 6.0 maps overviewRuler.width → verticalScrollbarSize for the
+   VS Code scrollable widget. FitAddon reads overviewRuler?.width||14 and subtracts
+   it from the available container width before calculating cols — leaving a
+   permanent right-side gap equal to overviewRuler.width (currently 10px).
+   Simultaneously, .xterm-viewport has overflow-y:scroll (from xterm.css) which
+   reserves the webkit scrollbar width (8px) at the right edge of the viewport.
+
+   TWO-PART FIX:
+   1. Zero out the webkit scrollbar width — the VS Code scrollable element handles
+      all scroll interaction in xterm 6; the native webkit scrollbar is redundant
+      and visually conflicts with the VS Code widget zone.
+   2. Hide the VS Code vertical scrollbar widget div — the 10px FitAddon-reserved
+      zone will show the terminal background color (set on .xterm-scrollable-element
+      above) making it visually invisible. Mouse-wheel scrolling is unaffected. */
+.xterm-viewport::-webkit-scrollbar { width: 0; height: 0; }
+.xterm-viewport::-webkit-scrollbar-track { background: transparent; }
+.xterm-viewport::-webkit-scrollbar-thumb { background: transparent; }
+
+/* Hide the VS Code scrollbar widget — the 10px zone set aside by FitAddon will
+   show through as terminal background. Mouse-wheel scrolling on .xterm-scrollable-element
+   continues to work; only the visual slider indicator is removed. */
+.xterm .xterm-scrollable-element > .scrollbar.vertical { display: none !important; }
+
+/* ─── Global custom scrollbars (match xterm style) ─── */
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--color-border-interactive); border-radius: 4px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--color-text); }
 
 /* Belt-and-suspenders: paint the mounting wrapper and pane body so
    any gap that leaks past the xterm DOM subtree also matches. */
@@ -278,22 +312,6 @@ html, body {
   height: 100%;
   overflow: hidden;
 }
-
-/* ─── xterm.js scrollbar overrides (cannot be Tailwind-ized) ─── */
-/* height: 0 on the base rule suppresses horizontal scrollbar size so the
-   global *::-webkit-scrollbar { height: 8px } does not reserve 8px of
-   vertical space inside .xterm-viewport (produces a bottom band). */
-.xterm-viewport::-webkit-scrollbar { width: 8px; height: 0; }
-.xterm-viewport::-webkit-scrollbar:horizontal { height: 0; display: none; }
-.xterm-viewport::-webkit-scrollbar-track { background: var(--color-bg); }
-.xterm-viewport::-webkit-scrollbar-thumb { background: var(--color-border-interactive); border-radius: 4px; }
-.xterm-viewport::-webkit-scrollbar-thumb:hover { background: var(--color-text); }
-
-/* ─── Global custom scrollbars (match xterm style) ─── */
-*::-webkit-scrollbar { width: 8px; height: 8px; }
-*::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb { background: var(--color-border-interactive); border-radius: 4px; }
-*::-webkit-scrollbar-thumb:hover { background: var(--color-text); }
 
 /* ─── Minimap overrides (global CSS — plugin uses .cm-minimap-gutter, NOT .cm-minimap) ─── */
 .cm-minimap-gutter {
