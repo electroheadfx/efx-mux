@@ -186,18 +186,34 @@
 }
 
 /* Phase 22 debug: the "hole" at pane bottom is the empty area below
-   xterm-scrollable-element inside xterm-viewport. Force the viewport
-   and scrollable-element to fill their parents with min-height: 100%
-   so there is no uncovered space below the rendered rows. */
+   xterm-scrollable-element inside xterm-viewport. Paint every possible
+   xterm ancestor with the terminal bg so whichever layer the hole
+   shows through looks identical to the screen. Use the xterm-scoped
+   descendant selectors (.xterm .foo) that match xterm's own rule
+   specificity so we don't lose the cascade war. */
+.xterm .xterm-viewport,
 .xterm-viewport {
   min-height: 100% !important;
   height: 100% !important;
   background-color: var(--color-bg-terminal) !important;
 }
 
+.xterm .xterm-scrollable-element,
 .xterm-scrollable-element {
   min-height: 100% !important;
   background-color: var(--color-bg-terminal) !important;
+}
+
+.xterm .xterm-screen,
+.xterm-screen {
+  background-color: var(--color-bg-terminal) !important;
+}
+
+/* Also paint the pane body itself. Editor / file-tree / GSD bodies are
+   absolute inset:0 with their own backgrounds so they cover this; only
+   terminal panes leave the body exposed. */
+.sub-scope-body {
+  background-color: var(--color-bg-terminal);
 }
 
 .server-pane {
