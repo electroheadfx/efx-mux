@@ -186,16 +186,17 @@
 }
 
 /* Phase 22 debug: the "hole" at pane bottom is the empty area below
-   xterm-scrollable-element inside xterm-viewport. Paint every possible
-   xterm ancestor with the terminal bg so whichever layer the hole
-   shows through looks identical to the screen. Use the xterm-scoped
-   descendant selectors (.xterm .foo) that match xterm's own rule
-   specificity so we don't lose the cascade war. */
+   xterm-scrollable-element inside xterm-viewport — integer rows *
+   cellHeight rarely equals container height exactly, so there is
+   always a 0–16px remainder. Paint the viewport with the tmux
+   status-bar green (--color-tmux-status) so the remainder looks
+   like an intentional continuation of the tmux bar. Other xterm
+   ancestors keep the dark terminal bg. */
 .xterm .xterm-viewport,
 .xterm-viewport {
   min-height: 100% !important;
   height: 100% !important;
-  background-color: var(--color-bg-terminal) !important;
+  background-color: var(--color-tmux-status, #859900) !important;
 }
 
 .xterm .xterm-scrollable-element,

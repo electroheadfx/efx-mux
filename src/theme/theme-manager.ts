@@ -119,6 +119,15 @@ export function applyTheme(theme: ThemeData): void {
         theme.terminal.background,
       );
     }
+    // Phase 22 debug: sync --color-tmux-status to theme.terminal.green so
+    // the xterm-viewport remainder band (below the last rendered row) is
+    // painted with the tmux status-bar color, making it look like an
+    // intentional continuation of the tmux bar.
+    const termGreen =
+      (theme.terminal as Record<string, string> | undefined)?.green;
+    if (termGreen) {
+      document.documentElement.style.setProperty('--color-tmux-status', termGreen);
+    }
     for (const reg of terminals) {
       reg.terminal.options.theme = theme.terminal;
       if (theme.chrome?.font) {
