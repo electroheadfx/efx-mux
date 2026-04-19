@@ -148,8 +148,16 @@ export function createTerminal(container: HTMLElement, options: TerminalOptions 
   }
   tryWebGL();
 
-  // Initial fit after mount
-  fitAddon.fit();
+  // Initial fit: defer two animation frames so the browser has completed
+  // flex layout before FitAddon measures the container. A synchronous
+  // fit() call here measures the container at its pre-layout (0) height
+  // and computes the wrong row count, producing a larger-than-expected
+  // row remainder band (diagnosed ea798dd).
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      fitAddon.fit();
+    });
+  });
 
   return {
     terminal,

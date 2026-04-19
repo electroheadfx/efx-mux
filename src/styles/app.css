@@ -159,15 +159,44 @@
   position: relative;
 }
 
+/* Phase 22 debug (7325e07 diagnostic confirmed): the bottom band is
+   .xterm-scrollable-element showing its background below .xterm-screen.
+   xterm-screen height = rows * cellHeight (always less than container);
+   scrollable-element fills the container height. Painting both the
+   scrollable-element and all ancestor wrappers with terminal bg makes
+   the row-remainder invisible — no height stretches (those broke the
+   vertical scrollbar track in b39564c). */
 .terminal-area .xterm {
   height: 100%;
 }
 
 .terminal-area .xterm-viewport {
   background-color: var(--color-bg-terminal) !important;
+  /* Prevent the global *::-webkit-scrollbar { height: 8px } rule from
+     reserving horizontal scrollbar space inside the terminal viewport.
+     xterm never uses a horizontal scrollbar; the reservation showed as
+     an ~8px dark strip at pane bottom (diagnosed in a1d5b41). */
+  overflow-x: hidden !important;
 }
 
 .terminal-area .xterm-screen {
+  background-color: var(--color-bg-terminal);
+}
+
+/* Paint the scrollable-element itself (it wraps xterm-screen and extends
+   to fill the viewport height) so the row-remainder shows terminal bg.
+   Do NOT set min-height/height here — that overflows the scrollbar track. */
+.terminal-area .xterm-scrollable-element {
+  background-color: var(--color-bg-terminal) !important;
+}
+
+/* Belt-and-suspenders: paint the mounting wrapper and pane body so
+   any gap that leaks past the xterm DOM subtree also matches. */
+.terminal-containers {
+  background-color: var(--color-bg-terminal);
+}
+
+.sub-scope-body {
   background-color: var(--color-bg-terminal);
 }
 
@@ -251,7 +280,11 @@ html, body {
 }
 
 /* ─── xterm.js scrollbar overrides (cannot be Tailwind-ized) ─── */
-.xterm-viewport::-webkit-scrollbar { width: 8px; }
+/* height: 0 on the base rule suppresses horizontal scrollbar size so the
+   global *::-webkit-scrollbar { height: 8px } does not reserve 8px of
+   vertical space inside .xterm-viewport (produces a bottom band). */
+.xterm-viewport::-webkit-scrollbar { width: 8px; height: 0; }
+.xterm-viewport::-webkit-scrollbar:horizontal { height: 0; display: none; }
 .xterm-viewport::-webkit-scrollbar-track { background: var(--color-bg); }
 .xterm-viewport::-webkit-scrollbar-thumb { background: var(--color-border-interactive); border-radius: 4px; }
 .xterm-viewport::-webkit-scrollbar-thumb:hover { background: var(--color-text); }
