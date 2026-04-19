@@ -990,12 +990,17 @@ export function closeUnifiedTab(tabId: string): void {
   const tab = allTabs.value.find(t => t.id === tabId);
 
   // Terminal tabs are not surfaced by `allTabs` (which is main-only); resolve
-  // them through the scope registry. Check both scopes so right-panel terminal
-  // tabs close correctly too.
-  const mainTermTab = terminalTabs.value.find(t => t.id === tabId);
-  const rightTermTab = getTerminalScope('right-0').tabs.value.find(t => t.id === tabId);
-  const termTab = mainTermTab ?? rightTermTab;
-  const termScope: TerminalScope | null = mainTermTab ? 'main-0' : rightTermTab ? 'right-0' : null;
+  // them through the scope registry. Search all 6 scopes so sub-scope terminal
+  // tabs (main-1/main-2/right-1/right-2) close correctly too.
+  // Phase 22 debug: previously only searched main-0 + right-0, causing tabs in
+  // other scopes to be silently unclasable (no "Quit Agent" modal, no cleanup).
+  const allScopes: TerminalScope[] = ['main-0', 'main-1', 'main-2', 'right-0', 'right-1', 'right-2'];
+  let termTab: TerminalTab | undefined;
+  let termScope: TerminalScope | null = null;
+  for (const s of allScopes) {
+    const found = getTerminalScope(s).tabs.value.find(t => t.id === tabId);
+    if (found) { termTab = found; termScope = s; break; }
+  }
 
   if (termTab && termScope) {
     const scopeHandle = getTerminalScope(termScope);
@@ -2244,9 +2249,18 @@ function renderTab(
               const input = e.currentTarget as HTMLInputElement;
               const newName = input.value.trim();
               if (tab.type === 'terminal') {
-                renameTerminalTab(tab.id, newName || getDefaultTerminalLabel(
-                  terminalTabs.value.find(t => t.id === tab.terminalTabId)!
-                ));
+                // Phase 22 debug: use scope-aware rename so tabs in main-1/main-2/
+                // right-0/right-1/right-2 are correctly renamed. The backward-compat
+                // `renameTerminalTab` export always routes to main-0 only.
+                // Also use the scope's own tab list for getDefaultTerminalLabel so the
+                // isAgent flag is read from the correct scope (not always main-0).
+                const scopedTermTab = getTerminalScope(tab.scope).tabs.value.find(
+                  t => t.id === tab.terminalTabId,
+                );
+                getTerminalScope(tab.scope).renameTerminalTab(
+                  tab.id,
+                  newName || getDefaultTerminalLabel(scopedTermTab!),
+                );
               } else if (tab.type === 'editor') {
                 renameEditorTab(tab.id, newName);
               }

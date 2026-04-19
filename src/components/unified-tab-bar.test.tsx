@@ -1207,6 +1207,133 @@ describe('Phase 22: dynamic sticky-removed tabs', () => {
       expect(createTerminalTab.mock.calls[0][0]?.scope).toBe('main-2');
     });
   });
+
+  // ── Phase 22 debug: agent tab behavioral regression tests ───────────────────
+  // These tests assert USER-OBSERVABLE behavior (DOM textContent, signal state)
+  // not just call parameters (structural). Closes the testing gap that allowed
+  // the "Agent creates Terminal" regression to ship undetected.
+
+  describe('Phase 22 debug: agent tab behavioral regression', () => {
+    it('agent terminal tab renders with "Agent" in label text (not "Terminal")', () => {
+      // Directly seed an agent tab into the scope signal (bypasses PTY spawn)
+      const agentTab = {
+        id: 'agent-behavior-1',
+        sessionName: 'testproj-agent-1',
+        label: 'Agent claude',
+        terminal: null as any, fitAddon: null as any,
+        container: null as any,
+        ptyConnected: false, isAgent: true, ownerScope: 'main-0' as const,
+      };
+      const main = getTerminalScope('main-0');
+      main.tabs.value = [agentTab as any];
+      main.activeTabId.value = agentTab.id;
+
+      const { container } = render(<UnifiedTabBar scope="main-0" />);
+      const tabEl = container.querySelector('[data-tab-id="agent-behavior-1"]') as HTMLElement;
+      expect(tabEl).not.toBeNull();
+      expect(tabEl.textContent).toContain('Agent');
+      expect(tabEl.textContent).not.toContain('Terminal');
+    });
+
+    it('agent tab in right-0 scope renders with "Agent" in label (scope lookup uses tab.scope)', () => {
+      const agentTab = {
+        id: 'agent-right-1',
+        sessionName: 'testproj-r1',
+        label: 'Agent claude',
+        terminal: null as any, fitAddon: null as any,
+        container: null as any,
+        ptyConnected: false, isAgent: true, ownerScope: 'right-0' as const,
+      };
+      const right = getTerminalScope('right-0');
+      right.tabs.value = [agentTab as any];
+      right.activeTabId.value = agentTab.id;
+
+      const { container } = render(<UnifiedTabBar scope="right-0" />);
+      const tabEl = container.querySelector('[data-tab-id="agent-right-1"]') as HTMLElement;
+      expect(tabEl).not.toBeNull();
+      expect(tabEl.textContent).toContain('Agent');
+      expect(tabEl.textContent).not.toContain('Terminal');
+    });
+
+    it('renaming agent tab in non-main-0 scope (right-0) actually updates the label in right-0', () => {
+      // This verifies the scope-aware rename fix. Previously renameTerminalTab
+      // routed to main-0 only, causing renames on right-0 tabs to silently fail.
+      const agentTab = {
+        id: 'agent-rename-right',
+        sessionName: 'testproj-r2',
+        label: 'Agent claude',
+        terminal: null as any, fitAddon: null as any,
+        container: null as any,
+        ptyConnected: false, isAgent: true, ownerScope: 'right-0' as const,
+      };
+      const right = getTerminalScope('right-0');
+      right.tabs.value = [agentTab as any];
+      right.activeTabId.value = agentTab.id;
+
+      // Trigger double-click rename on the rendered tab
+      const { container } = render(<UnifiedTabBar scope="right-0" />);
+      const tabEl = container.querySelector('[data-tab-id="agent-rename-right"]') as HTMLElement;
+      expect(tabEl).not.toBeNull();
+      const labelSpan = tabEl.querySelector('span') as HTMLElement;
+      fireEvent.click(labelSpan);
+      fireEvent.click(labelSpan);
+      const input = tabEl.querySelector('input[type="text"]') as HTMLInputElement;
+      expect(input).not.toBeNull();
+
+      // Type a new name and press Enter
+      fireEvent.change(input, { target: { value: 'My Agent' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      // Verify the right-0 scope tab was renamed (not silently lost)
+      const updatedTab = getTerminalScope('right-0').tabs.value.find(t => t.id === 'agent-rename-right');
+      expect(updatedTab).toBeDefined();
+      expect(updatedTab?.label).toBe('My Agent');
+    });
+
+    it('closing a terminal tab in main-1 scope removes it (scope-aware close, not main-0 only)', async () => {
+      // closeUnifiedTab previously only searched main-0 + right-0.
+      // A tab in main-1 was silently unclosable (silent no-op).
+      // Use isAgent:false so the immediate close path runs without a modal.
+      const termTab = {
+        id: 'term-close-main1',
+        sessionName: 'testproj-2',
+        label: 'Terminal 2',
+        terminal: { dispose() {} } as any, fitAddon: null as any,
+        container: { remove() {} } as any,
+        ptyConnected: false, isAgent: false, ownerScope: 'main-1' as const,
+      };
+      const main1 = getTerminalScope('main-1');
+      main1.tabs.value = [termTab as any];
+      main1.activeTabId.value = termTab.id;
+
+      closeUnifiedTab(termTab.id);
+      // closeTab is async internally (destroy_pty_session invoke); flush microtasks.
+      await new Promise(r => setTimeout(r, 0));
+
+      // Tab must be removed from main-1 scope after close
+      expect(main1.tabs.value.find(t => t.id === 'term-close-main1')).toBeUndefined();
+    });
+
+    it('closing a terminal tab in right-1 scope removes it (scope-aware close)', async () => {
+      // right-1 and right-2 were also not searched previously.
+      const termTab = {
+        id: 'term-close-right1',
+        sessionName: 'testproj-r1',
+        label: 'Terminal 1',
+        terminal: { dispose() {} } as any, fitAddon: null as any,
+        container: { remove() {} } as any,
+        ptyConnected: false, isAgent: false, ownerScope: 'right-1' as const,
+      };
+      const right1 = getTerminalScope('right-1');
+      right1.tabs.value = [termTab as any];
+      right1.activeTabId.value = termTab.id;
+
+      closeUnifiedTab(termTab.id);
+      await new Promise(r => setTimeout(r, 0));
+
+      expect(right1.tabs.value.find(t => t.id === 'term-close-right1')).toBeUndefined();
+    });
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
