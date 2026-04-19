@@ -159,20 +159,15 @@
   position: relative;
 }
 
-/* Phase 22: paint terminal pane ancestors with the terminal bg so the
-   xterm integer-row remainder at pane bottom blends in. Do NOT stretch
-   xterm's own internals (height / min-height) — that breaks scrollbar
-   hit-testing and vertical-scroll track rendering. */
-.terminal-area .xterm,
-.terminal-containers .xterm {
-  background-color: var(--color-bg-terminal);
+.terminal-area .xterm {
+  height: 100%;
 }
 
-.terminal-containers {
-  background-color: var(--color-bg-terminal);
+.terminal-area .xterm-viewport {
+  background-color: var(--color-bg-terminal) !important;
 }
 
-.sub-scope-body {
+.terminal-area .xterm-screen {
   background-color: var(--color-bg-terminal);
 }
 
@@ -256,16 +251,10 @@ html, body {
 }
 
 /* ─── xterm.js scrollbar overrides (cannot be Tailwind-ized) ─── */
-.xterm-viewport::-webkit-scrollbar { width: 8px; height: 0; }
-.xterm-viewport::-webkit-scrollbar:horizontal { height: 0; display: none; }
+.xterm-viewport::-webkit-scrollbar { width: 8px; }
 .xterm-viewport::-webkit-scrollbar-track { background: var(--color-bg); }
 .xterm-viewport::-webkit-scrollbar-thumb { background: var(--color-border-interactive); border-radius: 4px; }
 .xterm-viewport::-webkit-scrollbar-thumb:hover { background: var(--color-text); }
-
-/* Phase 22 debug: xterm-viewport must not reserve horizontal scrollbar space
-   (the global `*::-webkit-scrollbar { height: 8px }` rule below was producing
-   an ~8px dark band at the bottom of every terminal pane). */
-.xterm-viewport { overflow-x: hidden !important; }
 
 /* ─── Global custom scrollbars (match xterm style) ─── */
 *::-webkit-scrollbar { width: 8px; height: 8px; }

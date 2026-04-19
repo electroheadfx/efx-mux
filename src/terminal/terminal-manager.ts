@@ -148,23 +148,8 @@ export function createTerminal(container: HTMLElement, options: TerminalOptions 
   }
   tryWebGL();
 
-  // Initial fit after mount. Must be double-RAF'd so the browser has laid out
-  // the flex parent chain (main-panel → sub-scope-body → terminal-containers →
-  // container) before fitAddon measures container.clientHeight. Without this,
-  // fit() frequently measures a pre-flex or interim height (e.g. 208px) and
-  // xterm's rows count stays frozen, leaving a dark band at the pane's
-  // bottom where rows × cellHeight < container height. A second RAF is used
-  // because many layouts need two frames to settle after Preact's initial
-  // mount + effects pass, especially in the `absolute inset:0` nested chain.
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      try {
-        fitAddon.fit();
-      } catch {
-        // Terminal may have been disposed between scheduling and running.
-      }
-    });
-  });
+  // Initial fit after mount
+  fitAddon.fit();
 
   return {
     terminal,

@@ -107,27 +107,6 @@ export function applyTheme(theme: ThemeData): void {
   }
 
   if (theme.terminal) {
-    // Phase 22 debug: sync --color-bg-terminal to the xterm theme's own
-    // background, not to chrome.bgTerminal. The chrome value is the app
-    // wrapper's bg; xterm.js internally paints its viewport with
-    // theme.terminal.background. If these differ, the remainder between
-    // rows*cellHeight and container height shows as a visible dark band
-    // below the last rendered row. Syncing makes that hole invisible.
-    if (theme.terminal.background) {
-      document.documentElement.style.setProperty(
-        '--color-bg-terminal',
-        theme.terminal.background,
-      );
-    }
-    // Phase 22 debug: sync --color-tmux-status to theme.terminal.green so
-    // the xterm-viewport remainder band (below the last rendered row) is
-    // painted with the tmux status-bar color, making it look like an
-    // intentional continuation of the tmux bar.
-    const termGreen =
-      (theme.terminal as Record<string, string> | undefined)?.green;
-    if (termGreen) {
-      document.documentElement.style.setProperty('--color-tmux-status', termGreen);
-    }
     for (const reg of terminals) {
       reg.terminal.options.theme = theme.terminal;
       if (theme.chrome?.font) {
