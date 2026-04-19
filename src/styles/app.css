@@ -255,10 +255,16 @@ html, body {
 }
 
 /* ─── xterm.js scrollbar overrides (cannot be Tailwind-ized) ─── */
-.xterm-viewport::-webkit-scrollbar { width: 8px; }
+.xterm-viewport::-webkit-scrollbar { width: 8px; height: 0; }
+.xterm-viewport::-webkit-scrollbar:horizontal { height: 0; display: none; }
 .xterm-viewport::-webkit-scrollbar-track { background: var(--color-bg); }
 .xterm-viewport::-webkit-scrollbar-thumb { background: var(--color-border-interactive); border-radius: 4px; }
 .xterm-viewport::-webkit-scrollbar-thumb:hover { background: var(--color-text); }
+
+/* Phase 22 debug: xterm-viewport must not reserve horizontal scrollbar space
+   (the global `*::-webkit-scrollbar { height: 8px }` rule below was producing
+   an ~8px dark band at the bottom of every terminal pane). */
+.xterm-viewport { overflow-x: hidden !important; }
 
 /* ─── Global custom scrollbars (match xterm style) ─── */
 *::-webkit-scrollbar { width: 8px; height: 8px; }
