@@ -229,16 +229,6 @@ Plans:
 - [x] 22-04-PLAN.md — Main/Right panel N-sub-scope rewrite with SubScopePane + intra-zone resize handles + D-02 first-launch defaults + Phase 22 CSS classes
 - [ ] 22-05-PLAN.md — Human UAT verification + REQUIREMENTS/ROADMAP closeout
 
-### Phase 23: Cell-perfect terminal resize
-
-**Goal:** Research Ghostty/WezTerm/iTerm2 multi-pane cell alignment architecture, then implement proper solution for tmux grid-aligned pane sizing. Must handle: window border resize, internal split handle drag, pane add/remove, server pane toggle. Previous quick-task attempt (260419-pvx, 24 commits) failed — CSS flex percentage approach is fundamentally incompatible. Requires --research flag before planning.
-**Requirements**: Zero-gap tmux status bar alignment across all terminal panes (single, stacked, side-by-side). Window and internal handle resize must land on cell boundaries.
-**Depends on:** Phase 22
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd-plan-phase 23 to break down)
-
 ---
 *Roadmap created: 2026-04-06*
 *Last updated: 2026-04-18 (Phase 22 added — dynamic tabs, vertical split, preferences modal)*
