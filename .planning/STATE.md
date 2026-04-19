@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: Workspace Evolution
 status: executing
-stopped_at: Phase 22 UAT Round 2 FAILED — see 22-14-SUMMARY.md; user decision needed (hotfix-chain vs stale-build-check vs defer-to-phase-23)
-last_updated: "2026-04-19T07:05:43.026Z"
+stopped_at: "Completed quick-260419-mty Tasks 1+2; Task 3 checkpoint:human-verify pending"
+last_updated: "2026-04-19T14:49:54.360Z"
 last_activity: 2026-04-19
 progress:
   total_phases: 8
@@ -77,6 +77,8 @@ Progress: [██████████] 100% (Phase 17)
 - [Phase 22-12]: counter behavior = monotonic; preserves PTY-safety and D-12 stable-name invariant (deleting Terminal-N does not reuse slot N; next slot is max+1). Rationale: orphan tmux sessions may survive slot deletion → reuse would re-attach stale content; matches D-12 "PTY session name is stable on scope move"; simpler (one integer counter) vs. gap-fill (scan all 6 scopes per allocation).
 - [Phase 22]: Plan 22-13: Editor drag refactor — editor branch promoted above sourceScope===targetScope early-return in handleCrossScopeDrop to enable intra-scope reorder (UAT test 6 major). onDocMouseUp drop resolver rewritten: scope-first resolution via [data-tablist-scope] wrapper, empty targetId routes to append-last fallback in handleCrossScopeDrop, nearest-snap fallback constrained to drop target's scope (no cross-scope bleed).
 - [Phase 22]: Phase 22 UAT Round 2 failed with 5 regressions directly contradicting 22-08, 22-09, and 22-13 SUMMARY.md claims — gap-closure batch landed code commits but did not achieve end-to-end UAT closure; Phase 22 remains In Progress, 22-05 live, REQUIREMENTS untouched
+- [Phase quick-260419-mty]: Math.floor (not Math.round) for proportional split in computeTargetRows — guarantees drift always lands on last terminal pane
+- [Phase quick-260419-mty]: pane-distribute.ts: runtime-only CSS var redistribution (never updateLayout) — two-store separation: persisted=user intent, runtime=cell alignment
 
 ### Roadmap Evolution
 
@@ -151,8 +153,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-19T07:05:43.023Z
-Stopped at: Phase 22 UAT Round 2 FAILED — see 22-14-SUMMARY.md; user decision needed (hotfix-chain vs stale-build-check vs defer-to-phase-23)
+Last session: 2026-04-19T14:49:44.952Z
+Stopped at: Completed quick-260419-mty Tasks 1+2; Task 3 checkpoint:human-verify pending
 Resume file: None
 
 Next: `/gsd-execute-phase 15` or `/gsd-code-review-fix 17` to fix remaining warnings
