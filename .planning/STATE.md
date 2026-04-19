@@ -83,6 +83,7 @@ Progress: [██████████] 100% (Phase 17)
 ### Roadmap Evolution
 
 - Phase 22 added: Dynamic tabs, vertical split, and preferences modal (2026-04-18)
+- Phase 23 added: Cell-perfect terminal resize (2026-04-19) — needs deep research into Ghostty/WezTerm/iTerm2 architecture before implementation
 
 ### Pending Todos
 
