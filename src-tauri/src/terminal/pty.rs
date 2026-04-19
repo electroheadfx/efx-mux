@@ -213,9 +213,13 @@ pub async fn spawn_terminal(
         .args(["set-option", "-t", &sanitized, "remain-on-exit", "on"])
         .output();
 
-    // Hide tmux green status bar -- reclaim the row for terminal content
+    // Phase 22 debug: DIAGNOSTIC — temporarily re-enable tmux status bar to
+    // verify whether the bottom-band user reports maps to this reserved row.
+    // If the band is filled by the green status line after rebuild, we know
+    // the fix direction (resize tmux window / notify client after status off).
+    // Revert this diagnostic commit after confirming.
     std::process::Command::new("tmux")
-        .args(["set-option", "-t", &sanitized, "status", "off"])
+        .args(["set-option", "-t", &sanitized, "status", "on"])
         .output()
         .ok();
 
@@ -495,9 +499,10 @@ pub fn switch_tmux_session(
         .output()
         .ok();
 
-    // Hide tmux green status bar on switched-to session
+    // Phase 22 debug: DIAGNOSTIC — temporarily re-enable (see sibling comment
+    // at the spawn path).
     std::process::Command::new("tmux")
-        .args(["set-option", "-t", &target, "status", "off"])
+        .args(["set-option", "-t", &target, "status", "on"])
         .output()
         .ok();
 
