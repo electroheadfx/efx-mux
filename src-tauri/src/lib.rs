@@ -8,6 +8,7 @@ pub mod server;
 mod state;
 mod terminal;
 mod theme;
+mod window_resize;
 
 use std::collections::HashMap;
 use tauri::{Emitter, Manager};
@@ -17,6 +18,7 @@ use theme::iterm2::import_iterm2_theme;
 use server::{detect_agent, kill_all_servers, restart_server, start_server, stop_server, ServerProcesses};
 use state::{get_config_dir, load_state, save_state, ManagedAppState};
 use theme::types::load_theme;
+use window_resize::{set_content_resize_increments, clear_content_resize_increments};
 
 #[tauri::command]
 fn force_quit(app_handle: tauri::AppHandle) {
@@ -210,6 +212,10 @@ pub fn run() {
 
             // App lifecycle
             force_quit,
+
+            // Window resize increments (NSWindow contentResizeIncrements bridge)
+            set_content_resize_increments,
+            clear_content_resize_increments,
         ])
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
