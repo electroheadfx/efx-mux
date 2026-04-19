@@ -1230,20 +1230,49 @@ function getOrderedTabs(): UnifiedTab[] {
 
 // ── Dropdown Items ─────────────────────────────────────────────────────────────
 
-function buildDropdownItems(scope: TerminalScope): DropdownItem[] {
+/**
+ * Overrides for buildDropdownItems (test injection only).
+ * Production callers omit this and get the real createAndFocusMainTerminalTab.
+ */
+export interface BuildDropdownItemsOverrides {
+  /** Test spy for creator (bypasses real PTY spawn). */
+  createTerminalTab?: (opts: CreateTabOptionsShape) => Promise<unknown>;
+}
+
+/**
+ * Phase 22 gap-closure 22-12: `scope` is the originating UnifiedTabBar's scope.
+ * Every action callback that spawns a terminal/agent MUST forward this scope to
+ * the creator so the new tab appears in the originating pane, not always main-0.
+ *
+ * The bug this fixes (UAT test 15a): previously `action: () => { void
+ * createAndFocusMainTerminalTab(); }` omitted the scope, so createNewTab
+ * defaulted to `'main-0'` — clicking + in main-1 / main-2 / right-* put the new
+ * tab in main-0.
+ */
+export function buildDropdownItems(
+  scope: TerminalScope,
+  overrides?: BuildDropdownItemsOverrides,
+): DropdownItem[] {
   const gsdOwnedElsewhere = gsdTab.value !== null && gsdTab.value.owningScope !== scope;
   const gcOwnedElsewhere = gitChangesTab.value !== null && gitChangesTab.value.owningScope !== scope;
+
+  const spawnTerminal = (opts: CreateTabOptionsShape) => {
+    if (overrides?.createTerminalTab) {
+      return overrides.createTerminalTab(opts);
+    }
+    return createAndFocusMainTerminalTab(opts);
+  };
 
   return [
     {
       label: 'Terminal (Zsh)',
       icon: Terminal,
-      action: () => { void createAndFocusMainTerminalTab(); },
+      action: () => { void spawnTerminal({ scope }); },
     },
     {
       label: 'Agent',
       icon: Bot,
-      action: () => { void createAndFocusMainTerminalTab({ isAgent: true }); },
+      action: () => { void spawnTerminal({ scope, isAgent: true }); },
     },
     {
       label: 'GSD',

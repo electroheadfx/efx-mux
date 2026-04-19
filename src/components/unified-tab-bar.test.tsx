@@ -1121,7 +1121,7 @@ describe('Phase 22: dynamic sticky-removed tabs', () => {
   describe('Phase 22 gap-closure (22-12): +-button scope routing', () => {
     it('Terminal item action forwards originating scope main-1 to creator', async () => {
       const { buildDropdownItems } = await import('./unified-tab-bar');
-      const createTerminalTab = vi.fn(async () => undefined);
+      const createTerminalTab = vi.fn(async (_opts: { scope?: string; isAgent?: boolean }) => undefined);
       const items = buildDropdownItems('main-1', { createTerminalTab });
       const terminalItem = items.find(i => i.label === 'Terminal (Zsh)')!;
       expect(terminalItem).toBeDefined();
@@ -1134,7 +1134,7 @@ describe('Phase 22: dynamic sticky-removed tabs', () => {
 
     it('Agent item action forwards originating scope right-1 to creator with isAgent=true', async () => {
       const { buildDropdownItems } = await import('./unified-tab-bar');
-      const createTerminalTab = vi.fn(async () => undefined);
+      const createTerminalTab = vi.fn(async (_opts: { scope?: string; isAgent?: boolean }) => undefined);
       const items = buildDropdownItems('right-1', { createTerminalTab });
       const agentItem = items.find(i => i.label === 'Agent')!;
       expect(agentItem).toBeDefined();
@@ -1147,7 +1147,7 @@ describe('Phase 22: dynamic sticky-removed tabs', () => {
 
     it('Terminal item action forwards originating scope main-2', async () => {
       const { buildDropdownItems } = await import('./unified-tab-bar');
-      const createTerminalTab = vi.fn(async () => undefined);
+      const createTerminalTab = vi.fn(async (_opts: { scope?: string; isAgent?: boolean }) => undefined);
       const items = buildDropdownItems('main-2', { createTerminalTab });
       const terminalItem = items.find(i => i.label === 'Terminal (Zsh)')!;
       terminalItem.action();
