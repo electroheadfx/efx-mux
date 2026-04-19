@@ -14,6 +14,7 @@ import { EditorTab } from './editor-tab';
 import { getTerminalScope, type TerminalScope } from './terminal-tabs';
 import { gitChangesTab, editorTabs, fileTreeTabs, gsdTab, setProjectEditorTabs } from './unified-tab-bar';
 import { attachIntraZoneHandles } from '../drag-manager';
+import { dispatchLayoutChanged } from '../terminal/resize-handler';
 import {
   updateLayout,
   updateSession,
@@ -59,6 +60,14 @@ export function spawnSubScopeForZone(zone: Zone): void {
   sig.value = [...current, nextScope];
   const key = activeSubScopesKey(zone, activeProjectName.value);
   void updateLayout({ [key]: JSON.stringify(sig.value) });
+
+  // Debug 22-terminal-not-filling-pane: adding a sub-scope shrinks every
+  // pre-existing pane in this zone. Pre-existing terminals must refit their
+  // xterm rows/cols to match the new pane geometry — ResizeObserver alone is
+  // unreliable for this transition. Dispatch on a microtask so Preact has
+  // applied the new inline styles (height: var(--...)) before fit() reads
+  // the container's clientHeight.
+  queueMicrotask(() => dispatchLayoutChanged());
 }
 
 export function __resetActiveSubScopesForTesting(): void {
@@ -135,6 +144,14 @@ export function closeSubScope(zone: Zone, index: number): void {
     getTerminalScope(scope0).saveProjectTabs(project);
     getTerminalScope(closedScope).saveProjectTabs(project);
   }
+
+  // Debug 22-terminal-not-filling-pane: closing a sub-scope grows the
+  // remaining panes. Migrated terminals land inside a pane whose effective
+  // height just changed; pre-existing terminals in scope-0 see the pane grow
+  // (or the `flex:1` vs `flex:none` mode flip). Dispatch on a microtask so
+  // Preact has applied the new inline styles before terminals read the new
+  // container clientHeight.
+  queueMicrotask(() => dispatchLayoutChanged());
 }
 
 /**

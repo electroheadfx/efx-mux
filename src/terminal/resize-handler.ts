@@ -3,10 +3,28 @@
 // Per D-14: resize is a control operation (always goes through)
 // Per Pitfall 4: track last cols/rows to avoid infinite loop
 // Migrated to TypeScript with @tauri-apps/api imports (Phase 6.1)
+//
+// Debug 22-terminal-not-filling-pane: ResizeObserver alone is unreliable for
+// pre-existing terminals whose pane transitions between flex modes on split
+// topology change. Add a belt-and-suspenders `efxmux:layout-changed` listener
+// that runs the same RAF-deferred fit() path. Every code path that mutates
+// pane geometry (drag-manager intra-zone drag, spawnSubScopeForZone,
+// closeSubScope) dispatches this event so all mounted terminals refit.
 
 import { invoke } from '@tauri-apps/api/core';
 import type { Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
+
+/** Event name broadcast by drag-manager + sub-scope-pane when any pane geometry changes. */
+export const LAYOUT_CHANGED_EVENT = 'efxmux:layout-changed';
+
+/** Dispatch a layout-change signal. Terminals (and anything else that cares) will refit. */
+export function dispatchLayoutChanged(): void {
+  // Guarded for non-browser environments (e.g. unit tests that bypass jsdom).
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new Event(LAYOUT_CHANGED_EVENT));
+  }
+}
 
 /**
  * Attach resize handling to a terminal + container.
@@ -21,7 +39,9 @@ export function attachResizeHandler(
   let lastRows = 0;
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const observer = new ResizeObserver(() => {
+  // Shared fit+IPC path. Used by both the ResizeObserver and the
+  // `efxmux:layout-changed` listener so their behaviour is identical.
+  function runFit(): void {
     // Defer fit() to next frame to avoid ResizeObserver infinite loop (UAT gap test 5)
     requestAnimationFrame(() => {
       // Skip fit when container is hidden (display:none). During restoreTabs(), all
@@ -49,13 +69,26 @@ export function attachResizeHandler(
         invoke('resize_pty', { cols, rows, sessionName }).catch(() => {});
       }, 150);
     });
-  });
+  }
 
+  const observer = new ResizeObserver(() => runFit());
   observer.observe(container);
+
+  // Debug 22-terminal-not-filling-pane: belt-and-suspenders refit path.
+  // Listen for explicit layout-change broadcasts from the drag manager and
+  // SubScopePane topology mutations so pre-existing terminals always refit
+  // even when ResizeObserver misses the cascaded size change.
+  const onLayoutChanged = (): void => runFit();
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener(LAYOUT_CHANGED_EVENT, onLayoutChanged);
+  }
 
   return {
     detach(): void {
       observer.disconnect();
+      if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+        window.removeEventListener(LAYOUT_CHANGED_EVENT, onLayoutChanged);
+      }
       if (resizeTimer) clearTimeout(resizeTimer);
     },
   };
