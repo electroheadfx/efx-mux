@@ -229,9 +229,21 @@ None. The doc updates were straightforward once the user's UAT report was parsed
 
 **Recommendation from this summary:** Start with path (2) — verify the running build actually includes 22-06..22-13 commits. If it does and the UI still shows old labels / cannot close singletons, proceed to path (1) with targeted hotfix plans.
 
-## Self-Check: PENDING
+## Self-Check: PASSED
 
-Self-check will run after final commit.
+Files verified present:
+- `.planning/phases/22-dynamic-tabs-vertical-split-and-preferences-modal/22-14-SUMMARY.md` — FOUND (this file)
+- `.planning/phases/22-dynamic-tabs-vertical-split-and-preferences-modal/22-UAT.md` — FOUND (Round 2 results recorded)
+- `.planning/STATE.md` — FOUND (blocker added, decision added, session updated)
+
+Commits verified present via `git log --oneline -3`:
+- `e223497 test(22-14): UAT Round 2 — 5 regressions + 4 issues; Phase 22 NOT closed` — FOUND
+- `08996e0 docs(22-14): UAT Round 2 summary + STATE blocker — Phase 22 NOT complete` — FOUND
+
+Negative-verification (things that MUST NOT have happened):
+- `.planning/phases/22-dynamic-tabs-vertical-split-and-preferences-modal/22-05-PLAN.md` — STILL PRESENT (not superseded — correct)
+- `grep TABS-01|SPLIT-01..04|PREF-01 .planning/REQUIREMENTS.md` — 0 matches (REQUIREMENTS untouched — correct)
+- ROADMAP.md Phase 22 row — still shows `In Progress` (not marked Complete — correct)
 
 ---
 *Phase: 22-dynamic-tabs-vertical-split-and-preferences-modal*
