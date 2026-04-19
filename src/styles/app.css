@@ -356,18 +356,32 @@ html, body {
 }
 
 /* ─── Phase 22 Plan 04: Intra-zone horizontal resize handle ─── */
+/* Phase 22 debug (terminal-not-filling-pane follow-up): the previous
+   hit-widening trick (negative margin + positive padding) produced a
+   visible ~8px gap band between panes. Collapse to exactly 1px tall;
+   use a pseudo-element to widen the pointer hit target without adding
+   visible layout height. */
 .split-handle-h-intra {
+  position: relative;
   width: 100%;
   height: var(--handle-size, 1px);
   min-height: var(--handle-size, 1px);
   cursor: ns-resize;
   background: var(--color-border);
-  background-clip: content-box;
   flex-shrink: 0;
-  margin: calc((var(--handle-hit, 8px) - var(--handle-size, 1px)) / -2) 0;
-  padding: calc((var(--handle-hit, 8px) - var(--handle-size, 1px)) / 2) 0;
   z-index: 10;
   transition: background 0.1s ease;
+}
+
+.split-handle-h-intra::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--handle-hit, 8px) / -2);
+  bottom: calc(var(--handle-hit, 8px) / -2);
+  /* Transparent overlay extends the pointer hit area above + below the
+     1px visual line without affecting flex layout. */
 }
 
 .split-handle-h-intra:hover,
