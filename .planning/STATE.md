@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 Phase: 22 (dynamic-tabs-vertical-split-and-preferences-modal) — EXECUTING
 Plan: 5 of 14
 Status: Ready to execute
-Last activity: 2026-04-19 - Completed quick task 260419-k1n: Grid-snap pane resize
+Last activity: 2026-04-19
 
 **Code review fixes pending (non-blocking):**
 
@@ -135,7 +135,6 @@ None.
 | 260417-je3 | Add HMR-wipe guard to save_state Tauri command (refuse overwriting non-empty projects with empty list) | 2026-04-17 |
 | 260418-b1a | Fix `[exited]` dead terminal: right-panel overlay mount + restore-loop TOCTOU race + monitor thread delay | 2026-04-18 |
 | 260418-bpm | Fix main-window new-tab focus: creating new agent/terminal from non-agent tab now focuses the new tab | 2026-04-18 |
-| 260419-k1n | Grid-snap pane resize: quantize split-drag, sidebar-drag, and window-resize to tmux cell multiples | 2026-04-19 |
 | Phase 19 P01 | 8min | 3 tasks | 10 files |
 | Phase 19 P02 | 3min 43s | 2 tasks | 3 files |
 | Phase 19 P03 | 8min 40s | 3 tasks | 6 files |
