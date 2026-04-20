@@ -1,4 +1,5 @@
 ---
+status: complete
 phase: quick
 plan: "260410-x7o"
 subsystem: terminal

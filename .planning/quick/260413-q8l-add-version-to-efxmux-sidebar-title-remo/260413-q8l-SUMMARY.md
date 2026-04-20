@@ -1,3 +1,7 @@
+---
+status: complete
+---
+
 # Quick Task 260413-q8l: Summary
 
 **Task:** Add version to EFXMUX sidebar title, remove 4px left padding

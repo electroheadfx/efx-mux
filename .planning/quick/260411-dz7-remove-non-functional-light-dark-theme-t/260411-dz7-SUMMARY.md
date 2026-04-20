@@ -1,4 +1,5 @@
 ---
+status: complete
 phase: quick-260411-dz7
 plan: 01
 subsystem: ui/preferences

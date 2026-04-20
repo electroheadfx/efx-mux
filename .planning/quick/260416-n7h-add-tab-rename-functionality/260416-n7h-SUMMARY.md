@@ -1,4 +1,5 @@
 ---
+status: complete
 phase: quick-260416-n7h
 plan: 01
 subsystem: ui/tab-bar

@@ -1,4 +1,5 @@
 ---
+status: complete
 quick_id: 260410-vs4
 description: More UI fixes: git padding, file tree defaults, server pane BG, theme options, extra newlines
 date: 2026-04-10

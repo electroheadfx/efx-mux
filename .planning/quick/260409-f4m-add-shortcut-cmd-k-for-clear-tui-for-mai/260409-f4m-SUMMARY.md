@@ -1,3 +1,7 @@
+---
+status: complete
+---
+
 # Quick Task 260409-f4m: Add Cmd+K shortcut to clear terminal scrollback
 
 ## What Changed

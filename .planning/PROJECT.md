@@ -37,25 +37,24 @@ Laurent (the developer) and other developers who use Claude Code / OpenCode as t
 - ✓ First-run wizard -- v0.1.0
 - ✓ PTY crash recovery with restart option -- v0.1.0
 - ✓ Navy-blue pixel-perfect UI matching Pencil mockups -- v0.1.0
-- ✓ Vitest test infrastructure with Tauri IPC + xterm.js mocks, coverage reporting -- v0.2.0 Phase 11
-- ✓ 89 unit tests for 5 critical TypeScript modules (ansi-html, tokens, state-manager, theme-manager, server-bridge) -- v0.2.0 Phase 12
-- ✓ 30 component render tests for 4 workspace components (sidebar, server-pane, gsd-viewer, file-tree) -- v0.2.0 Phase 12
-- ✓ Rust unit tests for state serde, git_status, and file_ops (19 tests total) -- v0.2.0 Phase 13
-- ✓ Consolidation: dead code removal, any-type elimination, dependency audit -- v0.2.0 Phase 14
+- ✓ Vitest test infrastructure with Tauri IPC + xterm.js mocks, coverage reporting -- v0.2.0
+- ✓ 89 unit tests for 5 critical TypeScript modules -- v0.2.0
+- ✓ 30 component render tests for 4 workspace components -- v0.2.0
+- ✓ Rust unit tests for state serde, git_status, and file_ops -- v0.2.0
+- ✓ Consolidation: dead code removal, any-type elimination, dependency audit -- v0.2.0
+- ✓ CodeMirror 6 editor tabs with syntax highlighting, Cmd+S save, dirty-close modal -- v0.3.0
+- ✓ Git control pane with staging, commit, push, undo last commit -- v0.3.0
+- ✓ File tree: delete, Open In external editor, intra-tree drag, Finder drop import -- v0.3.0
+- ✓ GSD viewer with 5 sub-tabs (Milestones, Phases, Progress, History, State) -- v0.3.0
+- ✓ Multi-terminal right panel with plus menu for Terminal/Agent -- v0.3.0
+- ✓ Dynamic tabs with vertical split, cross-scope drag-and-drop -- v0.3.0
+- ✓ File watcher sync with external editors -- v0.3.0
 
 ### Active
 
-#### Current Milestone: v0.3.0 Workspace Evolution
+#### Next Milestone: v0.4.0 (TBD)
 
-**Goal:** Transform Efxmux from terminal-focused MVP to full-featured development workspace with file editing, git control, and enhanced navigation.
-
-**Target features:**
-- Filetree: delete, preview/open, edit in tab, external editor, drag/drop
-- Bug fixes: file watcher, newline injection, phantom chars, scroll, TUI padding/alignment
-- Main panel: dropdown to add Terminal/Agent/Git changes tabs, accordion diffs
-- GSD viewer: 5 sub-tabs (Milestones, Phases, Progress, History, State)
-- Left sidebar: 3 tabs (Projects, File tree, Git control with stage/commit/push)
-- Sidebar bash: plus menu for new Terminal/Agent sub-TUI
+Planning not started. Run `/gsd-new-milestone` to define scope.
 
 ### Out of Scope
 
@@ -86,10 +85,12 @@ Laurent (the developer) and other developers who use Claude Code / OpenCode as t
 
 ## Context
 
-Shipped v0.1.0 MVP with 9,517 LOC (TypeScript + Rust + CSS) in 6 days.
-Shipped v0.2.0 Testing & Consolidation with 7,287 LOC (2,821 TS + 4,466 Rust), 119 tests (89 TS + 30 component + 19 Rust), 8 plans across 4 phases.
-Tech stack evolved during development: Arrow.js was replaced by Preact + Vite + TypeScript + Tailwind 4 in Phase 6.1.
-UI went through two design passes: Phase 9 (GitHub-dark palette) then Phase 10 (navy-blue Pencil reference design).
+Shipped v0.1.0 MVP with 9,517 LOC in 6 days (11 phases, 63 plans).
+Shipped v0.2.0 Testing & Consolidation with 119 tests in 1 day (4 phases, 8 plans).
+Shipped v0.3.0 Workspace Evolution with 30,434 LOC in 7 days (8 phases, 53 plans, 555 commits).
+
+Current codebase: 25,004 LOC TypeScript + 5,430 LOC Rust.
+Tech stack: Tauri 2, Preact, CodeMirror 6, xterm.js 6.0, tmux, git2, Tailwind 4.
 
 ## Key Decisions
 
@@ -134,4 +135,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-12 after v0.2.0 milestone*
+*Last updated: 2026-04-20 after v0.3.0 milestone*

@@ -1,3 +1,7 @@
+---
+status: complete
+---
+
 # Quick Task 260408-rco: UI fixes round 2 - Summary
 
 ## Changes

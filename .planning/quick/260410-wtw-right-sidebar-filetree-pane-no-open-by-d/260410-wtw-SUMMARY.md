@@ -1,3 +1,7 @@
+---
+status: complete
+---
+
 # Quick Task 260410-wtw: Open FileTree by default on launch
 
 **Completed:** 2026-04-10

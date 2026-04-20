@@ -1,4 +1,5 @@
 ---
+status: complete
 phase: quick-260415-i4n
 plan: 01
 subsystem: ui/sidebar

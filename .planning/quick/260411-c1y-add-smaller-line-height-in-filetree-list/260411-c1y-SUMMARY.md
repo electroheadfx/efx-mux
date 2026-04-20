@@ -1,3 +1,7 @@
+---
+status: complete
+---
+
 # Quick Task 260411-c1y: File Tree Line Height & Theme Controls
 
 ## Changes

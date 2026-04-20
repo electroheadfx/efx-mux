@@ -1,4 +1,5 @@
 ---
+status: complete
 phase: quick
 plan: 260416-nmw
 subsystem: editor-tabs, file-tree, sidebar

@@ -1,4 +1,5 @@
 ---
+status: complete
 phase: quick-260411-fkk
 plan: 01
 subsystem: terminal-ui

@@ -1,4 +1,5 @@
 ---
+status: complete
 phase: quick-260417-je3
 plan: 01
 subsystem: state-persistence

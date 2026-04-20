@@ -1,3 +1,7 @@
+---
+status: complete
+---
+
 # Quick Task 260410-wky Summary
 
 ## One-liner

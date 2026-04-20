@@ -1,3 +1,7 @@
+---
+status: complete
+---
+
 # Quick Task 260411-cbq: Add edit button to sidebar project panes
 
 **Date:** 2026-04-11

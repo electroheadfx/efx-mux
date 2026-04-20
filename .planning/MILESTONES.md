@@ -1,5 +1,33 @@
 # Milestones
 
+## v0.3.0 Workspace Evolution (Shipped: 2026-04-20)
+
+**Phases:** 8 (15-22) | **Plans:** 53 | **Tasks:** ~200
+**Timeline:** 7 days (2026-04-14 → 2026-04-20)
+**Codebase:** 30,434 LOC (25,004 TS + 5,430 Rust) | 555 commits
+**Stack:** Tauri 2, Preact, CodeMirror 6, xterm.js 6.0, tmux, git2, Tailwind 4
+
+**Delivered:** Full-featured development workspace with CodeMirror editor tabs, git staging/commit/push, file tree operations (delete, drag/drop, external editor), GSD planning viewer with 5 sub-tabs, multi-terminal right panel, and dynamic tabs with vertical split and cross-scope drag.
+
+**Key accomplishments:**
+
+1. **CodeMirror 6 editor tabs** -- Syntax highlighting for 15+ languages, unsaved indicator, Cmd+S save, dirty-close confirmation modal, drag-and-drop reorder
+2. **Git control pane** -- 3-tab sidebar with Projects/File Tree/Git Control, staging checkboxes, commit with message, push to remote, undo last commit
+3. **File tree enhancements** -- Delete via context menu and Delete key, Open In submenu (Zed/VSCode), intra-tree drag reorder, Finder drop import
+4. **GSD sub-tabs** -- 5 specialized views (Milestones, Phases, Progress, History, State) parsing ROADMAP.md, MILESTONES.md, STATE.md via unified/remark
+5. **Multi-terminal right panel** -- Plus menu for Terminal/Agent sub-TUI, unified tab bar replacing split layout, scope-aware PTY sessions
+6. **Dynamic tabs and vertical split** -- GSD/Git Changes as closeable/reorderable tabs, 1-3 stacked sub-panes per zone, cross-scope drag-and-drop, stable PTY session names
+7. **Bug fixes** -- File watcher sync with external editors, open-in-editor button, CLAUDE.md tab-open, code-review debt closure
+
+**Deferred items at close:** 47 documentation hygiene items (37 debug session notes, 10 UAT/verification checkbox gaps) -- not blocking, work shipped
+
+**Archives:**
+
+- `milestones/v0.3.0-ROADMAP.md` -- Full phase details
+- `milestones/v0.3.0-REQUIREMENTS.md` -- Requirements snapshot
+
+---
+
 ## v0.2.0 Testing \& Consolidation (Shipped: 2026-04-12)
 
 **Phases completed:** 4 phases, 8 plans, 18 tasks

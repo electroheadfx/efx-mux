@@ -1,4 +1,5 @@
 ---
+status: complete
 phase: quick-260415-gkz
 plan: 01
 subsystem: git-panel

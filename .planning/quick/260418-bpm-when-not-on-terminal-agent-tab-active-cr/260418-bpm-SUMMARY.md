@@ -1,4 +1,5 @@
 ---
+status: complete
 phase: quick-260418-bpm
 plan: 01
 subsystem: unified-tab-bar

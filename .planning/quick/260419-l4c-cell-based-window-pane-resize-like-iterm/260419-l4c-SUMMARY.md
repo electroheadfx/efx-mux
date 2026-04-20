@@ -1,4 +1,5 @@
 ---
+status: complete
 phase: quick-260419-l4c
 plan: 1
 subsystem: window-resize

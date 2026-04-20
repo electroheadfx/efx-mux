@@ -1,4 +1,5 @@
 ---
+status: complete
 quick_id: 260410-vc7
 slug: ui-fixes-left-sidebar-padding-tui-newlin
 description: UI fixes: left sidebar padding, TUI newlines, pane backgrounds, git pane font size

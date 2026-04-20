@@ -1,3 +1,7 @@
+---
+status: complete
+---
+
 # Quick Task 260411-dsm: Make pane resize borders thin 1px
 
 ## Summary

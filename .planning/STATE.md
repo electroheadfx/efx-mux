@@ -1,34 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.3.0
-milestone_name: Workspace Evolution
-status: executing
-stopped_at: Phase 22 UAT Round 2 FAILED — see 22-14-SUMMARY.md; user decision needed (hotfix-chain vs stale-build-check vs defer-to-phase-23)
-last_updated: "2026-04-19T07:05:43.026Z"
-last_activity: 2026-04-19
+milestone: v0.4.0
+milestone_name: TBD
+status: planning
+stopped_at: v0.3.0 shipped — ready for next milestone
+last_updated: "2026-04-20T14:00:00.000Z"
+last_activity: 2026-04-20
 progress:
-  total_phases: 8
-  completed_phases: 7
-  total_plans: 49
-  completed_plans: 53
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-14)
+See: .planning/PROJECT.md (updated 2026-04-20)
 
 **Core value:** A single native macOS window that co-locates AI agent terminals alongside live GSD progress, git diff, and file tree -- all persisted across restarts via tmux.
-**Current focus:** Phase 22 — dynamic-tabs-vertical-split-and-preferences-modal
+**Current focus:** Planning v0.4.0
 
 ## Current Position
 
-Phase: 22 (dynamic-tabs-vertical-split-and-preferences-modal) — EXECUTING
-Plan: 5 of 14
-Status: Ready to execute
-Last activity: 2026-04-19
+Milestone: v0.3.0 SHIPPED (2026-04-20)
+Next: Run `/gsd-new-milestone` to define v0.4.0 scope
+Last activity: 2026-04-20
 
 **Code review fixes pending (non-blocking):**
 
@@ -92,7 +91,7 @@ None.
 - Git push credential handling: Must decide PTY shell-out vs git2-credentials crate (Phase 16)
 - Tauri drag-drop bug #14624: Verify fix in 2.10.3 before Phase 18
 - Next: Phase 15 planning/execution
-- Phase 22 UAT Round 2 FAILED (2026-04-19): 5 regressions + 4 residual issues. Contradictions: R-6/R-7/R-8 contradict 22-09 (GSD/File Tree labels still 'Git Changes', close buttons non-functional); R-10 contradicts 22-08 (tabs not persisted across restart); R-5 contradicts 22-13 (moved tab not activated on receiver). New regression R-11: cross-scope terminal activation erases main-panel file content. Phase 22 NOT complete. 22-05-PLAN.md NOT superseded. REQUIREMENTS.md NOT modified. See 22-14-SUMMARY.md for full contradiction analysis and paths forward.
+- Phase 22 UAT Round 3 PASSED (2026-04-20): All regressions resolved. I-4 (tmux cell-gap) deferred to Phase 23.
 
 ## Quick Tasks Completed
 
@@ -153,7 +152,7 @@ None.
 ## Session Continuity
 
 Last session: 2026-04-20
-Stopped at: Quick task 260420-focus-next-tab-on-close complete
+Stopped at: Phase 22 complete, milestone v0.3.0 ready for closeout
 Resume file: None
 
-Next: `/gsd-execute-phase 15` or `/gsd-code-review-fix 17` to fix remaining warnings
+Next: `/gsd-complete-milestone` to archive v0.3.0 and start v0.4.0
