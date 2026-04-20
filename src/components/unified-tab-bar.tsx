@@ -577,7 +577,30 @@ export function persistEditorTabs(): void {
     activeFilePath = priorActive;
   }
   const wasEditorActive = !!activeTab;
-  const data = JSON.stringify({ tabs, activeTabId: activeUnifiedTabId.value, activeFilePath, wasEditorActive });
+  // Per-scope active file paths: for each scope, if the scope's activeTabId is an editor tab,
+  // record which file path is active in that scope. Preserve prior values when the scope's
+  // current active tab is not an editor (e.g., terminal selected) to avoid losing the last
+  // active editor selection.
+  const prior = activeName ? getCurrentState()?.session?.[`editor-tabs:${activeName}`] : null;
+  let priorPerScope: Record<string, string> = {};
+  if (prior) {
+    try {
+      priorPerScope = (JSON.parse(prior)?.activeFilePathPerScope as Record<string, string>) ?? {};
+    } catch { /* fall through */ }
+  }
+  const activeFilePathPerScope: Record<string, string> = {};
+  const allScopes: TerminalScope[] = ['main-0', 'main-1', 'main-2', 'right-0', 'right-1', 'right-2'];
+  for (const scope of allScopes) {
+    const scopeActiveId = getTerminalScope(scope).activeTabId.value;
+    const scopeActiveTab = editorTabs.value.find(t => t.id === scopeActiveId && (t.ownerScope ?? 'main-0') === scope);
+    if (scopeActiveTab) {
+      activeFilePathPerScope[scope] = scopeActiveTab.filePath;
+    } else if (priorPerScope[scope]) {
+      // Preserve prior active editor path if current active tab is not an editor
+      activeFilePathPerScope[scope] = priorPerScope[scope];
+    }
+  }
+  const data = JSON.stringify({ tabs, activeTabId: activeUnifiedTabId.value, activeFilePath, wasEditorActive, activeFilePathPerScope });
   const patch: Record<string, string> = { 'editor-tabs': data };
   if (activeName) {
     patch[`editor-tabs:${activeName}`] = data;
@@ -620,24 +643,26 @@ export async function restoreEditorTabs(projectName: string): Promise<boolean> {
           renameEditorTab(opened.id, tab.displayName);
         }
       }
-      // Plan 20-05-D: honor persisted ownerScope. openEditorTab* default to
-      // 'main-0', so flip to 'right' AFTER the tab exists. Also re-route the
-      // scoped tab order: openEditorTab* seeded it in 'main-0' by default.
+      // Phase 22 fix: honor persisted ownerScope for ALL scopes (main-0..main-2,
+      // right-0..right-2). openEditorTab* default to 'main-0', so re-route to
+      // the correct scope AFTER the tab exists.
       const restoredScope = tab.ownerScope ?? 'main-0';
-      if (restoredScope.startsWith('right-')) {
+      if (restoredScope !== 'main-0') {
         const opened = editorTabs.value.find(t => t.filePath === tab.filePath);
         if (opened) {
           const updated = editorTabs.value.map(t =>
-            t.id === opened.id ? { ...t, ownerScope: 'right-0' as const } : t,
+            t.id === opened.id ? { ...t, ownerScope: restoredScope } : t,
           );
           setProjectEditorTabs(updated);
+          // Remove from main-0 (where openEditorTab* seeded it)
           setScopedTabOrder(
             'main-0',
             getScopedTabOrder('main-0').filter(id => id !== opened.id),
           );
+          // Add to the correct restored scope
           setScopedTabOrder(
-            'right-0',
-            [...getScopedTabOrder('right-0').filter(id => id !== opened.id), opened.id],
+            restoredScope,
+            [...getScopedTabOrder(restoredScope).filter(id => id !== opened.id), opened.id],
           );
         }
       }
@@ -658,6 +683,18 @@ export async function restoreEditorTabs(projectName: string): Promise<boolean> {
       activeUnifiedTabId.value = match.id;
     }
   }
+
+  // Restore per-scope active tab IDs by matching file paths to restored tabs.
+  const activeFilePathPerScope = (parsed as any).activeFilePathPerScope as Record<string, string> | undefined;
+  if (activeFilePathPerScope) {
+    for (const [scope, filePath] of Object.entries(activeFilePathPerScope)) {
+      const match = editorTabs.value.find(t => t.filePath === filePath && (t.ownerScope ?? 'main-0') === scope);
+      if (match) {
+        getTerminalScope(scope as TerminalScope).activeTabId.value = match.id;
+      }
+    }
+  }
+
   return true;
 }
 
