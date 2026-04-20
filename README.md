@@ -1,6 +1,6 @@
 # Efxmux
 
-![Efxmux](public/img/app-ui.png)
+![Efxmux](public/img/app-ui-v0.3.0.png)
 
 **A native macOS terminal multiplexer for AI-assisted development.**
 
