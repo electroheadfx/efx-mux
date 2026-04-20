@@ -136,6 +136,7 @@ None.
 | 260418-b1a | Fix `[exited]` dead terminal: right-panel overlay mount + restore-loop TOCTOU race + monitor thread delay | 2026-04-18 |
 | 260418-bpm | Fix main-window new-tab focus: creating new agent/terminal from non-agent tab now focuses the new tab | 2026-04-18 |
 | 260419-l4c | Cell-based window + pane resize like iTerm2/Ghostty (NSWindow contentResizeIncrements + live onDrag snap) | 2026-04-19 |
+| 260420-focus-next-tab-on-close | Focus next tab when closing any tab (if others exist) | 2026-04-20 |
 | Phase 19 P01 | 8min | 3 tasks | 10 files |
 | Phase 19 P02 | 3min 43s | 2 tasks | 3 files |
 | Phase 19 P03 | 8min 40s | 3 tasks | 6 files |
@@ -151,8 +152,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-19T07:05:43.023Z
-Stopped at: Phase 22 UAT Round 2 FAILED — see 22-14-SUMMARY.md; user decision needed (hotfix-chain vs stale-build-check vs defer-to-phase-23)
+Last session: 2026-04-20
+Stopped at: Quick task 260420-focus-next-tab-on-close complete
 Resume file: None
 
 Next: `/gsd-execute-phase 15` or `/gsd-code-review-fix 17` to fix remaining warnings

@@ -19,6 +19,7 @@ import {
   renameTerminalTab,
   getDefaultTerminalLabel,
   getTerminalScope,
+  persistActiveTabIdForScope,
 } from './terminal-tabs';
 import { writeFile, readFile } from '../services/file-service';
 import { getEditorCurrentContent, minimapVisible, toggleMinimap } from '../editor/setup';
@@ -97,7 +98,7 @@ const _tabOrderByProject = signal<Map<string, string[]>>(new Map());
 /**
  * Phase 20 Plan 02: per-scope, per-project tab order.
  * Outer key = TerminalScope ('main-0'..'main-2' | 'right-0'..'right-2'), inner key = project name.
- * Only dynamic tab IDs are stored — singleton IDs ('gsd') NEVER appear here (D-03 drag-reject).
+ * All tab IDs including singletons (gsd, git-changes) stored for ordering.
  */
 const _tabOrderByProjectScoped = signal<Map<TerminalScope, Map<string, string[]>>>(
   new Map<TerminalScope, Map<string, string[]>>([
@@ -193,11 +194,9 @@ export function getScopedTabOrder(scope: TerminalScope): string[] {
 export function setScopedTabOrder(scope: TerminalScope, order: string[]): void {
   const name = activeProjectName.value;
   if (!name) return;
-  // Strip the singleton gsd ID — singleton is stored in gsdTab signal, not in scoped order.
-  const clean = order.filter(id => id !== 'gsd');
   const nextOuter = new Map(_tabOrderByProjectScoped.value);
   const inner = new Map(nextOuter.get(scope) ?? new Map<string, string[]>());
-  inner.set(name, clean);
+  inner.set(name, order);
   nextOuter.set(scope, inner);
   _tabOrderByProjectScoped.value = nextOuter;
 }
@@ -557,10 +556,6 @@ export function persistEditorTabs(): void {
     ownerScope: t.ownerScope ?? 'main-0',
     ...(t.displayName ? { displayName: t.displayName } : {}),
   }));
-  // Never overwrite saved tabs with empty — prevents init race where computed
-  // fires with [] before restoreEditorTabs runs (activeProjectName set triggers
-  // recompute on empty _editorTabsByProject Map)
-  if (tabs.length === 0) return;
   // Save active file path (not tab ID which gets regenerated on restore).
   // quick-260417-f6e: when activeUnifiedTabId points to a tab that doesn't belong
   // to THIS project (e.g. during project switch the signal still holds the prior
@@ -581,7 +576,8 @@ export function persistEditorTabs(): void {
     }
     activeFilePath = priorActive;
   }
-  const data = JSON.stringify({ tabs, activeTabId: activeUnifiedTabId.value, activeFilePath });
+  const wasEditorActive = !!activeTab;
+  const data = JSON.stringify({ tabs, activeTabId: activeUnifiedTabId.value, activeFilePath, wasEditorActive });
   const patch: Record<string, string> = { 'editor-tabs': data };
   if (activeName) {
     patch[`editor-tabs:${activeName}`] = data;
@@ -650,9 +646,13 @@ export async function restoreEditorTabs(projectName: string): Promise<boolean> {
     }
   }
 
-  // Restore active tab by file path (tab IDs are regenerated on restore)
+  // Restore active tab by file path (tab IDs are regenerated on restore).
+  // Only restore editor focus if an editor was actually active at quit time
+  // (R-10 fix: terminal restore runs first; unconditionally overwriting
+  // activeUnifiedTabId here would always focus a file tab on restart).
   const activePath = (parsed as any).activeFilePath;
-  if (activePath) {
+  const wasEditorActive = (parsed as any).wasEditorActive ?? true;
+  if (activePath && wasEditorActive) {
     const match = editorTabs.value.find(t => t.filePath === activePath);
     if (match) {
       activeUnifiedTabId.value = match.id;
@@ -737,8 +737,8 @@ export function restoreGitChangesTab(projectName: string): void {
   }
 }
 
-// Watch gitChangesTab for changes and persist.
-gitChangesTab.subscribe(() => { persistGitChangesTab(); });
+// Watch gitChangesTab for changes and persist (respects _suppressPersist).
+gitChangesTab.subscribe(() => { if (!_suppressPersist) persistGitChangesTab(); });
 
 // ── GSD tab persistence (Phase 22 Plan 03) ───────────────────────────────────
 
@@ -755,7 +755,7 @@ function persistGsdTab(): void {
     return;
   }
   updateSession({
-    key: JSON.stringify({ id: current.id, owningScope: current.owningScope }),
+    [key]: JSON.stringify({ id: current.id, owningScope: current.owningScope }),
   });
 }
 
@@ -770,10 +770,14 @@ export function restoreGsdTab(projectName: string): void {
     const parsed = JSON.parse(raw) as { id?: string; owningScope?: TerminalScope };
     if (!parsed?.id || !parsed?.owningScope) return;
     gsdTab.value = { type: 'gsd', id: parsed.id, owningScope: parsed.owningScope };
+    const order = getScopedTabOrder(parsed.owningScope);
+    if (!order.includes(parsed.id)) {
+      setScopedTabOrder(parsed.owningScope, [...order, parsed.id]);
+    }
   } catch { /* corrupt */ }
 }
 
-gsdTab.subscribe(() => { persistGsdTab(); });
+gsdTab.subscribe(() => { if (!_suppressPersist) persistGsdTab(); });
 
 // ── File Tree tabs persistence (Phase 22 Plan 03) ─────────────────────────────
 
@@ -788,16 +792,23 @@ function persistFileTreeTabs(): void {
 
 export function restoreFileTreeTabs(projectName: string): void {
   const state = getCurrentState();
-  const raw = state?.session?.[`${FILE_TREE_KEY_PREFIX}${projectName}`];
+  const key = `${FILE_TREE_KEY_PREFIX}${projectName}`;
+  const raw = state?.session?.[key];
   if (!raw) return;
   try {
     const parsed = JSON.parse(raw) as FileTreeTabData[];
     if (!Array.isArray(parsed)) return;
     fileTreeTabs.value = parsed;
-  } catch { /* corrupt */ }
+    for (const ft of parsed) {
+      const order = getScopedTabOrder(ft.ownerScope);
+      if (!order.includes(ft.id)) {
+        setScopedTabOrder(ft.ownerScope, [...order, ft.id]);
+      }
+    }
+  } catch { /* ignore parse errors */ }
 }
 
-fileTreeTabs.subscribe(() => { persistFileTreeTabs(); });
+fileTreeTabs.subscribe(() => { if (!_suppressPersist) persistFileTreeTabs(); });
 
 // ── Singleton helpers (Phase 22 Plan 03) ────────────────────────────────────
 
@@ -1016,6 +1027,8 @@ export function closeUnifiedTab(tabId: string): void {
           // Update unified selection BEFORE close removes the tab.
           if (isMain && tabId === activeUnifiedTabId.value) {
             switchToAdjacentTab(tabId);
+          } else if (!isMain) {
+            switchToAdjacentTabInScope(termScope!, tabId);
           }
           if (isMain) {
             setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
@@ -1037,6 +1050,8 @@ export function closeUnifiedTab(tabId: string): void {
     // Non-agent terminal: close immediately on the owning scope.
     if (isMain && tabId === activeUnifiedTabId.value) {
       switchToAdjacentTab(tabId);
+    } else if (!isMain) {
+      switchToAdjacentTabInScope(termScope!, tabId);
     }
     if (isMain) {
       setProjectTabOrder(tabOrder.value.filter(id => id !== tabId));
@@ -1050,11 +1065,8 @@ export function closeUnifiedTab(tabId: string): void {
   // the × button still closes the tab and clears persistence.
   const gc = gitChangesTab.value;
   if (gc && gc.id === tabId && gc.owningScope.startsWith('right')) {
-    // Fall right-scope active back to '' if it was pointing here.
-    const right = getTerminalScope('right-0');
-    if (right.activeTabId.value === tabId) {
-      right.activeTabId.value = '';
-    }
+    // Switch to adjacent tab in scope before closing
+    switchToAdjacentTabInScope('right-0', tabId);
     gitChangesTab.value = null;
     // Clean the right-0 scoped tab order too.
     setScopedTabOrder('right-0', getScopedTabOrder('right-0').filter(id => id !== tabId));
@@ -1067,13 +1079,8 @@ export function closeUnifiedTab(tabId: string): void {
   // through the scope registry.
   const gsd = gsdTab.value;
   if (gsd && gsd.id === tabId) {
-    const owner = getTerminalScope(gsd.owningScope);
-    if (owner.activeTabId.value === tabId) {
-      owner.activeTabId.value = '';
-    }
-    if (activeUnifiedTabId.value === tabId) {
-      activeUnifiedTabId.value = '';
-    }
+    // Switch to adjacent tab in scope before closing
+    switchToAdjacentTabInScope(gsd.owningScope, tabId);
     gsdTab.value = null;
     setScopedTabOrder(gsd.owningScope, getScopedTabOrder(gsd.owningScope).filter(id => id !== tabId));
     return;
@@ -1081,13 +1088,8 @@ export function closeUnifiedTab(tabId: string): void {
 
   const ftTab = fileTreeTabs.value.find(t => t.id === tabId);
   if (ftTab) {
-    const owner = getTerminalScope(ftTab.ownerScope);
-    if (owner.activeTabId.value === tabId) {
-      owner.activeTabId.value = '';
-    }
-    if (activeUnifiedTabId.value === tabId) {
-      activeUnifiedTabId.value = '';
-    }
+    // Switch to adjacent tab in scope before closing
+    switchToAdjacentTabInScope(ftTab.ownerScope, tabId);
     fileTreeTabs.value = fileTreeTabs.value.filter(t => t.id !== tabId);
     setScopedTabOrder(ftTab.ownerScope, getScopedTabOrder(ftTab.ownerScope).filter(id => id !== tabId));
     return;
@@ -1238,6 +1240,32 @@ function switchToAdjacentTab(currentId: string): void {
       activeTabId.value = nextTab.id;
       switchToTab(nextTab.id);
     }
+  }
+}
+
+/**
+ * Switch to adjacent tab within a specific scope (for right-scope and sub-scope tabs).
+ * Uses scope-local tab order instead of the main-only allTabs view.
+ */
+function switchToAdjacentTabInScope(scope: TerminalScope, currentId: string): void {
+  // Use getOrderedTabsForScope to get ALL tabs in scope (terminals + editors + gsd + etc.)
+  const ordered = getOrderedTabsForScope(scope);
+  const idx = ordered.findIndex(t => t.id === currentId);
+  if (idx === -1) return;
+
+  // Try next first (more intuitive), then previous
+  const nextTab = ordered[idx + 1] ?? ordered[idx - 1];
+  if (!nextTab) return;
+
+  const scopeHandle = getTerminalScope(scope);
+  scopeHandle.activeTabId.value = nextTab.id;
+  // For terminal tabs, also switch container visibility
+  if (nextTab.type === 'terminal') {
+    scopeHandle.switchToTab(nextTab.id);
+  }
+  // Also update unified selection if this scope's tab was the unified active
+  if (activeUnifiedTabId.value === currentId) {
+    activeUnifiedTabId.value = nextTab.id;
   }
 }
 
@@ -1423,8 +1451,6 @@ const reorder: ReorderState = {
 };
 
 function onTabMouseDown(e: MouseEvent, tabId: string, scope: TerminalScope): void {
-  // Phase 20 Plan 02: sticky tabs are not draggable (D-03, Pitfall 7).
-  if (tabId === 'file-tree' || tabId === 'gsd') return;
   // Only left button, ignore close button clicks
   if (e.button !== 0) return;
   const target = e.currentTarget as HTMLElement;
@@ -1490,7 +1516,8 @@ function onDocMouseMove(e: MouseEvent): void {
 
   for (const el of tabEls) {
     const rect = el.getBoundingClientRect();
-    if (e.clientX >= rect.left && e.clientX <= rect.right) {
+    if (e.clientX >= rect.left && e.clientX <= rect.right &&
+        e.clientY >= rect.top && e.clientY <= rect.bottom) {
       const mid = rect.left + rect.width / 2;
       if (el.dataset.tabId !== reorder.sourceId) {
         if (e.clientX < mid) {
@@ -1536,14 +1563,15 @@ function onDocMouseUp(e: MouseEvent): void {
   const scopeWrapperEl = dropTargetEl?.closest('[data-tablist-scope]') as HTMLElement | null;
   const dropTargetScope = scopeWrapperEl?.getAttribute('data-tablist-scope') as TerminalScope | null;
 
-  // Find drop target tab (if any) within the cursor's x-range.
+  // Find drop target tab (if any) under the cursor (x + y range).
   const tabEls = document.querySelectorAll<HTMLElement>('[data-tab-id]');
   let targetId: string | null = null;
   let insertAfter = false;
 
   for (const el of tabEls) {
     const rect = el.getBoundingClientRect();
-    if (e.clientX >= rect.left && e.clientX <= rect.right) {
+    if (e.clientX >= rect.left && e.clientX <= rect.right &&
+        e.clientY >= rect.top && e.clientY <= rect.bottom) {
       targetId = el.dataset.tabId ?? null;
       const mid = rect.left + rect.width / 2;
       insertAfter = e.clientX >= mid;
@@ -1608,21 +1636,20 @@ function onDocMouseUp(e: MouseEvent): void {
   }
 
   if (targetId && targetId !== reorder.sourceId) {
-    // ── Same-scope reorder (existing behavior for non-editor tabs) ──────
-    const ordered = getOrderedTabs();
-    const allIds = ordered.map(t => t.id);
+    // ── Same-scope reorder — use full rendered order (includes all tab kinds) ──
+    const scope = dropTargetScope ?? reorder.sourceScope ?? 'main-0';
+    const rendered = computeDynamicTabsForScope(scope);
+    const allIds = rendered.map(t => t.id);
     const sourceIdx = allIds.indexOf(reorder.sourceId);
 
     if (sourceIdx !== -1) {
-      // Remove source
       allIds.splice(sourceIdx, 1);
-      // Find target position (after removal)
-      let targetIdx = allIds.indexOf(targetId);
-      if (targetIdx !== -1) {
-        if (insertAfter) targetIdx += 1;
-        allIds.splice(targetIdx, 0, reorder.sourceId);
-        setProjectTabOrder(allIds);
-      }
+    }
+    let targetIdx = allIds.indexOf(targetId);
+    if (targetIdx !== -1) {
+      if (insertAfter) targetIdx += 1;
+      allIds.splice(targetIdx, 0, reorder.sourceId);
+      setScopedTabOrder(scope, allIds);
     }
   }
 
@@ -1696,18 +1723,16 @@ export function handleCrossScopeDrop(
       );
     }
 
+    getTerminalScope(targetScope).activeTabId.value = sourceId;
     if (targetScope.startsWith('right')) {
-      getTerminalScope('right-0').activeTabId.value = sourceId;
       if (activeUnifiedTabId.value === sourceId) {
         const remainingMain = computeDynamicTabsForScope('main-0');
         activeUnifiedTabId.value = remainingMain[0]?.id ?? '';
       }
     } else {
       activeUnifiedTabId.value = sourceId;
-      const rightScope = getTerminalScope('right-0');
-      if (rightScope.activeTabId.value === sourceId) {
-        const remainingRight = computeDynamicTabsForScope('right-0');
-        rightScope.activeTabId.value = remainingRight[0]?.id ?? '';
+      if (getTerminalScope(sourceScope).activeTabId.value === sourceId) {
+        getTerminalScope(sourceScope).activeTabId.value = '';
       }
     }
     return;
@@ -1741,46 +1766,6 @@ export function handleCrossScopeDrop(
     getTerminalScope(targetScope).activeTabId.value = sourceId;
     if (getTerminalScope(sourceScope).activeTabId.value === sourceId) {
       getTerminalScope(sourceScope).activeTabId.value = '';
-    }
-    return;
-  }
-
-  // Plan 20-05-D: editor tabs — flip ownerScope and update scoped orders.
-  // NOTE: editor branch moved to the top of this function (22-13); this branch
-  // is now unreachable for editor sources. Preserved-disabled to simplify
-  // backport hunks — safe because sourceId.startsWith('editor-') is handled above.
-  if (sourceId.startsWith('editor-')) {
-    const edTab = editorTabs.value.find(t => t.id === sourceId);
-    if (!edTab) return;
-    if ((edTab.ownerScope ?? 'main-0') === targetScope) return;
-
-    const updated = editorTabs.value.map(t =>
-      t.id === sourceId ? { ...t, ownerScope: targetScope } : t,
-    );
-    setProjectEditorTabs(updated);
-
-    setScopedTabOrder(
-      sourceScope,
-      getScopedTabOrder(sourceScope).filter(id => id !== sourceId),
-    );
-    setScopedTabOrder(
-      targetScope,
-      [...getScopedTabOrder(targetScope).filter(id => id !== sourceId), sourceId],
-    );
-
-    if (targetScope.startsWith('right')) {
-      getTerminalScope('right-0').activeTabId.value = sourceId;
-      if (activeUnifiedTabId.value === sourceId) {
-        const remainingMain = computeDynamicTabsForScope('main-0');
-        activeUnifiedTabId.value = remainingMain[0]?.id ?? '';
-      }
-    } else {
-      activeUnifiedTabId.value = sourceId;
-      const rightScope = getTerminalScope('right-0');
-      if (rightScope.activeTabId.value === sourceId) {
-        const remainingRight = computeDynamicTabsForScope('right-0');
-        rightScope.activeTabId.value = remainingRight[0]?.id ?? '';
-      }
     }
     return;
   }
@@ -1848,25 +1833,29 @@ export function UnifiedTabBar({ scope }: UnifiedTabBarProps) {
   const hasDynamicRight = scope.startsWith('right') && computeDynamicTabsForScope(scope).length > 0;
 
   // Compute zone for split icon: 'main-0' or 'right'
-  const zone: 'main-0' | 'right' = scope.startsWith('main-0') ? 'main-0' : 'right';
+  const zone: 'main-0' | 'right' = scope.startsWith('main') ? 'main-0' : 'right';
   const activeSubScopes = getActiveSubScopesForZone(zone);
   const atCap = activeSubScopes.length >= 3;
 
   function handleTabClick(tab: UnifiedTab): void {
     // Phase 22: GSD singleton, File Tree, Git Changes all route via owningScope.
+    // Persist activeTabId so selection survives restart.
     if (tab.type === 'gsd') {
       getTerminalScope(tab.owningScope).activeTabId.value = tab.id;
       activeUnifiedTabId.value = tab.id;
+      persistActiveTabIdForScope(tab.owningScope);
       return;
     }
     if (tab.type === 'file-tree') {
       getTerminalScope(tab.ownerScope).activeTabId.value = tab.id;
       activeUnifiedTabId.value = tab.id;
+      persistActiveTabIdForScope(tab.ownerScope);
       return;
     }
     if (tab.type === 'git-changes') {
       getTerminalScope(tab.owningScope).activeTabId.value = tab.id;
       activeUnifiedTabId.value = tab.id;
+      persistActiveTabIdForScope(tab.owningScope);
       return;
     }
     // Terminal tab: scope determined by tab.scope.
@@ -1889,6 +1878,7 @@ export function UnifiedTabBar({ scope }: UnifiedTabBarProps) {
     if (tab.type === 'editor') {
       const ownerScope = tab.ownerScope ?? 'main-0';
       getTerminalScope(ownerScope).activeTabId.value = tab.id;
+      persistActiveTabIdForScope(ownerScope);
       // Only update global activeUnifiedTabId for main-scope editors;
       // right-scope has its own isolated focus tracking.
       if (!ownerScope.startsWith('right-')) {
