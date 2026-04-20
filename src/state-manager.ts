@@ -112,20 +112,9 @@ export async function loadAppState(): Promise<AppState> {
       }
     }
 
-    // Phase 22 D-06: drop sticky ids 'file-tree' / 'gsd' from persisted activeTabId
-    // in any per-scope blob. D-02 defaults re-seed at render time.
-    for (const key of Object.keys(session)) {
-      if (!/^terminal-tabs:.+:(main|right)-[0-2]$/.test(key)) continue;
-      const raw = session[key];
-      if (raw === undefined) continue;
-      try {
-        const parsed = JSON.parse(raw) as { activeTabId?: string };
-        if (parsed.activeTabId === 'file-tree' || parsed.activeTabId === 'gsd') {
-          parsed.activeTabId = '';
-          session[key] = JSON.stringify(parsed);
-        }
-      } catch { /* corrupt entry — fail-soft */ }
-    }
+    // Phase 22 gap-fix: removed D-06 stripping of 'file-tree'/'gsd' from activeTabId.
+    // These singleton tabs are now properly restored via restoreGsdTab/restoreFileTreeTabs,
+    // so their activeTabId should be preserved to restore the correct active state.
   }
 
   // Set signals from loaded state

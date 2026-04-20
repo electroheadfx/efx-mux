@@ -33,21 +33,23 @@ export function MainPanel() {
       aria-label="Main panel"
       style={{ backgroundColor: colors.bgBase, flex: 1, overflow: 'hidden' }}
     >
-      {scopes.map((scope, i) => (
-        <>
-          <SubScopePane key={scope} scope={scope} zone="main" index={i} total={scopes.length} />
-          {i < scopes.length - 1 && (
-            <div
-              key={`main-intra-${i}`}
-              class="split-handle-h-intra"
-              data-handle={`main-intra-${i}`}
-              role="separator"
-              aria-orientation="horizontal"
-              aria-label="Resize split pane"
-            />
-          )}
-        </>
-      ))}
+      <div class="flex flex-col" style={{ flex: 1, overflow: 'hidden' }}>
+        {scopes.map((scope, i) => (
+          <>
+            <SubScopePane key={scope} scope={scope} zone="main" index={i} total={scopes.length} />
+            {i < scopes.length - 1 && (
+              <div
+                key={`main-intra-${i}`}
+                class="split-handle-h-intra"
+                data-handle={`main-intra-${i}`}
+                role="separator"
+                aria-orientation="horizontal"
+                aria-label="Resize split pane"
+              />
+            )}
+          </>
+        ))}
+      </div>
       <ServerPane />
     </main>
   );

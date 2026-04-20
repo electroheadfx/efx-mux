@@ -43,6 +43,9 @@ pub struct ChromeTheme {
 
     #[serde(default = "default_chrome_bg_terminal", rename = "bgTerminal")]
     pub bg_terminal: String,
+
+    #[serde(default = "default_chrome_split_border", rename = "splitBorder")]
+    pub split_border: String,
 }
 
 // Chrome defaults (Solarized Dark)
@@ -59,6 +62,7 @@ fn default_chrome_file_tree_font() -> String { "Geist".into() }
 fn default_chrome_file_tree_font_size() -> u32 { 13 }
 fn default_chrome_file_tree_line_height() -> u32 { 5 }
 fn default_chrome_bg_terminal() -> String { "#111927".into() }
+fn default_chrome_split_border() -> String { "#35517B".into() }
 
 impl Default for ChromeTheme {
     fn default() -> Self {
@@ -76,6 +80,7 @@ impl Default for ChromeTheme {
             file_tree_font_size: default_chrome_file_tree_font_size(),
             file_tree_line_height: default_chrome_file_tree_line_height(),
             bg_terminal: default_chrome_bg_terminal(),
+            split_border: default_chrome_split_border(),
         }
     }
 }

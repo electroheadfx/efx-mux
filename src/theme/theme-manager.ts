@@ -36,6 +36,7 @@ export interface ChromeTheme {
   fileTreeFont?: string;
   fileTreeFontSize?: number;
   fileTreeLineHeight?: number;
+  splitBorder?: string;
 }
 
 export interface ThemeData {
@@ -90,7 +91,8 @@ export function applyTheme(theme: ThemeData): void {
     const style = document.documentElement.style;
     if (theme.chrome.bg) style.setProperty('--color-bg', theme.chrome.bg);
     if (theme.chrome.bgRaised) style.setProperty('--color-bg-raised', theme.chrome.bgRaised);
-    if (theme.chrome.bgTerminal) style.setProperty('--color-bg-terminal', theme.chrome.bgTerminal);
+    const bgTerminal = theme.terminal?.background ?? theme.chrome.bgTerminal;
+    if (bgTerminal) style.setProperty('--color-bg-terminal', bgTerminal);
     if (theme.chrome.border) style.setProperty('--color-border', theme.chrome.border);
     if (theme.chrome.borderInteractive) style.setProperty('--color-border-interactive', theme.chrome.borderInteractive);
     if (theme.chrome.text) style.setProperty('--color-text', theme.chrome.text);
@@ -105,6 +107,7 @@ export function applyTheme(theme: ThemeData): void {
     // Signal values (fontSize, lineHeight, bgColor) are owned by user preferences
     // in state.json — theme must not overwrite them (they're restored in bootstrap).
     if (theme.chrome.fileTreeFont) style.setProperty('--file-tree-font', theme.chrome.fileTreeFont);
+    if (theme.chrome.splitBorder) style.setProperty('--color-split-border', theme.chrome.splitBorder);
   }
 
   if (theme.terminal) {
@@ -165,7 +168,8 @@ export function setThemeMode(mode: 'dark' | 'light'): void {
     const c = currentTheme.chrome;
     if (c.bg) style.setProperty('--color-bg', c.bg);
     if (c.bgRaised) style.setProperty('--color-bg-raised', c.bgRaised);
-    if (c.bgTerminal) style.setProperty('--color-bg-terminal', c.bgTerminal);
+    const bgT = currentTheme?.terminal?.background ?? c.bgTerminal;
+    if (bgT) style.setProperty('--color-bg-terminal', bgT);
     if (c.border) style.setProperty('--color-border', c.border);
     if (c.borderInteractive) style.setProperty('--color-border-interactive', c.borderInteractive);
     if (c.text) style.setProperty('--color-text', c.text);

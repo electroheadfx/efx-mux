@@ -619,6 +619,17 @@ async function restoreProjectTabsScoped(
           if (typeof parsed.activeSessionName === 'string' && parsed.activeSessionName) {
             savedActiveSessionName = parsed.activeSessionName;
           }
+          // Phase 22: if activeTabId is a non-terminal tab (gsd, file-tree, git-changes),
+          // preserve it so the scope opens to that tab instead of defaulting to terminal.
+          if (typeof parsed.activeTabId === 'string' && parsed.activeTabId) {
+            const isNonTerminal = parsed.activeTabId.startsWith('gsd') ||
+              parsed.activeTabId.startsWith('file-tree') ||
+              parsed.activeTabId.startsWith('git-changes') ||
+              parsed.activeTabId.startsWith('editor-');
+            if (isNonTerminal) {
+              savedActiveStickyId = parsed.activeTabId;
+            }
+          }
         }
       } catch (err) {
         console.warn('[efxmux] Failed to restore scoped tabs:', err);
@@ -749,15 +760,25 @@ async function restoreTabsScoped(
 
   // Plan 20-05-B: prefer the sessionName-anchored active marker (survives
   // restart), then fall back to first-tab.
+  // Phase 22: if activeStickyId is set (non-terminal tab like gsd/file-tree),
+  // use it directly — the tab exists as a singleton, not in restoredTabs.
   let activeId: string | undefined;
-  if (savedData.activeSessionName) {
+  if (savedData.activeStickyId) {
+    // Non-terminal tab was active — set it directly without calling switchToTabScoped
+    // (which only handles terminal containers). The tab body visibility is handled
+    // by SubScopePane reading activeTabId.
+    activeId = savedData.activeStickyId;
+  } else if (savedData.activeSessionName) {
     const match = restoredTabs.find(t => t.sessionName === savedData.activeSessionName);
     if (match) activeId = match.id;
   }
   if (!activeId) activeId = restoredTabs[0].id;
 
   s.activeTabId.value = activeId;
-  switchToTabScoped(scope, activeId);
+  // Only call switchToTabScoped for terminal tabs (it manages container display:none/block)
+  if (!savedData.activeStickyId) {
+    switchToTabScoped(scope, activeId);
+  }
 
   persistTabStateScoped(scope);
   return true;
@@ -906,6 +927,36 @@ export function hasProjectTabs(projectName: string, scope: TerminalScope = 'main
 }
 export function clearAllTabs(): Promise<void> { return clearAllTabsScoped('main-0'); }
 export function ActiveTabCrashOverlay() { return ActiveTabCrashOverlayScoped('main-0'); }
+
+/**
+ * Phase 22: restore activeTabId for a scope when the persisted value is a
+ * non-terminal tab (gsd, file-tree, git-changes, editor). Call this AFTER
+ * singleton tabs have been restored (restoreGsdTab, restoreFileTreeTabs, etc.)
+ * so the tab exists when we set it as active.
+ *
+ * This handles the case where there are no terminal tabs but a non-terminal
+ * tab was active — restoreProjectTabsScoped returns early without setting
+ * activeTabId, so we need this separate restore path.
+ */
+export function restoreNonTerminalActiveTabId(projectName: string, scope: TerminalScope): void {
+  const s = getScope(scope);
+  const state = getCurrentState();
+  const persisted = state?.session?.[s.persistenceKey(projectName)];
+  if (!persisted) return;
+  try {
+    const parsed = JSON.parse(persisted);
+    const activeTabId = parsed?.activeTabId;
+    if (typeof activeTabId !== 'string' || !activeTabId) return;
+    // Only set if it's a non-terminal tab id
+    const isNonTerminal = activeTabId.startsWith('gsd') ||
+      activeTabId.startsWith('file-tree') ||
+      activeTabId.startsWith('git-changes') ||
+      activeTabId.startsWith('editor-');
+    if (isNonTerminal) {
+      s.activeTabId.value = activeTabId;
+    }
+  } catch { /* ignore parse errors */ }
+}
 
 /**
  * Plan 20-05-B: persistence helper for code paths that mutate a scope's

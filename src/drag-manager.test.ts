@@ -157,7 +157,7 @@ describe('Phase 22 gap-closure (22-11): attachIntraZoneHandles fresh-handle bind
     expect(final1).toBeLessThan(initial1 - 50);    // shrank by at least half the delta
   });
 
-  it('drag flips pane.flex to "none" so the new height is actually respected', () => {
+  it('drag flips pane0.flex to "none"; pane1 (last pane) keeps flex:1 to absorb remainder', () => {
     dragManager.attachIntraZoneHandles('main');
     const handle = document.querySelector<HTMLElement>('[data-handle="main-intra-0"]')!;
     const pane0 = document.querySelector<HTMLElement>('[data-subscope="main-0"]')!;
@@ -180,12 +180,13 @@ describe('Phase 22 gap-closure (22-11): attachIntraZoneHandles fresh-handle bind
     document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientY: 250 }));
     document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientY: 250 }));
 
-    // Post-drag (POST-TASK-2): drag handler must set flex: 'none' on both adjacent panes
-    // so the explicit height actually renders. On CURRENT CODE the drag only sets the CSS var
-    // and leaves the pane inline flex:1 untouched → FAIL.
+    // Post-drag: pane0 (non-last) must have flex: 'none' so the explicit height is respected.
+    // pane1 (last pane) keeps flex: '1' to absorb remaining space.
+    // Bug fix 22-split-resize-position-reset: last pane should NOT have flex:none; it needs
+    // flex:1 to absorb the space left over by other panes' fixed heights.
     // (jsdom normalizes "flex: none" to "0 0 auto"; we check for that specific shorthand.)
     expect(pane0.style.flex).toMatch(/^(none|0 0 auto)$/);
-    expect(pane1.style.flex).toMatch(/^(none|0 0 auto)$/);
+    expect(pane1.style.flex).toContain('1'); // Last pane keeps flex:1
     // Also verify the CSS var was written (sanity: this was already working in 22-04).
     expect(document.documentElement.style.getPropertyValue('--main-split-0-pct')).toMatch(/^\d+(\.\d+)?%$/);
   });

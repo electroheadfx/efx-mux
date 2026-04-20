@@ -6,6 +6,7 @@ use std::sync::{
     Arc, Mutex,
 };
 use tauri::{Emitter, Manager};
+use crate::theme::types::load_or_create_theme;
 
 /// High watermark: pause PTY reads when unacknowledged bytes exceed this threshold.
 const FLOW_HIGH_WATERMARK: u64 = 400_000;
@@ -213,9 +214,19 @@ pub async fn spawn_terminal(
         .args(["set-option", "-t", &sanitized, "remain-on-exit", "on"])
         .output();
 
-    // Keep tmux green status bar visible (user preference)
+    // Keep tmux status bar visible, painted to match terminal background
+    // so the row-remainder gap between xterm's last cell row and the pane
+    // bottom is invisible (same color as terminal bg).
+    let theme = load_or_create_theme();
     std::process::Command::new("tmux")
         .args(["set-option", "-t", &sanitized, "status", "on"])
+        .output()
+        .ok();
+    std::process::Command::new("tmux")
+        .args([
+            "set-option", "-t", &sanitized, "status-style",
+            &format!("bg={},fg={}", theme.terminal.background, theme.terminal.foreground),
+        ])
         .output()
         .ok();
 
@@ -495,9 +506,17 @@ pub fn switch_tmux_session(
         .output()
         .ok();
 
-    // Keep tmux green status bar visible on switched-to session
+    // Keep tmux status bar visible, match terminal background
+    let theme = load_or_create_theme();
     std::process::Command::new("tmux")
         .args(["set-option", "-t", &target, "status", "on"])
+        .output()
+        .ok();
+    std::process::Command::new("tmux")
+        .args([
+            "set-option", "-t", &target, "status-style",
+            &format!("bg={},fg={}", theme.terminal.background, theme.terminal.foreground),
+        ])
         .output()
         .ok();
 

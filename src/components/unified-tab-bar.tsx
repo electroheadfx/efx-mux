@@ -1908,6 +1908,8 @@ export function UnifiedTabBar({ scope }: UnifiedTabBarProps) {
       style={{
         backgroundColor: colors.bgBase,
         borderColor: colors.bgBorder,
+        // Split pane indicator: non-first scopes (*-1, *-2) get accent border-top
+        borderTop: /-[12]$/.test(scope) ? '1px solid var(--color-split-border, #35517B)' : undefined,
       }}
     >
       <style>{`

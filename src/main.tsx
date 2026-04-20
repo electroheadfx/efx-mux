@@ -27,7 +27,7 @@ import { ConfirmModal, showConfirmModal } from './components/confirm-modal';
 import { initDragManager } from './drag-manager';
 import { initTheme, registerTerminal, toggleThemeMode } from './theme/theme-manager';
 import { syncIncrementsDebounced, clearWindowIncrements } from './window/resize-increments';
-import { createNewTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs, saveProjectTabs, hasProjectTabs, restoreProjectTabs, getTerminalScope, seedCounterFromRestoredTabs } from './components/terminal-tabs';
+import { createNewTab, cycleToNextTab, initFirstTab, clearAllTabs, restoreTabs, saveProjectTabs, hasProjectTabs, restoreProjectTabs, getTerminalScope, seedCounterFromRestoredTabs, restoreNonTerminalActiveTabId } from './components/terminal-tabs';
 import { getActiveSubScopesForZone, shouldSeedFirstLaunch, markFirstLaunchSeeded } from './components/sub-scope-pane';
 import {
   loadAppState, saveAppState, getCurrentState, initBeforeUnload, sidebarCollapsed, updateLayout, updateSession,
@@ -130,6 +130,11 @@ function App() {
 }
 
 async function bootstrap() {
+  // Suppress all tab persistence during bootstrap to prevent empty-array overwrites.
+  // loadAppState() sets activeProjectName which triggers editorTabs computed →
+  // subscribe → persistEditorTabs() with empty map, wiping saved data.
+  suppressEditorPersist(true);
+
   // Step 1: Load persisted state (prevents layout flash)
   let appState = null;
   try {
@@ -246,9 +251,6 @@ async function bootstrap() {
   }
 
   // Step 5: Init project system
-  // Suppress editor tab persist until restore completes — prevents empty-array overwrite race
-  // (activeProjectName change triggers computed → subscribe → persist empty before restore runs)
-  suppressEditorPersist(true);
   // Phase 22 persistence-chaos fix: await so that activeProjectName is set
   // BEFORE the Step-8 requestAnimationFrame block reads it for the per-project
   // sub-scope restore + tab restore. Previously this was fire-and-forget and
@@ -547,12 +549,24 @@ async function bootstrap() {
       // RightPanel renders the gc body correctly when its activeTabId matches
       // the restored Git Changes id.
       restoreGitChangesTab(activeName);
+      // Phase 22 gap fix: restore GSD and file-tree tabs from persisted state
+      restoreGsdTab(activeName);
+      restoreFileTreeTabs(activeName);
       try {
         for (const scope of getActiveSubScopesForZone('right')) {
           await getTerminalScope(scope).restoreProjectTabs(activeName, activeProject?.path, agentBinary ?? undefined);
         }
       } catch (err) {
         console.warn('[efxmux] Failed to restore right-scope tabs:', err);
+      }
+
+      // Phase 22: restore activeTabId for non-terminal tabs (gsd, file-tree, etc.)
+      // after both terminal tabs and singleton tabs have been restored.
+      for (const scope of getActiveSubScopesForZone('main')) {
+        restoreNonTerminalActiveTabId(activeName, scope);
+      }
+      for (const scope of getActiveSubScopesForZone('right')) {
+        restoreNonTerminalActiveTabId(activeName, scope);
       }
 
       // Debug 22-pty-session-collision: seed the monotonic per-project counter
@@ -584,6 +598,13 @@ async function bootstrap() {
     // Restore editor tabs from persisted state
     if (activeName) {
       await restoreEditorTabs(activeName);
+    }
+    // R-10 fix: if restoreEditorTabs didn't set activeUnifiedTabId (because a
+    // terminal was active at quit time), propagate main-0's restored terminal
+    // tab so the UI shows the correct active tab on launch.
+    if (!activeUnifiedTabId.value) {
+      const main0Active = getTerminalScope('main-0').activeTabId.value;
+      if (main0Active) activeUnifiedTabId.value = main0Active;
     }
     suppressEditorPersist(false);
     // quick-260417-f6e: flush restored focus back to state.json (subscribe fires
@@ -672,13 +693,14 @@ document.addEventListener('project-changed', async (e: Event) => {
         await initFirstTab(themeOptions, newMainSession, project.path, agentBinary ?? undefined);
       }
 
-      // Fix #3 (20-05-E): clear gitChangesTab (prior project may have owned it)
-      // then restore from new project's persisted state. Cast through `any`
-      // to prevent TS from narrowing subsequent `gitChangesTab.value` reads
-      // below — `restoreGitChangesTab` may reassign the signal but control-flow
-      // analysis cannot see across the function boundary.
-      (gitChangesTab as any).value = null;
+      // Fix #3 (20-05-E): restore singleton tabs from new project's persisted state.
+      // Suppress persistence during restore to prevent race where clearing a signal
+      // fires subscribe and persists empty state before restore reads it.
+      suppressEditorPersist(true);
       restoreGitChangesTab(newProjectName);
+      restoreGsdTab(newProjectName);
+      restoreFileTreeTabs(newProjectName);
+      suppressEditorPersist(false);
 
       // Phase 22 D-10: restore right-scope tabs for every active right sub-scope.
       // Serialized after main-scope restore to avoid concurrent persist writes
@@ -689,6 +711,14 @@ document.addEventListener('project-changed', async (e: Event) => {
         }
       } catch (err) {
         console.warn('[efxmux] Failed to restore right-scope tabs:', err);
+      }
+
+      // Phase 22: restore activeTabId for non-terminal tabs after terminal restore.
+      for (const scope of getActiveSubScopesForZone('main')) {
+        restoreNonTerminalActiveTabId(newProjectName, scope);
+      }
+      for (const scope of getActiveSubScopesForZone('right')) {
+        restoreNonTerminalActiveTabId(newProjectName, scope);
       }
 
       // Debug 22-pty-session-collision: seed the monotonic per-project counter

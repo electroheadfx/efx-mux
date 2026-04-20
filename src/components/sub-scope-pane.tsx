@@ -61,6 +61,19 @@ export function spawnSubScopeForZone(zone: Zone): void {
   const key = activeSubScopesKey(zone, activeProjectName.value);
   void updateLayout({ [key]: JSON.stringify(sig.value) });
 
+  // Reset split ratios to even distribution so the new pane doesn't appear
+  // outside the visible area (stale CSS vars from a prior ratio would
+  // give pane-0 too much height, pushing the new pane off-screen).
+  // Also persist the new ratios so restoreActiveSubScopes finds matching count.
+  const newTotal = current.length + 1;
+  const evenPct = `${(100 / newTotal).toFixed(1)}%`;
+  const ratioUpdates: Record<string, string> = {};
+  for (let i = 0; i < newTotal - 1; i++) {
+    document.documentElement.style.setProperty(`--${zone}-split-${i}-pct`, evenPct);
+    ratioUpdates[splitRatioKey(zone, i, activeProjectName.value)] = evenPct;
+  }
+  void updateLayout(ratioUpdates);
+
   // Debug 22-terminal-not-filling-pane: adding a sub-scope shrinks every
   // pre-existing pane in this zone. Pre-existing terminals must refit their
   // xterm rows/cols to match the new pane geometry — ResizeObserver alone is
@@ -194,13 +207,39 @@ export function restoreActiveSubScopes(projectName?: string | null): void {
   }
 
   // Restore split ratios into CSS custom properties (per-project).
+  // For each zone, set even defaults first so stale ratios from a different
+  // pane count don't push the last pane off-screen. Then overwrite with
+  // persisted ratios where available — but validate they sum to <90% to leave
+  // room for the last pane (flex:1).
+  const zoneScopeCounts: Record<string, number> = {
+    main: activeMainSubScopes.value.length,
+    right: activeRightSubScopes.value.length,
+  };
   for (const zone of ['main', 'right'] as const) {
-    for (let i = 0; i < 2; i++) {
+    const total = zoneScopeCounts[zone];
+    const evenPct = `${(100 / total).toFixed(1)}%`;
+    for (let i = 0; i < total - 1; i++) {
+      document.documentElement.style.setProperty(`--${zone}-split-${i}-pct`, evenPct);
+    }
+    // Overwrite with persisted ratios if ALL expected ratios exist and sum < 90%.
+    // If persisted count doesn't match (total - 1), ratios are stale from a
+    // different scope count — keep even defaults to avoid pushing panes offscreen.
+    const expectedCount = total - 1;
+    const persistedRatios: number[] = [];
+    for (let i = 0; i < expectedCount; i++) {
       const val = state.layout?.[splitRatioKey(zone, i, projectName)];
       if (typeof val === 'string') {
-        document.documentElement.style.setProperty(`--${zone}-split-${i}-pct`, val);
+        persistedRatios.push(parseFloat(val) || 0);
       }
     }
+    const totalPersisted = persistedRatios.reduce((a, b) => a + b, 0);
+    // Only apply if we have ALL expected ratios and they sum < 90%
+    if (persistedRatios.length === expectedCount && totalPersisted > 0 && totalPersisted < 90) {
+      for (let i = 0; i < persistedRatios.length; i++) {
+        document.documentElement.style.setProperty(`--${zone}-split-${i}-pct`, `${persistedRatios[i].toFixed(1)}%`);
+      }
+    }
+    // Otherwise keep even defaults (stale/partial/corrupt data protection)
   }
 }
 

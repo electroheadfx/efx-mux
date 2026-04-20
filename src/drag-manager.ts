@@ -171,8 +171,24 @@ export function attachIntraZoneHandles(zone: 'main' | 'right'): void {
         const panel = document.querySelector<HTMLElement>(`.${zone}-panel`);
         if (!panel) return;
         const rect = panel.getBoundingClientRect();
-        const pct = ((snapped - rect.top) / rect.height) * 100;
-        const clamped = Math.max(10, Math.min(90, pct));
+        // Calculate cumulative position from top as percentage
+        const cumulativePct = ((snapped - rect.top) / rect.height) * 100;
+        // For handle idx, the CSS var represents THIS pane's height.
+        // Subtract previous panes' cumulative height to get this pane's height.
+        let prevCumulative = 0;
+        if (idx > 0) {
+          const prevVar = getComputedStyle(document.documentElement).getPropertyValue(`--${zone}-split-${idx - 1}-pct`).trim();
+          // Previous var is already a pane height, so cumulative = sum of all previous pane heights
+          // For idx=1, prevCumulative = pane 0's height = --zone-split-0-pct
+          // We need cumulative position of previous handle = sum of panes 0..idx-1
+          // Simplification: cumulative position before handle idx = sum of --zone-split-0-pct through --zone-split-(idx-1)-pct
+          for (let i = 0; i < idx; i++) {
+            const varVal = getComputedStyle(document.documentElement).getPropertyValue(`--${zone}-split-${i}-pct`).trim();
+            prevCumulative += parseFloat(varVal) || 0;
+          }
+        }
+        const paneHeightPct = cumulativePct - prevCumulative;
+        const clamped = Math.max(10, Math.min(90, paneHeightPct));
         document.documentElement.style.setProperty(
           `--${zone}-split-${idx}-pct`,
           `${clamped.toFixed(1)}%`,
@@ -182,16 +198,33 @@ export function attachIntraZoneHandles(zone: 'main' | 'right'): void {
         // style.height + flex so non-Preact consumers (and the 22-11 RED tests)
         // observe the resize. Without this, SubScopePane renders flex:1 and the
         // CSS var is cosmetically set but visually invisible.
+        //
+        // Bug fix 22-split-resize-position-reset: Use panel height (rect.height)
+        // as reference frame since clamped is a percentage of panel height.
+        // Previously used totalPx (sum of 2 adjacent panes) which caused position
+        // jumps with 3+ panes because totalPx << rect.height.
         const panes = panel.querySelectorAll<HTMLElement>('.sub-scope-pane');
         const pane0 = panes[idx];
         const pane1 = panes[idx + 1];
-        if (pane0 && pane1) {
-          const totalPx = pane0.offsetHeight + pane1.offsetHeight;
-          if (totalPx > 0) {
-            const newPane0Px = (clamped / 100) * totalPx;
-            pane0.style.height = `${newPane0Px}px`;
-            pane0.style.flex = 'none';
-            pane1.style.height = `${totalPx - newPane0Px}px`;
+        if (pane0 && pane1 && rect.height > 0) {
+          // pane0's new height in pixels = clamped% of panel height
+          const newPane0Px = (clamped / 100) * rect.height;
+          pane0.style.height = `${newPane0Px}px`;
+          pane0.style.flex = 'none';
+
+          // pane1's height: if it's the last pane (flex:1), let it auto-fill;
+          // otherwise compute from its CSS var percentage.
+          const isPane1Last = pane1 === panes[panes.length - 1];
+          if (isPane1Last) {
+            // Last pane uses flex:1 to absorb remaining space
+            pane1.style.height = '';
+            pane1.style.flex = '1';
+          } else {
+            // Middle pane: compute from its CSS var (--zone-split-(idx+1)-pct)
+            const pane1VarVal = getComputedStyle(document.documentElement).getPropertyValue(`--${zone}-split-${idx + 1}-pct`).trim();
+            const pane1Pct = parseFloat(pane1VarVal) || (100 / panes.length);
+            const newPane1Px = (pane1Pct / 100) * rect.height;
+            pane1.style.height = `${newPane1Px}px`;
             pane1.style.flex = 'none';
           }
         }
@@ -202,8 +235,16 @@ export function attachIntraZoneHandles(zone: 'main' | 'right'): void {
         const panel = document.querySelector<HTMLElement>(`.${zone}-panel`);
         if (!panel) return;
         const rect = panel.getBoundingClientRect();
-        const pct = ((snapped - rect.top) / rect.height) * 100;
-        const clamped = Math.max(10, Math.min(90, pct));
+        // Calculate cumulative position from top as percentage
+        const cumulativePct = ((snapped - rect.top) / rect.height) * 100;
+        // Subtract previous panes' heights to get this pane's height
+        let prevCumulative = 0;
+        for (let i = 0; i < idx; i++) {
+          const varVal = getComputedStyle(document.documentElement).getPropertyValue(`--${zone}-split-${i}-pct`).trim();
+          prevCumulative += parseFloat(varVal) || 0;
+        }
+        const paneHeightPct = cumulativePct - prevCumulative;
+        const clamped = Math.max(10, Math.min(90, paneHeightPct));
         // Phase 22 gap-closure 22-07: persist per-project so project A's split
         // ratio does not leak into project B when switching.
         const project = activeProjectName.value;

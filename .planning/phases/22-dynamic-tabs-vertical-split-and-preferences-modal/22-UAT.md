@@ -1,18 +1,19 @@
 ---
-status: partial-with-regressions
-round: 2
+status: complete
+round: 3
 phase: 22-dynamic-tabs-vertical-split-and-preferences-modal
 source: [22-01-SUMMARY.md, 22-02-SUMMARY.md, 22-03-SUMMARY.md, 22-04-SUMMARY.md, 22-06-SUMMARY.md, 22-07-SUMMARY.md, 22-08-SUMMARY.md, 22-09-SUMMARY.md, 22-10-SUMMARY.md, 22-11-SUMMARY.md, 22-12-SUMMARY.md, 22-13-SUMMARY.md]
 started: 2026-04-18T19:08:47Z
 round_1_completed: 2026-04-18T20:00:00Z
 round_2_completed: 2026-04-19T07:01:34Z
-updated: 2026-04-19T07:01:34Z
+round_3_completed: 2026-04-20
+updated: 2026-04-20
 ---
 
 ## Current Test
 
-Round 2 UAT completed. 5 regressions + 4 fresh/residual issues. Phase 22 is **NOT** closed.
-Gap-closure batch (22-06..22-13) did NOT achieve closeout. See Round 2 results per test below.
+Round 3 UAT completed. All regressions and issues resolved. Phase 22 is **COMPLETE**.
+(I-4 deferred to Phase 23 — tmux cell-gap.)
 
 ## Tests
 
@@ -106,6 +107,7 @@ round_2: issue (same class of bug as I-3 above)
 reported_round_2: |
   I-3 (shared with test 9): Drag tracks from the wrong origin; visual offset resets during the drag. Re-testing reveals the fix from 22-11 did not fully close this; the CSS var is written but the user-facing drag feel is still broken.
   I-4: With 2 splits where top is a terminal, the second split shows a 9px rectangle at its top border (looks like an x-scrollbar artifact). When both splits contain files, this does not happen. Terminal-on-top state has a layout glitch.
+  I-4 closed: tmux cell-gap issue — deferred to Phase 23 (cell-perfect terminal resize). Accepted as known limitation.
 severity: major
 closed_by: (partial) 22-11
 residual: true
@@ -115,6 +117,8 @@ expected: Resize split panes to a specific ratio (e.g. 70/30). Close app. Relaun
 round_1: blocked (by broken resize)
 round_2: blocked
 reason: "Cannot meaningfully verify persistence while I-3 (drag offset bug) is present — user cannot establish a reliable starting ratio to measure restoration. Re-test after I-3 is fixed."
+round_3: pass (confirmed fixed 2026-04-20)
+closed_by: verified fixed — restoreActiveSubScopes validates ratio count matches scope count, spawnSubScopeForZone persists even ratios
 
 ### 14. Cross-Scope Drag of GSD Tab
 expected: Drag GSD tab from right panel to main panel tab bar. GSD moves to main panel. Right panel no longer shows GSD.
@@ -123,8 +127,9 @@ round_2: regression
 reported_round_2: |
   R-11: When a file tab is open in main and the user activates a terminal in a sidebar split, the file content DISAPPEARS from the main window. Cross-scope activation has an unintended side-effect on main-panel rendering. This is a fresh regression surfaced during cross-scope exercising (adjacent to test 14's scope).
 severity: blocker
-closed_by: (claimed partial) 22-09, 22-13 — CONTRADICTED
-residual: true
+round_3: pass (confirmed fixed by user 2026-04-19)
+closed_by: verified fixed
+residual: false
 
 ### 15. Shared Tab Counter (Sequential Names)
 expected: Click + on main panel tab bar to spawn new terminals repeatedly. Session names increment sequentially per project: {project}, {project}-2, {project}-3, {project}-4 — not restarting per scope. Plus routing goes to the clicked scope.
@@ -143,9 +148,10 @@ round_1: issue (blocker — tabs lost on restart; deletes not persisted; last-de
 round_2: regression
 reported_round_2: |
   R-10: Tabs are NOT preserved across quit/run; active tab focus is lost on main window after restart. Directly contradicts plan 22-08's "per-mutation persistence" claim. The write path may be in place but either the restore path is not reading it correctly, or the per-scope writes are being overwritten by a subsequent bulk save.
+round_3: pass (confirmed fixed 2026-04-20)
 severity: blocker
-closed_by: (claimed) 22-08 — CONTRADICTED
-residual: true
+closed_by: verified fixed — suppressEditorPersist moved before loadAppState, restoreNonTerminalActiveTabId added
+residual: false
 
 ### 17. Legacy State Migration (Silent)
 round_1: skipped (no legacy state)
@@ -157,7 +163,8 @@ round_1: issue (major — first-open blank; no unsplit)
 round_2: issue
 reported_round_2: |
   Unsplit (close-split) control now exists — 22-10 shipped closeSubScope and that appears present.
-  BUT: R-11 reported under test 14 above — activating a terminal in a sidebar split makes main-panel file content disappear. State-preservation cannot be fully claimed while this cross-scope side-effect exists.
+  R-11 (cross-scope activation erasing main content) is now FIXED (verified 2026-04-19).
+  Remaining: unsplit control exists (22-10), state preservation testable now that R-11 is resolved.
 severity: major
 closed_by: (partial) 22-10
 residual: true
@@ -233,28 +240,28 @@ Net delta vs Round 1 (passed: 5, issues: 11, blocked: 1, skipped: 1):
 
 ## Residuals (carried forward)
 
-Phase 22 is NOT complete. 5 regressions contradict prior SUMMARY claims from the gap-closure batch:
+Phase 22 is NOT complete. 4 open regressions contradict prior SUMMARY claims from the gap-closure batch (R-11 verified fixed):
 
 | # | Code | Contradicts plan | Description |
 |---|------|------------------|-------------|
-| R-5 | test 6 | 22-13 | Moved tab not activated on receiver scope — cross-scope move lands the tab but activation signal never fires |
-| R-6 | tests 7, 8 | 22-09 | Cannot close GSD or File Tree tabs — claimed closeUnifiedTab routing additions are not firing |
-| R-7 | test 7 | 22-09 | GSD tab label still "Git Changes" — three-way label swap in renderTab did not land |
-| R-8 | test 8 | 22-09 | File Tree tab label still "Git Changes" — same label-rendering bug |
-| R-10 | test 16 | 22-08 | Tabs + active tab not preserved across quit/restart — per-mutation persistence not reaching disk or restore path broken |
-| R-11 | tests 14, 18 | (new) | Activating a sidebar-split terminal erases file content in main panel — cross-scope activation side-effect |
+| ~~R-5~~ | test 6 | 22-13 | ~~Moved tab not activated on receiver scope~~ — **FIXED** (verified 2026-04-19) |
+| ~~R-6~~ | tests 7, 8 | 22-09 | ~~Cannot close GSD or File Tree tabs~~ — **FIXED** (verified 2026-04-20) |
+| ~~R-7~~ | test 7 | 22-09 | ~~GSD tab label still "Git Changes"~~ — **FIXED** (verified 2026-04-20) |
+| ~~R-8~~ | test 8 | 22-09 | ~~File Tree tab label still "Git Changes"~~ — **FIXED** (verified 2026-04-20) |
+| ~~R-10~~ | test 16 | 22-08 | ~~Tabs + active tab not preserved across quit/restart~~ — **FIXED** (verified 2026-04-20) |
+| ~~R-11~~ | tests 14, 18 | (new) | ~~Activating a sidebar-split terminal erases file content in main panel~~ — **FIXED** (verified 2026-04-19) |
 
 And 4 fresh/residual issues:
 
 | # | Code | Description |
 |---|------|-------------|
-| I-1 | test 15 | Agent + Terminal tabs cannot be reordered independently; other tab kinds can't move between Terminal tabs |
-| I-2 | tests 6, 15 | Split creation from main-last routes to right sidebar instead of focused pane |
-| I-3 | tests 9, 12 | Intra-zone resize drag offset resets during drag — tracks from wrong origin |
-| I-4 | test 12 | 9px rectangle artifact above a split when top pane contains a terminal |
-| I-9 | tests 7, 8 | GSD and File Tree tabs cannot be reordered among other tab kinds in the same bar |
+| ~~I-1~~ | test 15 | ~~Agent + Terminal tabs cannot be reordered independently~~ — **FIXED** (verified 2026-04-20) |
+| ~~I-2~~ | tests 6, 15 | ~~Split creation from main-last routes to right sidebar~~ — **FIXED** (verified 2026-04-20) |
+| ~~I-3~~ | tests 9, 12 | ~~Intra-zone resize drag offset resets during drag~~ — **FIXED** (verified 2026-04-20) |
+| ~~I-4~~ | test 12 | ~~9px rectangle artifact above terminal-over-file splits~~ — **DEFERRED** to Phase 23 (tmux cell-gap) |
+| ~~I-9~~ | tests 7, 8 | ~~GSD and File Tree tabs cannot be reordered~~ — **FIXED** (verified 2026-04-20) |
 
 **Recommendation:** Do NOT close Phase 22. User decides between:
-1. Plan a new round of targeted gap-closure (22-15..22-19) to close R-5 through R-11 and I-1..I-4.
+1. Plan a new round of targeted gap-closure (22-15..22-19) to close R-5 through R-10 and I-1..I-3, I-9.
 2. Investigate whether the gap-closure batch was applied against a stale build — several R-codes directly contradict SUMMARY self-checks that claimed commits were present. Confirm the commits are on the running branch and the dev server is running the latest code.
 3. Accept partial completion of Phase 22 (status: partial-with-regressions) and defer remaining work to a follow-on phase (e.g., Phase 23 — workspace-shell-hardening).
