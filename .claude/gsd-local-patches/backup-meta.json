@@ -1,0 +1,13 @@
+{
+  "backed_up_at": "2026-04-20T06:06:17.145Z",
+  "from_version": "1.36.0",
+  "from_manifest_timestamp": "2026-04-14T19:12:01.426Z",
+  "files": [
+    "get-shit-done/bin/lib/core.cjs",
+    "get-shit-done/workflows/execute-phase.md"
+  ],
+  "pristine_hashes": {
+    "get-shit-done/bin/lib/core.cjs": "42a188529baeb56e15620ca3840278e9b378a7ff06ab550c214db72c7e37fa8a",
+    "get-shit-done/workflows/execute-phase.md": "bdaf258150e109bbd9a39a77a98195dead506418dcf1105d1e5067cfd3f96d08"
+  }
+}
