@@ -10,16 +10,36 @@
 
 ## Dependencies
 
+- @codemirror/lang-css (^6.3.1)
+- @codemirror/lang-html (^6.4.11)
+- @codemirror/lang-javascript (^6.2.5)
+- @codemirror/lang-json (^6.0.2)
+- @codemirror/lang-markdown (^6.5.0)
+- @codemirror/lang-rust (^6.0.2)
+- @codemirror/lang-yaml (^6.1.3)
+- @codemirror/language (^6.12.3)
+- @codemirror/legacy-modes (^6.5.2)
+- @codemirror/state (^6.6.0)
+- @codemirror/view (^6.41.0)
+- @lezer/highlight (^1.2.3)
 - @preact/signals (^2.9.0)
+- @replit/codemirror-minimap (^0.5.2)
 - @tauri-apps/api (^2.10.1)
 - @tauri-apps/plugin-dialog (^2.7.0)
 - @tauri-apps/plugin-opener (^2.5.3)
 - @xterm/addon-fit (0.11.0)
 - @xterm/addon-webgl (0.19.0)
 - @xterm/xterm (6.0.0)
+- codemirror (^6.0.2)
 - lucide-preact (^1.8.0)
 - marked (^14.1.4)
 - preact (^10.29.1)
+- remark-frontmatter (5.0.0)
+- remark-gfm (4.0.1)
+- remark-parse (11.0.0)
+- unified (11.0.5)
+- unist-util-visit (5.1.0)
+- yaml (2.8.3)
 
 ## Dev Dependencies
 
@@ -28,6 +48,7 @@
 - @tauri-apps/cli (^2)
 - @testing-library/jest-dom (^6.9.1)
 - @testing-library/preact (^3.2.4)
+- @types/mdast (4.0.4)
 - @vitest/coverage-v8 (^4.1.4)
 - @xterm/addon-web-links (^0.12.0)
 - esbuild (^0.28.0)
@@ -39,8 +60,8 @@
 
 ## Configuration Files
 
-- vite.config.ts
-- tsconfig.json
 - .gitignore
+- tsconfig.json
+- vite.config.ts
 - vitest.config.ts
 - package.json

@@ -1,0 +1,10 @@
+{
+  "permission": {
+    "read": {
+      "/Users/lmarques/Dev/efx-mux/.opencode/get-shit-done/*": "allow"
+    },
+    "external_directory": {
+      "/Users/lmarques/Dev/efx-mux/.opencode/get-shit-done/*": "allow"
+    }
+  }
+}

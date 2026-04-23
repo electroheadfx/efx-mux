@@ -38,30 +38,30 @@ This skill contains the following reference files:
 
 ## Statistics
 
-59 files | 10 879 lines
+417 files | 106 424 lines
 
 | Language | Files | Lines |
 |----------|------:|------:|
-| TypeScript (TSX) | 17 | 5 531 |
-| Rust | 15 | 2 939 |
-| TypeScript | 13 | 1 389 |
-| JSON | 5 | 142 |
-| No Extension | 2 | 13 |
-| Markdown | 2 | 389 |
+| Markdown | 292 | 64 224 |
+| TypeScript (TSX) | 32 | 13 654 |
+| JavaScript (CJS) | 25 | 17 663 |
+| TypeScript | 21 | 2 978 |
+| Rust | 17 | 5 433 |
+| JSON | 11 | 573 |
+| JavaScript | 8 | 1 050 |
+| No Extension | 3 | 15 |
+| Shell | 3 | 110 |
 | PLIST | 1 | 23 |
-| HTML | 1 | 12 |
-| YAML | 1 | 3 |
-| CSS | 1 | 409 |
-| Other | 1 | 29 |
+| Other | 4 | 701 |
 
 **Largest files:**
-- `src/components/terminal-tabs.tsx` (769 lines)
-- `src/components/sidebar.tsx` (744 lines)
-- `src-tauri/src/terminal/pty.rs` (609 lines)
-- `src/components/file-tree.tsx` (567 lines)
-- `src/components/project-modal.tsx` (501 lines)
-- `src-tauri/src/state.rs` (459 lines)
-- `src/components/preferences-panel.tsx` (420 lines)
-- `src/styles/app.css` (409 lines)
-- `src/components/first-run-wizard.tsx` (384 lines)
-- `src/main.tsx` (381 lines)
+- `src/components/unified-tab-bar.tsx` (2 428 lines)
+- `.opencode/get-shit-done/bin/lib/init.cjs` (1 875 lines)
+- `src/components/file-tree.tsx` (1 809 lines)
+- `.opencode/get-shit-done/bin/lib/core.cjs` (1 733 lines)
+- `.opencode/get-shit-done/bin/lib/state.cjs` (1 618 lines)
+- `.opencode/get-shit-done/workflows/execute-phase.md` (1 537 lines)
+- `.opencode/agents/gsd-debugger.md` (1 445 lines)
+- `.opencode/get-shit-done/workflows/new-project.md` (1 377 lines)
+- `.opencode/get-shit-done/workflows/discuss-phase.md` (1 325 lines)
+- `.opencode/get-shit-done/workflows/plan-phase.md` (1 294 lines)
