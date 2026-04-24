@@ -1,4 +1,5 @@
 {
+  "$schema": "https://opencode.ai/config.json",
   "permission": {
     "read": {
       "/Users/lmarques/Dev/efx-mux/.opencode/get-shit-done/*": "allow"

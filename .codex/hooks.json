@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.codex/hooks/gsd-check-update.js",
+            "statusMessage": "Checking for GSD update"
+          }
+        ]
+      }
+    ]
+  }
+}
