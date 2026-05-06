@@ -6,10 +6,11 @@ import type { ComponentChildren } from 'preact';
 import { signal, computed } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
-import { detectAgent } from '../server/server-bridge';
-import { addProject, updateProject, switchProject } from '../state-manager';
+import { addProject, updateProject, switchProject, activeProjectName, projects } from '../state-manager';
 import type { ProjectEntry } from '../state-manager';
+import { restartAgentTabsForActiveProject } from './terminal-tabs';
 import { colors, fonts, fontSizes } from '../tokens';
+import { Loader } from 'lucide-preact';
 
 // ---------------------------------------------------------------------------
 // Module-level signals for modal state
@@ -22,6 +23,7 @@ const agent = signal('claude');
 const gsdFile = signal('');
 const serverCmd = signal('');
 const error = signal<string | null>(null);
+const isSaving = signal(false);
 const isFirstRun = signal(false);
 const editingName = signal<string | null>(null); // non-null = edit mode
 
@@ -53,6 +55,7 @@ export function openProjectModal(opts: { firstRun?: boolean; project?: ProjectEn
     serverCmd.value = '';
   }
   error.value = null;
+  isSaving.value = false;
 }
 
 export function closeProjectModal() {
@@ -65,8 +68,10 @@ export function closeProjectModal() {
 // ---------------------------------------------------------------------------
 
 async function handleSubmit() {
-  if (!isValid.value) return;
+  if (!isValid.value || isSaving.value) return;
   error.value = null;
+  isSaving.value = true;
+  await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
   try {
     const entry: ProjectEntry = {
       path: directory.value.trim(),
@@ -76,17 +81,20 @@ async function handleSubmit() {
       server_cmd: serverCmd.value.trim() || undefined,
     };
 
-    if (entry.agent !== 'bash') {
-      await detectAgent(entry.agent);
-    }
+    const oldName = editingName.value;
+    const oldProject = oldName ? projects.value.find(p => p.name === oldName) : null;
+    const wasActiveProject = !!oldName && activeProjectName.value === oldName;
+    const agentChanged = wasActiveProject && oldProject?.agent !== entry.agent;
 
-    if (editingName.value) {
-      // Edit mode: update existing project
-      await updateProject(editingName.value, entry);
+    if (oldName) {
+      await updateProject(oldName, entry);
       document.dispatchEvent(new CustomEvent('project-added', { detail: { entry } }));
-      await switchProject(entry.name);
+      if (activeProjectName.value !== entry.name) {
+        await switchProject(entry.name);
+      } else if (agentChanged) {
+        await restartAgentTabsForActiveProject(entry.agent);
+      }
     } else {
-      // Add mode: create new project
       await addProject(entry);
       document.dispatchEvent(new CustomEvent('project-added', { detail: { entry } }));
       await switchProject(entry.name);
@@ -95,6 +103,8 @@ async function handleSubmit() {
     visible.value = false;
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to save project';
+  } finally {
+    isSaving.value = false;
   }
 }
 
@@ -201,7 +211,7 @@ export function ProjectModal() {
         justifyContent: 'center',
       }}
       onClick={() => {
-        if (!isFirstRun.value) closeProjectModal();
+        if (!isFirstRun.value && !isSaving.value) closeProjectModal();
       }}
     >
       <div
@@ -235,7 +245,8 @@ export function ProjectModal() {
             {editingName.value ? 'Edit Project' : 'Add Project'}
           </span>
           <button
-            onClick={() => { visible.value = false; }}
+            onClick={() => { if (!isSaving.value) visible.value = false; }}
+            disabled={isSaving.value}
             style={{
               width: 28,
               height: 28,
@@ -245,7 +256,8 @@ export function ProjectModal() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              cursor: 'pointer',
+              cursor: isSaving.value ? 'not-allowed' : 'pointer',
+              opacity: isSaving.value ? 0.5 : 1,
             }}
             title="Close"
           >
@@ -441,6 +453,24 @@ export function ProjectModal() {
             </InputShell>
           </div>
 
+          {isSaving.value && (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                color: colors.textMuted,
+                fontSize: 12,
+                fontFamily: fonts.sans,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <Loader size={12} class="animate-spin" />
+              <span>Saving project settings...</span>
+            </div>
+          )}
+
           {/* Error */}
           {error.value && (
             <div
@@ -476,6 +506,7 @@ export function ProjectModal() {
                   backgroundColor: 'transparent',
                   cursor: 'pointer',
                 }}
+                disabled={isSaving.value}
                 onClick={() => { closeProjectModal(); }}
               >
                 Cancel
@@ -483,20 +514,25 @@ export function ProjectModal() {
             )}
             <button
               type="submit"
-              disabled={!isValid.value}
+              disabled={!isValid.value || isSaving.value}
               style={{
                 borderRadius: 8,
-                backgroundColor: isValid.value ? colors.accent : `${colors.accent}40`,
+                backgroundColor: isValid.value && !isSaving.value ? colors.accent : `${colors.accent}40`,
                 border: 'none',
                 padding: '8px 20px',
                 fontSize: 13,
                 fontWeight: 600,
                 fontFamily: fonts.sans,
                 color: 'white',
-                cursor: isValid.value ? 'pointer' : 'not-allowed',
+                cursor: isValid.value && !isSaving.value ? 'pointer' : 'not-allowed',
               }}
             >
-              {editingName.value ? 'Save Changes' : 'Add Project'}
+              {isSaving.value ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <Loader size={12} class="animate-spin" />
+                  {editingName.value ? 'Saving...' : 'Adding...'}
+                </span>
+              ) : (editingName.value ? 'Save Changes' : 'Add Project')}
             </button>
           </div>
         </form>

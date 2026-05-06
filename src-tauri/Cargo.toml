@@ -1,6 +1,6 @@
 [package]
 name = "gsd-mux"
-version = "0.3.1"
+version = "0.3.2"
 description = "Terminal Multiplexer for AI-Assisted Development"
 authors = ["Laurent Marques"]
 edition = "2021"

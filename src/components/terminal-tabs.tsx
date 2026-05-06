@@ -25,7 +25,6 @@ import { connectPty } from '../terminal/pty-bridge';
 import { attachResizeHandler } from '../terminal/resize-handler';
 import { registerTerminal, getTheme } from '../theme/theme-manager';
 import { updateSession, activeProjectName, projects, getCurrentState, loadTabCounter, persistTabCounter } from '../state-manager';
-import { detectAgent } from '../server/server-bridge';
 import { projectSessionName } from '../utils/session-name';
 import { CrashOverlay } from './crash-overlay';
 
@@ -48,6 +47,7 @@ export interface TerminalTab {
   disconnectPty?: () => void;
   detachResize?: () => void;
   exitCode?: number | null;  // undefined = running, number = exited
+  errorMessage?: string | null;
   isAgent: boolean;  // true if this tab runs an agent (claude/opencode)
   ownerScope: TerminalScope;  // Phase 20 D-10: scope this tab belongs to
 }
@@ -193,13 +193,9 @@ async function getActiveProjectInfo(): Promise<{ path?: string; agent?: string }
   return project ? { path: project.path, agent: project.agent } : null;
 }
 
-async function resolveAgentBinary(agent?: string): Promise<string | undefined> {
+function resolveAgentBinary(agent?: string): string | undefined {
   if (!agent || agent === 'bash') return undefined;
-  try {
-    return await detectAgent(agent);
-  } catch {
-    return undefined;
-  }
+  return agent;
 }
 
 /**
@@ -238,11 +234,7 @@ async function createNewTabScoped(
   // Resolve project info (needed for working directory and agent config)
   const projectInfo = await getActiveProjectInfo();
 
-  // Resolve agent binary when requested
-  let agentBinary: string | undefined;
-  if (wantAgent) {
-    agentBinary = await resolveAgentBinary(projectInfo?.agent);
-  }
+  const agentBinary = wantAgent ? resolveAgentBinary(projectInfo?.agent) : undefined;
   const isAgent = wantAgent && !!agentBinary;
 
   // Label: agent tabs get the agent name, plain tabs get "Terminal N".
@@ -318,8 +310,11 @@ async function createNewTabScoped(
     disconnectPty = conn.disconnect;
     ptyConnected = true;
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     console.error('[efxmux] Failed to connect PTY for tab:', err);
-    terminal.writeln(`\x1b[33mFailed to connect PTY: ${err}\x1b[0m`);
+    terminal.writeln(`\x1b[33mFailed to connect PTY: ${message}\x1b[0m`);
+    partialTab.exitCode = 1;
+    partialTab.errorMessage = message;
   }
 
   // Attach resize handler
@@ -476,7 +471,7 @@ function persistTabStateScoped(scope: TerminalScope): void {
 // Restart (Pitfall 1: use -rr<N> suffix to avoid collision with right-scope -r<N>)
 // ---------------------------------------------------------------------------
 
-export async function restartTabSession(tabId: string): Promise<void> {
+export async function restartTabSession(tabId: string, options: { preserveSession?: boolean; agent?: string } = {}): Promise<void> {
   // Find the tab across all scopes.
   let owningScope: TerminalScope | null = null;
   let tab: TerminalTab | undefined;
@@ -497,16 +492,16 @@ export async function restartTabSession(tabId: string): Promise<void> {
   tab.detachResize?.();
   tab.terminal.dispose();
 
-  // Clear exit code
   tab.exitCode = undefined;
+  tab.errorMessage = null;
 
-  // New session name (increment owning-scope counter) — must be computed before createTerminal
-  // so the key handler's sessionName closure captures the correct value.
-  // Pitfall 1: 'rr' prefix avoids collision with right-scope -r<N>.
   const projectInfo = await getActiveProjectInfo();
-  s.counter.n++;
-  const newSessionSuffix = `rr${s.counter.n}`;
-  const newSessionName = projectSessionName(activeProjectName.value, newSessionSuffix);
+  let newSessionName = tab.sessionName;
+  if (!options.preserveSession) {
+    s.counter.n++;
+    const newSessionSuffix = `rr${s.counter.n}`;
+    newSessionName = projectSessionName(activeProjectName.value, newSessionSuffix);
+  }
 
   // Create new terminal in same container
   tab.container.innerHTML = '';
@@ -517,14 +512,17 @@ export async function restartTabSession(tabId: string): Promise<void> {
   await nextFrame();
   fitAddon.fit();
 
-  const restartAgentBinary = tab.isAgent ? await resolveAgentBinary(projectInfo?.agent) : undefined;
+  const restartAgentBinary = tab.isAgent ? resolveAgentBinary(options.agent ?? projectInfo?.agent) : undefined;
   try {
-    const conn = await connectPty(terminal, newSessionName, projectInfo?.path, restartAgentBinary, true);
+    const conn = await connectPty(terminal, newSessionName, projectInfo?.path, restartAgentBinary, !options.preserveSession);
     tab.disconnectPty = conn.disconnect;
     tab.ptyConnected = true;
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     console.error('[efxmux] Failed to restart PTY:', err);
-    terminal.writeln(`\x1b[33mFailed to restart: ${err}\x1b[0m`);
+    terminal.writeln(`\x1b[33mFailed to restart: ${message}\x1b[0m`);
+    tab.exitCode = 1;
+    tab.errorMessage = message;
     tab.ptyConnected = false;
   }
 
@@ -746,8 +744,11 @@ async function restoreTabsScoped(
       tab.disconnectPty = conn.disconnect;
       tab.ptyConnected = true;
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       console.error('[efxmux] Failed to restore PTY for tab:', saved.sessionName, err);
-      terminal.writeln(`\x1b[33mFailed to restore session "${saved.sessionName}": ${err}\x1b[0m`);
+      terminal.writeln(`\x1b[33mFailed to restore session "${saved.sessionName}": ${message}\x1b[0m`);
+      tab.exitCode = 1;
+      tab.errorMessage = message;
     }
 
     const resizeHandle = attachResizeHandler(container, terminal, fitAddon, saved.sessionName);
@@ -858,6 +859,7 @@ export async function initFirstTab(
     disconnectPty: undefined,
     detachResize: () => {},
     exitCode: undefined,
+    errorMessage: null,
     isAgent: !!agentBinary,
     ownerScope: 'main-0',
   };
@@ -869,9 +871,12 @@ export async function initFirstTab(
     tab.disconnectPty = conn.disconnect;
     tab.ptyConnected = true;
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     console.error('[efxmux] Failed to connect PTY:', err);
-    terminal.writeln('\x1b[33mWarning: Could not attach to tmux session "' + sessionName + '":\x1b[0m ' + err);
+    terminal.writeln('\x1b[33mWarning: Could not attach to tmux session "' + sessionName + '":\x1b[0m ' + message);
     terminal.writeln('\x1b[33mIf tmux is not installed, run: brew install tmux\x1b[0m');
+    tab.exitCode = 1;
+    tab.errorMessage = message;
   }
 
   const resizeHandle = attachResizeHandler(container, terminal, fitAddon, sessionName);
@@ -921,6 +926,23 @@ export function restoreProjectTabs(
   scope: TerminalScope = 'main-0',
 ): Promise<boolean> {
   return restoreProjectTabsScoped(projectName, projectPath, agentBinary, scope);
+}
+
+export async function restartAgentTabsForActiveProject(agent?: string): Promise<void> {
+  const projectInfo = await getActiveProjectInfo();
+  const requestedAgent = agent ?? projectInfo?.agent;
+  const restarts: Promise<void>[] = [];
+  for (const [, state] of scopes) {
+    for (const tab of state.tabs.value) {
+      if (!tab.isAgent) continue;
+      tab.label = agentLabel(requestedAgent);
+      tab.exitCode = undefined;
+      tab.errorMessage = null;
+      restarts.push(restartTabSession(tab.id, { preserveSession: true, agent: requestedAgent }));
+    }
+    state.tabs.value = [...state.tabs.value];
+  }
+  await Promise.all(restarts);
 }
 export function hasProjectTabs(projectName: string, scope: TerminalScope = 'main-0'): boolean {
   return hasProjectTabsScoped(projectName, scope);
@@ -1063,6 +1085,7 @@ listen<{ session: string; code: number }>('pty-exited', (event) => {
     const tab = state.tabs.value.find(t => t.sessionName === session);
     if (tab) {
       tab.exitCode = code;
+      tab.errorMessage = null;
       state.tabs.value = [...state.tabs.value]; // trigger reactivity
       return; // D-14 guarantees unique session names across scopes
     }

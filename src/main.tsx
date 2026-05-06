@@ -38,7 +38,6 @@ import { openEditorTab, openEditorTabPinned, restoreEditorTabs, activeUnifiedTab
 import { triggerEditorSave } from './editor/setup';
 import { serverPaneState, saveCurrentProjectState, restoreProjectState } from './components/server-pane';
 import { fileTreeFontSize, fileTreeLineHeight, fileTreeBgColor, defaultExternalEditor } from './components/file-tree';
-import { detectAgent } from './server/server-bridge';
 import { projectSessionName } from './utils/session-name';
 import { Settings } from 'lucide-preact';
 
@@ -473,17 +472,6 @@ async function bootstrap() {
       // Best-effort: migration failure must not block bootstrap.
     }
 
-    // Agent detection (D-10, D-11, AGENT-03/04/05)
-    let agentBinary: string | null = null;
-    if (activeProject?.agent && activeProject.agent !== 'bash') {
-      try {
-        agentBinary = await detectAgent(activeProject.agent);
-      } catch {
-        // Agent binary not found -- will show banner (D-13, AGENT-05)
-        agentBinary = null;
-      }
-    }
-
     // Phase 22 persistence-chaos fix: restore main-scope tabs via per-sub-scope
     // keys exactly like the right-panel restore does. The pre-Phase-22 flat keys
     // (`terminal-tabs:<project>` and global `terminal-tabs`) are no longer read
@@ -502,7 +490,7 @@ async function bootstrap() {
           const restored = await getTerminalScope(scope).restoreProjectTabs(
             activeName,
             activeProject?.path,
-            agentBinary ?? undefined,
+            activeProject?.agent !== 'bash' ? activeProject?.agent : undefined,
           );
           if (restored) tabsRestored = true;
         }
@@ -518,19 +506,12 @@ async function bootstrap() {
         font: loadedTheme?.chrome?.font,
         fontSize: loadedTheme?.chrome?.fontSize,
       };
-      const firstTab = await initFirstTab(themeOptions, sessionName, activeProject?.path, agentBinary ?? undefined);
+      const firstTab = await initFirstTab(themeOptions, sessionName, activeProject?.path, activeProject?.agent !== 'bash' ? activeProject?.agent : undefined);
 
       if (firstTab) {
         const { terminal, fitAddon } = firstTab;
         registerTerminal(terminal, fitAddon);
         updateSession({ 'main-tmux-session': sessionName });
-
-        // Agent fallback banner (D-13, AGENT-05, per UI-SPEC copywriting)
-        if (activeProject?.agent && activeProject.agent !== 'bash' && !agentBinary) {
-          terminal.writeln('');
-          terminal.writeln('\x1b[33mNo agent binary found. Install claude or opencode to enable AI assistance.\x1b[0m');
-          terminal.writeln('\x1b[33mStarting plain bash session...\x1b[0m');
-        }
 
         setTimeout(() => fitAddon.fit(), 100);
         terminal.focus();
@@ -554,7 +535,7 @@ async function bootstrap() {
       restoreFileTreeTabs(activeName);
       try {
         for (const scope of getActiveSubScopesForZone('right')) {
-          await getTerminalScope(scope).restoreProjectTabs(activeName, activeProject?.path, agentBinary ?? undefined);
+          await getTerminalScope(scope).restoreProjectTabs(activeName, activeProject?.path, activeProject?.agent !== 'bash' ? activeProject?.agent : undefined);
         }
       } catch (err) {
         console.warn('[efxmux] Failed to restore right-scope tabs:', err);
@@ -652,7 +633,7 @@ document.addEventListener('project-pre-switch', (e: Event) => {
   }
 });
 
-// project-changed listener: switch tmux sessions + update file watcher + agent detection
+// project-changed listener: switch tmux sessions + update file watcher.
 // 07-06: Servers keep running across project switches; only UI state swaps via cache
 // 08-02: Clear all tabs and create new first tab for new project
 document.addEventListener('project-changed', async (e: Event) => {
@@ -670,27 +651,19 @@ document.addEventListener('project-changed', async (e: Event) => {
       mainPtyKey = newMainSession;
       mainCurrentSession = newMainSession;
 
-      // Detect agent for the new project (AGENT-03, AGENT-04)
-      let agentBinary: string | null = null;
-      if (project.agent && project.agent !== 'bash') {
-        try {
-          agentBinary = await detectAgent(project.agent);
-        } catch {
-          agentBinary = null;
-        }
-      }
+      const agentCommand = project.agent !== 'bash' ? project.agent : undefined;
 
       // Try restoring cached tabs from a previous visit to this project.
       // spawn_terminal in pty.rs clears tmux history before re-attach to prevent
       // stale screen content from appearing as extra newlines.
-      const restored = await restoreProjectTabs(newProjectName, project.path, agentBinary ?? undefined);
+      const restored = await restoreProjectTabs(newProjectName, project.path, agentCommand);
 
       if (!restored) {
         // First visit to this project (no cached tabs) -- create fresh first tab
         const themeOptions = {
           theme: undefined, // Will use current theme from getTheme() inside initFirstTab
         };
-        await initFirstTab(themeOptions, newMainSession, project.path, agentBinary ?? undefined);
+        await initFirstTab(themeOptions, newMainSession, project.path, agentCommand);
       }
 
       // Fix #3 (20-05-E): restore singleton tabs from new project's persisted state.
@@ -707,7 +680,7 @@ document.addEventListener('project-changed', async (e: Event) => {
       // racing on the same state.json blob.
       try {
         for (const scope of getActiveSubScopesForZone('right')) {
-          await getTerminalScope(scope).restoreProjectTabs(newProjectName, project.path, agentBinary ?? undefined);
+          await getTerminalScope(scope).restoreProjectTabs(newProjectName, project.path, agentCommand);
         }
       } catch (err) {
         console.warn('[efxmux] Failed to restore right-scope tabs:', err);

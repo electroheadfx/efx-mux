@@ -18,12 +18,13 @@ import {
   activeTabId,
   getTerminalScope,
   restartTabSession,
+  restartAgentTabsForActiveProject,
   __resetScopeCountersForTesting,
   type TerminalTab,
 } from './terminal-tabs';
 
 // Capture spawn_terminal invocations for session-name assertions.
-type SpawnCall = { sessionName: string; shellCommand?: string | null; startDir?: string };
+type SpawnCall = { sessionName: string; shellCommand?: string | null; startDir?: string; forceNew?: boolean };
 let spawnCalls: SpawnCall[] = [];
 // Capture save_state calls for persistence-key assertions.
 let lastSavedState: any = null;
@@ -57,6 +58,7 @@ beforeEach(async () => {
         sessionName: args?.sessionName,
         shellCommand: args?.shellCommand ?? null,
         startDir: args?.startDir,
+        forceNew: args?.forceNew,
       });
       return null;
     }
@@ -232,6 +234,7 @@ describe('terminal-tabs scope registry', () => {
             sessionName: args?.sessionName,
             shellCommand: args?.shellCommand ?? null,
             startDir: args?.startDir,
+          forceNew: args?.forceNew,
           });
           return null;
         }
@@ -276,6 +279,72 @@ describe('terminal-tabs scope registry', () => {
       await restartTabSession(tab!.id);
       const newName = spawnCalls[0]?.sessionName;
       expect(newName).toMatch(/-rr\d+$/);
+    });
+
+    it('restartTabSession stores an overlay error when PTY restart fails', async () => {
+      const tab = await getTerminalScope('main').createNewTab();
+      expect(tab).toBeTruthy();
+      mockIPC((cmd, args: any) => {
+        if (cmd === 'spawn_terminal') {
+          spawnCalls.push({
+            sessionName: args?.sessionName,
+            shellCommand: args?.shellCommand ?? null,
+            startDir: args?.startDir,
+          forceNew: args?.forceNew,
+          });
+          throw new Error('tmux refused session');
+        }
+        if (cmd === 'destroy_pty_session' || cmd === 'resize_pty' || cmd === 'write_pty') return null;
+        if (cmd === 'detect_agent') return 'claude';
+        if (cmd === 'load_state') return seedState;
+        if (cmd === 'save_state') return null;
+        return null;
+      });
+
+      await restartTabSession(tab!.id);
+
+      expect(tab!.exitCode).toBe(1);
+      expect(tab!.errorMessage).toContain('tmux refused session');
+      expect(tab!.ptyConnected).toBe(false);
+    });
+
+    it('restartAgentTabsForActiveProject reattaches only agent tabs with the updated agent command', async () => {
+      projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'ccscodex' }];
+      const agentTab = await getTerminalScope('main-0').createNewTab({ isAgent: true });
+      const shellTab = await getTerminalScope('main-0').createNewTab();
+      expect(agentTab).toBeTruthy();
+      expect(shellTab).toBeTruthy();
+      agentTab!.label = 'Agent claude';
+      agentTab!.isAgent = true;
+      agentTab!.exitCode = 0;
+      spawnCalls = [];
+      mockIPC((cmd, args: any) => {
+        if (cmd === 'detect_agent') return 'ccscodex';
+        if (cmd === 'spawn_terminal') {
+          spawnCalls.push({
+            sessionName: args?.sessionName,
+            shellCommand: args?.shellCommand ?? null,
+            startDir: args?.startDir,
+          forceNew: args?.forceNew,
+          });
+          return null;
+        }
+        if (cmd === 'destroy_pty_session' || cmd === 'resize_pty' || cmd === 'write_pty') return null;
+        if (cmd === 'load_state') return seedState;
+        if (cmd === 'save_state') return null;
+        return null;
+      });
+
+      await restartAgentTabsForActiveProject('ccscodex');
+
+      expect(spawnCalls).toHaveLength(1);
+      expect(spawnCalls[0]?.sessionName).toBe('testproj');
+      expect(spawnCalls[0]?.shellCommand).toBe('ccscodex');
+      expect(spawnCalls[0]?.forceNew).toBe(false);
+      expect(agentTab!.label).toBe('Agent ccscodex');
+      expect(agentTab!.sessionName).toBe('testproj');
+      expect(agentTab!.exitCode).toBeUndefined();
+      expect(shellTab!.sessionName).toBe('testproj-2');
     });
   });
 
@@ -556,6 +625,7 @@ describe('terminal-tabs scope registry', () => {
             sessionName: args?.sessionName,
             shellCommand: args?.shellCommand ?? null,
             startDir: args?.startDir,
+          forceNew: args?.forceNew,
           });
         }
         return null;

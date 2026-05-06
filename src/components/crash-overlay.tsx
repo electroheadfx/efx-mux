@@ -69,7 +69,7 @@ export function CrashOverlay({ tab, onRestart }: CrashOverlayProps) {
               marginBottom: 16,
             }}
           >
-            Terminal session ended (exit code {tab.exitCode})
+            {tab.errorMessage ?? `Terminal session ended (exit code ${tab.exitCode})`}
           </p>
         )}
         {isNormalExit && <div style={{ height: 12 }} />}

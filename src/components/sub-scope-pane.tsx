@@ -287,6 +287,7 @@ interface SubScopePaneProps {
 export function SubScopePane({ scope, zone, index = 0, total = 1 }: SubScopePaneProps) {
   const scopeState = getTerminalScope(scope);
   const { activeTabId } = scopeState;
+  const ActiveTabCrashOverlay = scopeState.ActiveTabCrashOverlay;
   const activeId = activeTabId.value;
 
   // Phase 22 gap-closure (22-11): non-last panes take their persisted ratio via
@@ -407,6 +408,8 @@ export function SubScopePane({ scope, zone, index = 0, total = 1 }: SubScopePane
             />
           </div>
         ))}
+
+        {isTerminalActive && <ActiveTabCrashOverlay />}
 
         {/* Empty-state placeholder */}
         {!hasAnyTab && (

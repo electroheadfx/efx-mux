@@ -8,27 +8,24 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({
   open: vi.fn(),
 }));
 
-describe('ProjectModal agent command validation', () => {
+describe('ProjectModal save behavior', () => {
   beforeEach(() => {
     cleanup();
     projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'bash' }];
     activeProjectName.value = 'testproj';
+    document.body.innerHTML = '<div class="terminal-containers" data-scope="main-0"></div>';
   });
 
-  it('validates the configured agent before saving and stays editable when unavailable', async () => {
-    let updateCalled = false;
+  it('shows save progress immediately while saving settings', async () => {
+    let resolveUpdate: () => void = () => {};
     mockIPC((cmd) => {
-      if (cmd === 'detect_agent') throw new Error('No such file or directory (os error 2)');
-      if (cmd === 'update_project') {
-        updateCalled = true;
-        return null;
-      }
+      if (cmd === 'update_project') return new Promise(resolve => { resolveUpdate = () => resolve(); });
       if (cmd === 'load_state') return {
         version: 1,
         layout: {},
         theme: { mode: 'dark' },
         session: {},
-        project: { active: 'testproj', projects: [{ path: '/tmp/proj', name: 'testproj', agent: 'bash' }] },
+        project: { active: 'testproj', projects: [{ path: '/tmp/proj', name: 'testproj', agent: 'ccscodex' }] },
         panels: {},
       };
       if (cmd === 'get_projects') return projects.value;
@@ -39,13 +36,13 @@ describe('ProjectModal agent command validation', () => {
     render(<ProjectModal />);
 
     const agentInput = screen.getByPlaceholderText('claude') as HTMLInputElement;
-    fireEvent.input(agentInput, { target: { value: 'ccscode' } });
+    fireEvent.input(agentInput, { target: { value: 'ccscodex' } });
     fireEvent.click(screen.getByText('Save Changes'));
 
     await waitFor(() => {
-      expect(document.body.textContent).toContain('Agent "ccscode" is not available');
+      expect(screen.getByRole('status').textContent).toContain('Saving project settings...');
     });
-    expect(agentInput.value).toBe('ccscode');
-    expect(updateCalled).toBe(false);
+    expect(screen.getByText('Saving...').closest('button')).toBeDisabled();
+    resolveUpdate();
   });
 });
