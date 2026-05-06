@@ -1,15 +1,7 @@
-Please find GSD tools from `.claude/get-shit-done` and not from `$HOME/.claude/get-shit-done`
-Please do not run the server, I do on my side
+# Main setup
 
-<!-- GSD:project-start source:PROJECT.md -->
-## Project
-
-**GSD⚡MUX
-
-A native macOS desktop application that wraps Claude Code and OpenCode terminal sessions in a structured, multi-panel workspace. The goal is to give AI-assisted developers a single window that co-locates: the AI agent terminal, a live GSD progress viewer (Markdown with write-back), git diff, and a file tree — all around a real terminal that runs the original CLI binaries without any modification or hacking.
-
-**Core Value:** Developers using Claude Code or OpenCode lose context switching between the terminal, their editor, and their planning docs. GSD⚡MUX collapses all of that into one native window with a terminal-first aesthetic — dark, fast, keyboard-driven.
-<!-- GSD:project-end -->
+- **Please find GSD tools from `.Codex/get-shit-done`** and not from `$HOME/.Codex/get-shit-done`
+- **Please do not run the server** I do on my side
 
 <!-- GSD:stack-start source:research/STACK.md -->
 ## Technology Stack

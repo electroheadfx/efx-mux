@@ -103,6 +103,6 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "node /Users/lmarques/.claude/efx-statusline.js"
+    "command": "node /Users/lmarques/.claude/efx-statusline-ccs-codex.js"
   }
 }
