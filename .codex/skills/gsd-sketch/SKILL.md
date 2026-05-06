@@ -27,15 +27,28 @@ Multi-select workaround:
 - Codex has no `multiSelect`. Use sequential single-selects, or present a numbered freeform list asking the user to enter comma-separated numbers.
 
 Execute mode fallback:
-- When `request_user_input` is rejected (Execute mode), present a plain-text numbered list and pick a reasonable default.
+- When `request_user_input` is rejected or unavailable, you MUST stop and present the questions as a plain-text numbered list, then wait for the user's reply. Do NOT pick a default and continue (#3018).
+- You may only proceed without a user answer when one of these is true:
+  (a) the invocation included an explicit non-interactive flag (`--auto` or `--all`),
+  (b) the user has explicitly approved a specific default for this question, or
+  (c) the workflow's documented contract says defaults are safe (e.g. autonomous lifecycle paths).
+- Do NOT write workflow artifacts (CONTEXT.md, DISCUSSION-LOG.md, PLAN.md, checkpoint files) until the user has answered the plain-text questions or one of (a)-(c) above applies. Surfacing the questions and waiting is the correct response — silently defaulting and writing artifacts is the #3018 failure mode.
 
 ## C. Task() → spawn_agent Mapping
 GSD workflows use `Task(...)` (Claude Code syntax). Translate to Codex collaboration tools:
 
 Direct mapping:
 - `Task(subagent_type="X", prompt="Y")` → `spawn_agent(agent_type="X", message="Y")`
-- `Task(model="...")` → omit (Codex uses per-role config, not inline model selection)
+- `Task(model="...")` → omit. `spawn_agent` has no inline `model` parameter;
+  GSD embeds the resolved per-agent model directly into each agent's `.toml`
+  at install time so `model_overrides` from `.planning/config.json` and
+  `~/.gsd/defaults.json` are honored automatically by Codex's agent router.
 - `fork_context: false` by default — GSD agents load their own context via `<files_to_read>` blocks
+
+Spawn restriction:
+- Codex restricts `spawn_agent` to cases where the user has explicitly
+  requested sub-agents. When automatic spawning is not permitted, do the
+  work inline in the current agent rather than attempting to force a spawn.
 
 Parallel fan-out:
 - Spawn multiple agents → collect agent IDs → `wait(ids)` for all to complete
@@ -60,6 +73,7 @@ Does not require `$gsd-new-project` — auto-creates `.planning/sketches/` if ne
 
 <execution_context>
 @/Users/lmarques/Dev/efx-mux/.codex/get-shit-done/workflows/sketch.md
+@/Users/lmarques/Dev/efx-mux/.codex/get-shit-done/workflows/sketch-wrap-up.md
 @/Users/lmarques/Dev/efx-mux/.codex/get-shit-done/references/ui-brand.md
 @/Users/lmarques/Dev/efx-mux/.codex/get-shit-done/references/sketch-theme-system.md
 @/Users/lmarques/Dev/efx-mux/.codex/get-shit-done/references/sketch-interactivity.md
@@ -76,9 +90,13 @@ Design idea: {{GSD_ARGS}}
 
 **Available flags:**
 - `--quick` — Skip mood/direction intake, jump straight to decomposition and building. Use when the design direction is already clear.
+- `--wrap-up` — Package sketch design findings into a persistent project skill for future build conversations. Runs the sketch-wrap-up workflow.
 </context>
 
 <process>
-Execute the sketch workflow from @/Users/lmarques/Dev/efx-mux/.codex/get-shit-done/workflows/sketch.md end-to-end.
+Parse the first token of {{GSD_ARGS}}:
+- If it is `--wrap-up`: strip the flag, execute the sketch-wrap-up workflow from @/Users/lmarques/Dev/efx-mux/.codex/get-shit-done/workflows/sketch-wrap-up.md end-to-end.
+- Otherwise: execute the sketch workflow from @/Users/lmarques/Dev/efx-mux/.codex/get-shit-done/workflows/sketch.md end-to-end.
+
 Preserve all workflow gates (intake, decomposition, target stack research, variant evaluation, MANIFEST updates, commit patterns).
 </process>

@@ -1,5 +1,5 @@
 name = "gsd-ai-researcher"
-description = "Researches a chosen AI framework's official docs to produce implementation-ready guidance — best practices, syntax, core patterns, and pitfalls distilled for the specific use case. Writes the Framework Quick Reference and Implementation Guidance sections of AI-SPEC.md. Spawned by /gsd-ai-integration-phase orchestrator."
+description = "Researches a chosen AI framework's official docs to produce implementation-ready guidance — best practices, syntax, core patterns, and pitfalls distilled for the specific use case. Writes the Framework Quick Reference and Implementation Guidance sections of AI-SPEC.md. Spawned by $gsd-ai-integration-phase orchestrator."
 sandbox_mode = "read-only"
 developer_instructions = '''
 <role>
@@ -55,7 +55,7 @@ Use context7 MCP first (fastest). Fall back to WebFetch.
 | LangChain | https://python.langchain.com/docs |
 | LangGraph | https://langchain-ai.github.io/langgraph |
 | OpenAI Agents SDK | https://openai.github.io/openai-agents-python |
-| Claude Agent SDK | https://docs.anthropic.com/en/docs/claude-code/sdk |
+| the agent Agent SDK | https://docs.anthropic.com/en/docs/claude-code/sdk |
 | AutoGen / AG2 | https://ag2ai.github.io/ag2 |
 | Google ADK | https://google.github.io/adk-docs |
 | Haystack | https://docs.haystack.deepset.ai |

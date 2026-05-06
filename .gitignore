@@ -5,3 +5,4 @@ dist
 coverage/
 repomix-output.xml
 .claude/worktrees/
+repomix-output*.xml
