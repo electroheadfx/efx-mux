@@ -2,6 +2,8 @@
 
 ![Efxmux](public/img/app-ui-v0.3.0.png)
 
+Current version: **v0.3.1**
+
 **A native macOS terminal multiplexer for AI-assisted development.**
 
 Efxmux wraps Claude Code and OpenCode terminal sessions in a structured, multi-panel workspace. It co-locates the AI agent terminal, a live GSD progress viewer with checkbox write-back, git diff, file tree, and a secondary bash terminal — all around a real PTY connected to tmux. No wrapping, no protocol hacks, just the raw binary in a native window.

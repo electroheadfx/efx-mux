@@ -23,7 +23,7 @@ import {
 } from './terminal-tabs';
 
 // Capture spawn_terminal invocations for session-name assertions.
-type SpawnCall = { sessionName: string; agent?: string | null; cwd?: string };
+type SpawnCall = { sessionName: string; shellCommand?: string | null; startDir?: string };
 let spawnCalls: SpawnCall[] = [];
 // Capture save_state calls for persistence-key assertions.
 let lastSavedState: any = null;
@@ -55,8 +55,8 @@ beforeEach(async () => {
     if (cmd === 'spawn_terminal') {
       spawnCalls.push({
         sessionName: args?.sessionName,
-        agent: args?.agent ?? null,
-        cwd: args?.cwd,
+        shellCommand: args?.shellCommand ?? null,
+        startDir: args?.startDir,
       });
       return null;
     }
@@ -220,6 +220,30 @@ describe('terminal-tabs scope registry', () => {
       await getTerminalScope('right').createNewTab();
       const tab = getTerminalScope('right').tabs.value[0];
       expect(tab?.label).toMatch(/^Terminal \d+$/);
+    });
+
+    it('agent tab passes configured custom agent command to PTY spawn', async () => {
+      projects.value = [{ path: '/tmp/proj', name: 'testproj', agent: 'ccscodex' }];
+      activeProjectName.value = 'testproj';
+      mockIPC((cmd, args: any) => {
+        if (cmd === 'detect_agent') return 'ccscodex';
+        if (cmd === 'spawn_terminal') {
+          spawnCalls.push({
+            sessionName: args?.sessionName,
+            shellCommand: args?.shellCommand ?? null,
+            startDir: args?.startDir,
+          });
+          return null;
+        }
+        if (cmd === 'destroy_pty_session' || cmd === 'resize_pty' || cmd === 'write_pty') return null;
+        if (cmd === 'load_state') return seedState;
+        if (cmd === 'save_state') return null;
+        return null;
+      });
+
+      await getTerminalScope('right').createNewTab({ isAgent: true });
+
+      expect(spawnCalls[0]?.shellCommand).toBe('ccscodex');
     });
   });
 
@@ -530,8 +554,8 @@ describe('terminal-tabs scope registry', () => {
         if (cmd === 'spawn_terminal') {
           spawnCalls.push({
             sessionName: args?.sessionName,
-            agent: args?.agent ?? null,
-            cwd: args?.cwd,
+            shellCommand: args?.shellCommand ?? null,
+            startDir: args?.startDir,
           });
         }
         return null;

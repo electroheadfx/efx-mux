@@ -28,7 +28,10 @@ pub async fn start_server(
     // Validate cwd exists and is a directory (T-07-02 mitigation)
     let cwd_path = std::path::Path::new(&cwd);
     if !cwd_path.exists() || !cwd_path.is_dir() {
-        return Err(format!("Working directory '{}' does not exist or is not a directory", cwd));
+        return Err(format!(
+            "Working directory '{}' does not exist or is not a directory",
+            cwd
+        ));
     }
 
     // Kill existing server process for this project first
@@ -84,7 +87,8 @@ pub async fn start_server(
                 match line {
                     Ok(text) => {
                         let text = text + "\n"; // Restore newline stripped by lines()
-                        let payload = serde_json::json!({ "project": project_id_clone, "text": text });
+                        let payload =
+                            serde_json::json!({ "project": project_id_clone, "text": text });
                         let _ = app_clone.emit("server-output", payload);
                     }
                     Err(_) => break,
@@ -126,7 +130,8 @@ pub async fn start_server(
                 match line {
                     Ok(text) => {
                         let text = text + "\n"; // Restore newline stripped by lines()
-                        let payload = serde_json::json!({ "project": project_id_clone, "text": text });
+                        let payload =
+                            serde_json::json!({ "project": project_id_clone, "text": text });
                         let _ = app_clone.emit("server-output", payload);
                     }
                     Err(_) => break,
@@ -173,25 +178,39 @@ pub async fn restart_server(
     app: AppHandle,
 ) -> Result<(), String> {
     stop_server_for_project(&app, &project_id)?;
-    let payload = serde_json::json!({ "project": project_id, "text": "[server] --- Restarting ---\n" });
+    let payload =
+        serde_json::json!({ "project": project_id, "text": "[server] --- Restarting ---\n" });
     let _ = app.emit("server-output", payload);
     start_server(cmd, cwd, project_id, app).await
 }
 
-/// Detect whether an agent binary exists in PATH.
+fn is_safe_agent_command(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '@' | '+'))
+}
+
+/// Detect whether an agent command, alias, or script exists in the user's shell.
 #[tauri::command]
 pub fn detect_agent(agent: String) -> Result<String, String> {
+    let agent = agent.trim();
     if agent.is_empty() || agent == "bash" {
         return Ok("bash".to_string());
     }
-    let output = Command::new("which")
-        .arg(&agent)
+    if !is_safe_agent_command(agent) {
+        return Err(format!("Agent '{}' is not a valid command name", agent));
+    }
+    let user_shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+    let probe = format!("command -v {}", agent);
+    let output = Command::new(&user_shell)
+        .args(["-ic", &probe])
         .output()
-        .map_err(|e| format!("Failed to run which: {}", e))?;
+        .map_err(|e| format!("Failed to inspect shell commands: {}", e))?;
     if output.status.success() {
-        Ok(agent)
+        Ok(agent.to_string())
     } else {
-        Err(format!("Binary '{}' not found in PATH", agent))
+        Err(format!("Agent '{}' is not available in your shell", agent))
     }
 }
 

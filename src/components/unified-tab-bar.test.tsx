@@ -916,14 +916,16 @@ describe('Phase 22: dynamic sticky-removed tabs', () => {
   // ── TABS-01 / D-04: singleton dimming ─────────────────────────────────────
 
   describe('singleton dimming (gsd + git changes)', () => {
-    it('GSD menu item is disabled when gsdTab owns a different scope', () => {
+    it('GSD menu item moves an existing GSD tab from another scope', () => {
       gsdTab.value = { id: 'gsd', type: 'gsd', owningScope: 'right-0' };
       render(<UnifiedTabBar scope="main-0" />);
       clickPlusButton();
       const menuItems = queryMenuItems();
       const gsdItem = menuItems.find(el => el.textContent?.trim() === 'GSD');
       expect(gsdItem).not.toBeUndefined();
-      expect(gsdItem?.getAttribute('aria-disabled')).toBe('true');
+      expect(gsdItem?.getAttribute('aria-disabled')).not.toBe('true');
+      fireEvent.click(gsdItem!);
+      expect(gsdTab.value?.owningScope).toBe('main-0');
     });
 
     it('GSD menu item is enabled when gsdTab owns the current scope', () => {

@@ -6,6 +6,7 @@ import type { ComponentChildren } from 'preact';
 import { signal, computed } from '@preact/signals';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
+import { detectAgent } from '../server/server-bridge';
 import { addProject, updateProject, switchProject } from '../state-manager';
 import type { ProjectEntry } from '../state-manager';
 import { colors, fonts, fontSizes } from '../tokens';
@@ -75,6 +76,10 @@ async function handleSubmit() {
       server_cmd: serverCmd.value.trim() || undefined,
     };
 
+    if (entry.agent !== 'bash') {
+      await detectAgent(entry.agent);
+    }
+
     if (editingName.value) {
       // Edit mode: update existing project
       await updateProject(editingName.value, entry);
@@ -89,7 +94,7 @@ async function handleSubmit() {
 
     visible.value = false;
   } catch (err) {
-    error.value = err?.toString() || 'Failed to save project';
+    error.value = err instanceof Error ? err.message : 'Failed to save project';
   }
 }
 

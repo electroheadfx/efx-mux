@@ -1,3 +1,4 @@
+use crate::theme::types::load_or_create_theme;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::collections::HashMap;
 use std::io::Read;
@@ -6,7 +7,17 @@ use std::sync::{
     Arc, Mutex,
 };
 use tauri::{Emitter, Manager};
-use crate::theme::types::load_or_create_theme;
+
+fn is_safe_agent_command(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '@' | '+'))
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
 
 /// High watermark: pause PTY reads when unacknowledged bytes exceed this threshold.
 const FLOW_HIGH_WATERMARK: u64 = 400_000;
@@ -65,7 +76,9 @@ pub async fn spawn_terminal(
         .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
         .collect();
     if sanitized.is_empty() {
-        return Err("Invalid session name: must contain at least one alphanumeric character".to_string());
+        return Err(
+            "Invalid session name: must contain at least one alphanumeric character".to_string(),
+        );
     }
 
     // If the tmux session already exists, behaviour is driven by `force_new`:
@@ -193,9 +206,12 @@ pub async fn spawn_terminal(
             // tmux creates inside the session. Only inline export in the shell command
             // itself (or tmux -e flag) reliably delivers env vars to the spawned process.
             // This mirrors the approach already used in switch_tmux_session().
+            if !is_safe_agent_command(shell_cmd) {
+                return Err(format!("Invalid agent command: {}", shell_cmd));
+            }
             let wrapped = format!(
-                "{} -c 'export CLAUDE_CODE_NO_FLICKER=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 ENABLE_LSP_TOOL=1; {}; exec {}'",
-                user_shell, shell_cmd, user_shell
+                "{} -ic 'export CLAUDE_CODE_NO_FLICKER=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 ENABLE_LSP_TOOL=1; {}; exec {}'",
+                shell_quote(&user_shell), shell_cmd, shell_quote(&user_shell)
             );
             cmd.arg(&wrapped);
         }
@@ -224,22 +240,22 @@ pub async fn spawn_terminal(
         .ok();
     std::process::Command::new("tmux")
         .args([
-            "set-option", "-t", &sanitized, "status-style",
-            &format!("bg={},fg={}", theme.terminal.background, theme.terminal.foreground),
+            "set-option",
+            "-t",
+            &sanitized,
+            "status-style",
+            &format!(
+                "bg={},fg={}",
+                theme.terminal.background, theme.terminal.foreground
+            ),
         ])
         .output()
         .ok();
 
     // take_writer() is one-shot -- store in Arc<Mutex<>> for reuse (CLAUDE.md gotcha)
-    let writer = pair
-        .master
-        .take_writer()
-        .map_err(|e| e.to_string())?;
+    let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
 
-    let mut reader = pair
-        .master
-        .try_clone_reader()
-        .map_err(|e| e.to_string())?;
+    let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
 
     let sent_bytes = Arc::new(AtomicU64::new(0));
     let acked_bytes = Arc::new(AtomicU64::new(0));
@@ -277,7 +293,8 @@ pub async fn spawn_terminal(
             }
 
             // Flow control: hysteresis between HIGH (400KB) and LOW (100KB) watermarks
-            let unacked = sent.load(Ordering::Relaxed)
+            let unacked = sent
+                .load(Ordering::Relaxed)
                 .saturating_sub(acked.load(Ordering::Relaxed));
 
             if paused {
@@ -345,7 +362,13 @@ pub async fn spawn_terminal(
 
             // Poll pane_dead status
             let pane_dead = std::process::Command::new("tmux")
-                .args(["display-message", "-t", &session_for_monitor, "-p", "#{pane_dead}"])
+                .args([
+                    "display-message",
+                    "-t",
+                    &session_for_monitor,
+                    "-p",
+                    "#{pane_dead}",
+                ])
                 .output()
                 .ok()
                 .and_then(|o| {
@@ -361,7 +384,13 @@ pub async fn spawn_terminal(
             if pane_dead {
                 // Pane is dead -- query real exit code before killing session
                 let exit_code = std::process::Command::new("tmux")
-                    .args(["display-message", "-t", &session_for_monitor, "-p", "#{pane_dead_status}"])
+                    .args([
+                        "display-message",
+                        "-t",
+                        &session_for_monitor,
+                        "-p",
+                        "#{pane_dead_status}",
+                    ])
                     .output()
                     .ok()
                     .and_then(|o| {
@@ -401,9 +430,14 @@ pub async fn spawn_terminal(
 
 /// Write input data to the PTY master (keystrokes from xterm.js).
 #[tauri::command]
-pub fn write_pty(data: String, session_name: String, manager: tauri::State<'_, PtyManager>) -> Result<(), String> {
+pub fn write_pty(
+    data: String,
+    session_name: String,
+    manager: tauri::State<'_, PtyManager>,
+) -> Result<(), String> {
     let map = manager.0.lock().map_err(|e| e.to_string())?;
-    let state = map.get(&session_name)
+    let state = map
+        .get(&session_name)
         .ok_or_else(|| format!("No PTY session found: {}", session_name))?;
     let mut writer = state.writer.lock().map_err(|e| e.to_string())?;
     writer
@@ -414,9 +448,15 @@ pub fn write_pty(data: String, session_name: String, manager: tauri::State<'_, P
 
 /// Resize the PTY. This is a control operation that bypasses flow control (D-14).
 #[tauri::command]
-pub fn resize_pty(cols: u16, rows: u16, session_name: String, manager: tauri::State<'_, PtyManager>) -> Result<(), String> {
+pub fn resize_pty(
+    cols: u16,
+    rows: u16,
+    session_name: String,
+    manager: tauri::State<'_, PtyManager>,
+) -> Result<(), String> {
     let map = manager.0.lock().map_err(|e| e.to_string())?;
-    let state = map.get(&session_name)
+    let state = map
+        .get(&session_name)
         .ok_or_else(|| format!("No PTY session found: {}", session_name))?;
     let master = state.master.lock().map_err(|e| e.to_string())?;
     master
@@ -431,9 +471,14 @@ pub fn resize_pty(cols: u16, rows: u16, session_name: String, manager: tauri::St
 
 /// Acknowledge processed bytes from the frontend for flow control (D-11).
 #[tauri::command]
-pub fn ack_bytes(count: u64, session_name: String, manager: tauri::State<'_, PtyManager>) -> Result<(), String> {
+pub fn ack_bytes(
+    count: u64,
+    session_name: String,
+    manager: tauri::State<'_, PtyManager>,
+) -> Result<(), String> {
     let map = manager.0.lock().map_err(|e| e.to_string())?;
-    let state = map.get(&session_name)
+    let state = map
+        .get(&session_name)
         .ok_or_else(|| format!("No PTY session found: {}", session_name))?;
     state.acked_bytes.fetch_add(count, Ordering::Relaxed);
     Ok(())
@@ -487,9 +532,12 @@ pub fn switch_tmux_session(
         if let Some(ref cmd) = shell_command {
             if !cmd.is_empty() {
                 let user_shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+                if !is_safe_agent_command(cmd) {
+                    return Err(format!("Invalid agent command: {}", cmd));
+                }
                 shell_cmd_str = format!(
-                    "{} -c 'export CLAUDE_CODE_NO_FLICKER=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 ENABLE_LSP_TOOL=1; {}; exec {}'",
-                    user_shell, cmd, user_shell
+                    "{} -ic 'export CLAUDE_CODE_NO_FLICKER=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 ENABLE_LSP_TOOL=1; {}; exec {}'",
+                    shell_quote(&user_shell), cmd, shell_quote(&user_shell)
                 );
                 args.push(&shell_cmd_str);
             }
@@ -514,15 +562,27 @@ pub fn switch_tmux_session(
         .ok();
     std::process::Command::new("tmux")
         .args([
-            "set-option", "-t", &target, "status-style",
-            &format!("bg={},fg={}", theme.terminal.background, theme.terminal.foreground),
+            "set-option",
+            "-t",
+            &target,
+            "status-style",
+            &format!(
+                "bg={},fg={}",
+                theme.terminal.background, theme.terminal.foreground
+            ),
         ])
         .output()
         .ok();
 
     // Find the client attached to the current session
     let clients_out = std::process::Command::new("tmux")
-        .args(["list-clients", "-t", &current_session, "-F", "#{client_name}"])
+        .args([
+            "list-clients",
+            "-t",
+            &current_session,
+            "-F",
+            "#{client_name}",
+        ])
         .output();
     let client_name = match clients_out {
         Ok(out) => {
@@ -553,7 +613,10 @@ pub fn switch_tmux_session(
 /// The tmux session is kept alive so tabs can be restored on project switch-back.
 /// Stale screen content is handled by clearing history before re-attach in spawn_terminal.
 #[tauri::command]
-pub fn destroy_pty_session(session_name: String, manager: tauri::State<'_, PtyManager>) -> Result<(), String> {
+pub fn destroy_pty_session(
+    session_name: String,
+    manager: tauri::State<'_, PtyManager>,
+) -> Result<(), String> {
     let sanitized: String = session_name
         .chars()
         .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
@@ -665,17 +728,20 @@ pub fn send_literal_sequence(session_name: String, sequence: String) -> Result<(
     Ok(())
 }
 
-/// Get the version string of an AI agent binary (claude, opencode).
-/// Validates agent name against a whitelist before executing (T-09-09 mitigation).
+/// Get the version string of an AI agent command, alias, or script.
 #[tauri::command]
 pub async fn get_agent_version(agent: String) -> Result<String, String> {
-    let valid_agents = ["claude", "opencode"];
-    if !valid_agents.contains(&agent.as_str()) {
-        return Err(format!("Unknown agent: {}", agent));
+    let agent = agent.trim();
+    if agent.is_empty() || agent == "bash" {
+        return Err("No agent version for bash".to_string());
     }
-
-    let output = std::process::Command::new(&agent)
-        .arg("--version")
+    if !is_safe_agent_command(agent) {
+        return Err(format!("Invalid agent command: {}", agent));
+    }
+    let user_shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+    let version_cmd = format!("{} --version", agent);
+    let output = std::process::Command::new(&user_shell)
+        .args(["-ic", &version_cmd])
         .output()
         .map_err(|e| format!("Failed to run {} --version: {}", agent, e))?;
 
@@ -684,5 +750,9 @@ pub async fn get_agent_version(agent: String) -> Result<String, String> {
     }
 
     let version_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    Ok(version_str.lines().next().unwrap_or(&version_str).to_string())
+    Ok(version_str
+        .lines()
+        .next()
+        .unwrap_or(&version_str)
+        .to_string())
 }

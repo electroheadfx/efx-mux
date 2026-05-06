@@ -1355,7 +1355,6 @@ export function buildDropdownItems(
   scope: TerminalScope,
   overrides?: BuildDropdownItemsOverrides,
 ): DropdownItem[] {
-  const gsdOwnedElsewhere = gsdTab.value !== null && gsdTab.value.owningScope !== scope;
   const gcOwnedElsewhere = gitChangesTab.value !== null && gitChangesTab.value.owningScope !== scope;
 
   const spawnTerminal = (opts: CreateTabOptionsShape) => {
@@ -1380,7 +1379,6 @@ export function buildDropdownItems(
       label: 'GSD',
       icon: ListChecks,
       action: () => openOrMoveSingletonToScope('gsd', scope),
-      disabled: gsdOwnedElsewhere,
     },
     {
       label: 'Git Changes',

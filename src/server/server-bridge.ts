@@ -35,7 +35,11 @@ export async function restartServer(cmd: string, cwd: string, projectId: string)
  * Returns the agent name if found, throws if not found.
  */
 export async function detectAgent(agent: string): Promise<string> {
-  return await invoke<string>('detect_agent', { agent });
+  try {
+    return await invoke<string>('detect_agent', { agent });
+  } catch {
+    throw new Error(`Agent "${agent}" is not available. Check the command in Project Settings or install it on your shell PATH.`);
+  }
 }
 
 /**

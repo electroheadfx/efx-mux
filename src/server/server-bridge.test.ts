@@ -67,10 +67,24 @@ describe('server-bridge', () => {
       expect(result).toBe('claude-code');
     });
 
-    it('detectAgent throws when agent not found', async () => {
+    it('detectAgent validates aliases through an interactive shell', async () => {
       const { detectAgent } = await import('./server-bridge');
-      mockIPC((cmd, args) => { throw new Error('Agent not found'); });
-      await expect(detectAgent('nonexistent')).rejects.toThrow('Agent not found');
+      let capturedAgent = '';
+      mockIPC((_cmd, args: any) => {
+        capturedAgent = args.agent;
+        return 'ccscodex';
+      });
+
+      const result = await detectAgent('ccscodex');
+
+      expect(capturedAgent).toBe('ccscodex');
+      expect(result).toBe('ccscodex');
+    });
+
+    it('detectAgent throws a friendly unavailable-agent message', async () => {
+      const { detectAgent } = await import('./server-bridge');
+      mockIPC((_cmd, _args) => { throw new Error('No such file or directory (os error 2)'); });
+      await expect(detectAgent('ccscode')).rejects.toThrow('Agent "ccscode" is not available');
     });
   });
 
