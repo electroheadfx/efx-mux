@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-20)
 
 Milestone: v0.3.0 SHIPPED (2026-04-20)
 Next: Run `/gsd-new-milestone` to define v0.4.0 scope
-Last activity: 2026-04-20
+Last activity: 2026-05-07 - Completed quick task 260507-lkg: How to do when I download the dmg image and copy the app to Applications without to force me to do a quarantine on the app because apple think its a malware.
 
 **Code review fixes pending (non-blocking):**
 
@@ -148,6 +148,7 @@ None.
 | Phase 22 P11 | ~4m30s | 2 tasks | 6 files |
 | Phase 22 P12 | ~10min | 3 tasks | 4 files |
 | Phase 22 P13 | ~15min | 2 tasks | 2 files |
+| 260507-lkg | How to do when I download the dmg image and copy the app to Applications without to force me to do a quarantine on the app because apple think its a malware. | 2026-05-07 |
 
 ## Session Continuity
 
