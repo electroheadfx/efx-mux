@@ -95,8 +95,8 @@ Design idea: {{GSD_ARGS}}
 
 <process>
 Parse the first token of {{GSD_ARGS}}:
-- If it is `--wrap-up`: strip the flag, execute the sketch-wrap-up workflow from @/Users/lmarques/Dev/efx-mux/.codex/get-shit-done/workflows/sketch-wrap-up.md end-to-end.
-- Otherwise: execute the sketch workflow from @/Users/lmarques/Dev/efx-mux/.codex/get-shit-done/workflows/sketch.md end-to-end.
+- If it is `--wrap-up`: strip the flag, execute the sketch-wrap-up workflow end-to-end.
+- Otherwise: execute the sketch workflow end-to-end.
 
 Preserve all workflow gates (intake, decomposition, target stack research, variant evaluation, MANIFEST updates, commit patterns).
 </process>

@@ -99,6 +99,6 @@ Phase number: extracted from {{GSD_ARGS}} (required)
 </context>
 
 <process>
-Execute the plan-review-convergence workflow from @/Users/lmarques/Dev/efx-mux/.codex/get-shit-done/workflows/plan-review-convergence.md end-to-end.
+Execute end-to-end.
 Preserve all workflow gates (pre-flight, revision loop, stall detection, escalation).
 </process>

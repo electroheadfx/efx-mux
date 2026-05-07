@@ -225,9 +225,11 @@ Wait for user selection.
 </step>
 
 <step name="route_to_workflow">
-Based on user selection, route to appropriate workflow:
+Based on user selection, route to appropriate workflow.
 
-- **Execute plan** → Show command for user to run after clearing:
+Resume-specific exception: do **not** emit `` here. Resume is already a session-entry flow, so the next command should be shown directly.
+
+- **Execute plan** → Show direct next command:
   ```
   ---
 
@@ -239,7 +241,7 @@ Based on user selection, route to appropriate workflow:
 
   ---
   ```
-- **Plan phase** → Show command for user to run after clearing:
+- **Plan phase** → Show direct next command:
   ```
   ---
 

@@ -92,8 +92,8 @@ Idea: {{GSD_ARGS}}
 
 <process>
 Parse the first token of {{GSD_ARGS}}:
-- If it is `--wrap-up`: strip the flag, execute the spike-wrap-up workflow from @/Users/lmarques/Dev/efx-mux/.codex/get-shit-done/workflows/spike-wrap-up.md.
-- Otherwise: pass all of {{GSD_ARGS}} as the idea to the spike workflow from @/Users/lmarques/Dev/efx-mux/.codex/get-shit-done/workflows/spike.md end-to-end.
+- If it is `--wrap-up`: strip the flag, execute the spike-wrap-up workflow
+- Otherwise: pass all of {{GSD_ARGS}} as the idea to the spike workflow end-to-end.
 
 Preserve all workflow gates (prior spike check, decomposition, research, risk ordering, observability assessment, verification, MANIFEST updates, commit patterns).
 </process>

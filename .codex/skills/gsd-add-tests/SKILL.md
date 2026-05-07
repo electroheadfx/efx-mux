@@ -78,6 +78,6 @@ Phase: {{GSD_ARGS}}
 </context>
 
 <process>
-Execute the add-tests workflow from @/Users/lmarques/Dev/efx-mux/.codex/get-shit-done/workflows/add-tests.md end-to-end.
+Execute end-to-end.
 Preserve all workflow gates (classification approval, test plan approval, RED-GREEN verification, gap reporting).
 </process>

@@ -82,6 +82,9 @@ Project context, phase list, dependencies, and recommendations are resolved insi
 </context>
 
 <process>
-Execute the manager workflow from @/Users/lmarques/Dev/efx-mux/.codex/get-shit-done/workflows/manager.md end-to-end.
+If `--analyze-deps` is in {{GSD_ARGS}}:
+Read and execute `/Users/lmarques/Dev/efx-mux/.codex/get-shit-done/workflows/analyze-dependencies.md` end-to-end.
+
+Execute end-to-end.
 Maintain the dashboard refresh loop until the user exits or all phases complete.
 </process>

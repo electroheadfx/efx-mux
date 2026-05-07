@@ -74,5 +74,5 @@ Flags:
 </execution_context>
 
 <process>
-Execute the audit-fix workflow from @/Users/lmarques/Dev/efx-mux/.codex/get-shit-done/workflows/audit-fix.md end-to-end.
+Execute end-to-end.
 </process>

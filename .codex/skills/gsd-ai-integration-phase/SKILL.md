@@ -75,6 +75,6 @@ Phase number: {{GSD_ARGS}} — optional, auto-detects next unplanned phase if om
 </context>
 
 <process>
-Execute @/Users/lmarques/Dev/efx-mux/.codex/get-shit-done/workflows/ai-integration-phase.md end-to-end.
+Execute end-to-end.
 Preserve all workflow gates.
 </process>

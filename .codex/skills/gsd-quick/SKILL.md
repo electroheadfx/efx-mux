@@ -199,7 +199,7 @@ When SUBCMD=resume and SLUG is set (already sanitized):
 
 When SUBCMD=run:
 
-Execute the quick workflow from @/Users/lmarques/Dev/efx-mux/.codex/get-shit-done/workflows/quick.md end-to-end.
+Execute end-to-end.
 Preserve all workflow gates (validation, task description, planning, execution, state updates, commits).
 
 </process>

@@ -78,5 +78,5 @@ Three modes:
 </context>
 
 <process>
-Execute the undo workflow from @/Users/lmarques/Dev/efx-mux/.codex/get-shit-done/workflows/undo.md end-to-end.
+Execute end-to-end.
 </process>

@@ -84,5 +84,5 @@ Phase number: extracted from {{GSD_ARGS}} (required)
 </context>
 
 <process>
-Execute the review workflow from @/Users/lmarques/Dev/efx-mux/.codex/get-shit-done/workflows/review.md end-to-end.
+Execute end-to-end.
 </process>
