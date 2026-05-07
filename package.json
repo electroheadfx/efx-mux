@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "tauri": "tauri",
+    "release:macos:notarized": "bash scripts/macos-notarized-release.sh",
     "repomix": "npx repomix@latest --config repomix.config.json",
     "repomix:skill": "npx repomix@latest --skill-generate",
     "repomix:skill-remote": "npx repomix@latest --remote"
