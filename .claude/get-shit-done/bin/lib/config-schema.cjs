@@ -47,6 +47,8 @@ const VALID_CONFIG_KEYS = new Set([
   'review.ollama_host', 'review.lm_studio_host', 'review.llama_cpp_host',
   'workflow.cross_ai_execution', 'workflow.cross_ai_command', 'workflow.cross_ai_timeout',
   'workflow.subagent_timeout',
+  'executor.stall_detect_interval_minutes',
+  'executor.stall_threshold_minutes',
   'workflow.inline_plan_threshold',
   'hooks.context_warnings',
   'hooks.workflow_guard',
@@ -107,6 +109,10 @@ const DYNAMIC_KEY_PATTERNS = [
   { topLevel: 'dynamic_routing',
     test: (k) => /^dynamic_routing\.(enabled|escalate_on_failure|max_escalations|tier_models\.(light|standard|heavy))$/.test(k),
     description: 'dynamic_routing.<enabled|escalate_on_failure|max_escalations|tier_models.<light|standard|heavy>>' },
+  // #3227 — per-agent model overrides: model_overrides.<agent-id>
+  // Full model IDs (e.g. "openai/o3") and tier aliases (opus/sonnet/haiku/inherit)
+  // are both accepted. Value validation is handled by the resolver at read time.
+  { topLevel: 'model_overrides', test: (k) => /^model_overrides\.[a-zA-Z0-9_-]+$/.test(k), description: 'model_overrides.<agent-id>' },
 ];
 
 /**
